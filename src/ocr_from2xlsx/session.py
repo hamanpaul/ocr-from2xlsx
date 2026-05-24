@@ -54,8 +54,6 @@ class ImportSession:
             duplicate_key = record.duplicate_key()
             if duplicate_key in self.batch_duplicate_keys:
                 blockers.append("duplicate.in_batch")
-            else:
-                self.batch_duplicate_keys.add(duplicate_key)
 
         if blockers and not force:
             report_item = ImportReportItem(
@@ -73,6 +71,9 @@ class ImportSession:
                 blockers=blockers,
                 warnings=warnings,
             )
+
+        if duplicate_key is not None:
+            self.batch_duplicate_keys.add(duplicate_key)
 
         row_number = self.writer.write_record(record)
         self.writer.save()

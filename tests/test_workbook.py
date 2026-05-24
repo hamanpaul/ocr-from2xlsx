@@ -1,12 +1,23 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
+
+import pytest
 
 from openpyxl import load_workbook
 
+from ocr_from2xlsx.constants import BASIC_COLUMN_BY_FIELD
 from ocr_from2xlsx.workbook import WorkbookWriter
 from tests.fixtures import create_workbook_template
 from tests.test_json_io import make_record
+
+
+def _column_for_header(sheet, header: str) -> int:
+    for cell in sheet[1]:
+        if cell.value == header:
+            return cell.column
+    raise AssertionError(f"Missing header in fixture: {header}")
 
 
 def test_writer_copies_template_and_writes_record(tmp_path: Path) -> None:
@@ -67,3 +78,70 @@ def test_existing_duplicate_keys_include_service_summary(tmp_path: Path) -> None
     reopened = WorkbookWriter(working)
 
     assert record.duplicate_key() in reopened.existing_duplicate_keys()
+
+
+def test_existing_duplicate_keys_include_raw_service_codes(tmp_path: Path) -> None:
+    template = tmp_path / "template.xlsx"
+    create_workbook_template(template)
+
+    wb = load_workbook(template)
+    ws = wb["個案總表"]
+    ws.cell(row=2, column=_column_for_header(ws, BASIC_COLUMN_BY_FIELD["service_date"]), value="2026-04-01")
+    ws.cell(row=2, column=_column_for_header(ws, BASIC_COLUMN_BY_FIELD["name"]), value="李小美")
+    ws.cell(row=2, column=_column_for_header(ws, BASIC_COLUMN_BY_FIELD["medical_record_no"]), value="B987654")
+    ws.cell(row=2, column=_column_for_header(ws, "諮詢-健康與醫療系統1"), value="some_code")
+    ws.cell(row=2, column=_column_for_header(ws, "提供實體用品及設備1"), value="some_supply")
+    ws.cell(row=2, column=_column_for_header(ws, "轉介或連結院內資源3"), value="some_resource")
+    ws.cell(row=2, column=_column_for_header(ws, "轉介或連結院外資源9"), value="some_external")
+    ws.cell(row=2, column=_column_for_header(ws, "轉介或連結資源成果4"), value="some_outcome")
+    wb.save(template)
+
+    expected_summary = "|".join(
+        sorted(
+            [
+                "health_medical:some_code",
+                "supplies:some_supply",
+                "internal:some_resource",
+                "external:some_external",
+                "outcomes:some_outcome",
+            ]
+        )
+    )
+    expected_key = ("2026-04-01", "李小美", "B987654", expected_summary)
+
+    reopened = WorkbookWriter(template)
+
+    assert expected_key in reopened.existing_duplicate_keys()
+
+
+def test_missing_patient_header_raises_value_error(tmp_path: Path) -> None:
+    template = tmp_path / "template.xlsx"
+    create_workbook_template(template)
+
+    wb = load_workbook(template)
+    ws = wb["個案總表"]
+    missing_header = BASIC_COLUMN_BY_FIELD["nationality"]
+    missing_cell = ws.cell(row=1, column=_column_for_header(ws, missing_header))
+    missing_cell.value = None
+    wb.save(template)
+
+    with pytest.raises(ValueError, match=re.escape(missing_header)):
+        WorkbookWriter(template)
+
+
+def test_writer_leaves_newly_diagnosed_blank_when_none(tmp_path: Path) -> None:
+    template = tmp_path / "template.xlsx"
+    working = tmp_path / "working.xlsx"
+    create_workbook_template(template)
+    record = make_record()
+    record.patient_fields.newly_diagnosed_within_year = None
+
+    writer = WorkbookWriter.create_from_template(template, working)
+    writer.write_record(record)
+    writer.save()
+
+    wb = load_workbook(working)
+    ws = wb["個案總表"]
+    column = _column_for_header(ws, BASIC_COLUMN_BY_FIELD["newly_diagnosed_within_year"])
+
+    assert ws.cell(row=2, column=column).value is None

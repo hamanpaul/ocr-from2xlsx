@@ -38,6 +38,14 @@ SUMMARY_BY_HEADER_PREFIX_AND_LABEL = {
     ("轉介或連結資源成果", "4.獲得服務協助"): "outcomes:received_service_help",
 }
 
+SUMMARY_PREFIX_BY_HEADER_PREFIX = {
+    "諮詢-健康與醫療系統": "health_medical",
+    "提供實體用品及設備": "supplies",
+    "轉介或連結院內資源": "internal",
+    "轉介或連結院外資源": "external",
+    "轉介或連結資源成果": "outcomes",
+}
+
 
 class WorkbookWriter:
     def __init__(self, working_path: Path | str) -> None:
@@ -72,11 +80,12 @@ class WorkbookWriter:
             self._set(row, BASIC_COLUMN_BY_FIELD["channel"], CHANNEL_LABELS.get(fields.channel or ""))
             self._set(row, BASIC_COLUMN_BY_FIELD["disease_status"], DISEASE_STATUS_LABELS.get(fields.disease_status or ""))
             self._set(row, BASIC_COLUMN_BY_FIELD["source"], SOURCE_LABELS.get(fields.source or ""))
-            self._set(
-                row,
-                BASIC_COLUMN_BY_FIELD["newly_diagnosed_within_year"],
-                "是" if fields.newly_diagnosed_within_year else "否",
-            )
+            newly_diagnosed = None
+            if fields.newly_diagnosed_within_year is True:
+                newly_diagnosed = "是"
+            elif fields.newly_diagnosed_within_year is False:
+                newly_diagnosed = "否"
+            self._set(row, BASIC_COLUMN_BY_FIELD["newly_diagnosed_within_year"], newly_diagnosed)
             for index, cancer in enumerate(fields.cancers[:3], start=1):
                 self._set(row, f"癌別{index}\n(病人才填)", CANCER_LABELS.get(cancer, cancer))
 
@@ -123,9 +132,19 @@ class WorkbookWriter:
             value = self.sheet.cell(row=row, column=column).value
             if value in (None, ""):
                 continue
-            for (prefix, label), summary_part in SUMMARY_BY_HEADER_PREFIX_AND_LABEL.items():
-                if header.startswith(prefix) and value == label:
-                    parts.append(summary_part)
+            value_str = str(value)
+            summary_part = None
+            for (prefix, label), candidate in SUMMARY_BY_HEADER_PREFIX_AND_LABEL.items():
+                if header.startswith(prefix) and value_str == label:
+                    summary_part = candidate
+                    break
+            if summary_part:
+                parts.append(summary_part)
+                continue
+            for prefix, summary_prefix in SUMMARY_PREFIX_BY_HEADER_PREFIX.items():
+                if header.startswith(prefix):
+                    parts.append(f"{summary_prefix}:{value_str}")
+                    break
         return "|".join(sorted(parts))
 
     def _build_header_map(self, sheet: Worksheet) -> dict[str, int]:
@@ -133,7 +152,12 @@ class WorkbookWriter:
         for cell in sheet[1]:
             if cell.value:
                 header_map[str(cell.value)] = cell.column
-        missing = [header for header in ["服務月份", "服務日期", "身分", "姓名", "ID", "性別"] if header not in header_map]
+        required_headers = list(BASIC_COLUMN_BY_FIELD.values()) + [
+            "癌別1\n(病人才填)",
+            "癌別2\n(病人才填)",
+            "癌別3\n(病人才填)",
+        ]
+        missing = [header for header in required_headers if header not in header_map]
         if missing:
             raise ValueError(f"Missing required headers: {', '.join(missing)}")
         return header_map

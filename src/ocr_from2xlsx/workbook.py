@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import shutil
 from datetime import date, datetime
 from pathlib import Path
@@ -46,6 +47,8 @@ SUMMARY_PREFIX_BY_HEADER_PREFIX = {
     "轉介或連結院外資源": "external",
     "轉介或連結資源成果": "outcomes",
 }
+
+_SERVICE_NUMBER_PATTERN = re.compile(r"^(?P<number>\d+)\.")
 
 
 def _normalize_duplicate_value(value: object) -> str:
@@ -123,6 +126,22 @@ class WorkbookWriter:
         self.workbook.calculation.forceFullCalc = True
         self.workbook.save(self.working_path)
 
+    def close(self) -> None:
+        vba_archive = getattr(self.workbook, "vba_archive", None)
+        if vba_archive is not None:
+            vba_closer = getattr(vba_archive, "close", None)
+            if callable(vba_closer):
+                vba_closer()
+        closer = getattr(self.workbook, "close", None)
+        if callable(closer):
+            closer()
+
+    def __enter__(self) -> "WorkbookWriter":
+        return self
+
+    def __exit__(self, exc_type: object, exc: object, traceback: object) -> None:
+        self.close()
+
     def existing_duplicate_keys(self) -> set[tuple[str, str, str, str]]:
         keys: set[tuple[str, str, str, str]] = set()
         service_date_col = self.header_map.get(BASIC_COLUMN_BY_FIELD["service_date"])
@@ -143,15 +162,41 @@ class WorkbookWriter:
         for category, codes in record.services.consultation.items():
             prefix = _consultation_prefix(category)
             for index, code in enumerate(codes, start=1):
-                self._set_if_present(row, f"{prefix}{index}", LABEL_BY_CODE.get(code, code))
+                label = LABEL_BY_CODE.get(code, code)
+                header = self._service_header(prefix, index, label)
+                if header:
+                    self._set(row, header, label)
         for index, code in enumerate(record.services.supplies, start=1):
-            self._set_if_present(row, f"提供實體用品及設備{index}", LABEL_BY_CODE.get(code, code))
+            label = LABEL_BY_CODE.get(code, code)
+            header = self._service_header("提供實體用品及設備", index, label)
+            if header:
+                self._set(row, header, label)
         for index, code in enumerate(record.services.internal_referrals, start=1):
-            self._set_if_present(row, f"轉介或連結院內資源{index}", LABEL_BY_CODE.get(code, code))
+            label = LABEL_BY_CODE.get(code, code)
+            header = self._service_header("轉介或連結院內資源", index, label)
+            if header:
+                self._set(row, header, label)
         for index, code in enumerate(record.services.external_referrals, start=1):
-            self._set_if_present(row, f"轉介或連結院外資源{index}", LABEL_BY_CODE.get(code, code))
+            label = LABEL_BY_CODE.get(code, code)
+            header = self._service_header("轉介或連結院外資源", index, label)
+            if header:
+                self._set(row, header, label)
         for index, code in enumerate(record.services.referral_outcomes, start=1):
-            self._set_if_present(row, f"轉介或連結資源成果{index}", LABEL_BY_CODE.get(code, code))
+            label = LABEL_BY_CODE.get(code, code)
+            header = self._service_header("轉介或連結資源成果", index, label)
+            if header:
+                self._set(row, header, label)
+
+    def _service_header(self, prefix: str, index: int, label: str) -> str | None:
+        match = _SERVICE_NUMBER_PATTERN.match(label)
+        if match:
+            candidate = f"{prefix}{match.group('number')}"
+            if candidate in self.header_map:
+                return candidate
+        candidate = f"{prefix}{index}"
+        if candidate in self.header_map:
+            return candidate
+        return None
 
     def _service_summary_from_row(self, row: int) -> str:
         parts: list[str] = []

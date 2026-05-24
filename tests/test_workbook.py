@@ -10,6 +10,7 @@ from openpyxl import load_workbook
 
 import ocr_from2xlsx.workbook as workbook_module
 from ocr_from2xlsx.constants import BASIC_COLUMN_BY_FIELD
+from ocr_from2xlsx.domain import Services
 from ocr_from2xlsx.workbook import WorkbookWriter
 from tests.fixtures import create_workbook_template
 from tests.test_json_io import make_record
@@ -30,6 +31,7 @@ def test_writer_copies_template_and_writes_record(tmp_path: Path) -> None:
     writer = WorkbookWriter.create_from_template(template, working)
     row_number = writer.write_record(make_record())
     writer.save()
+    writer.close()
 
     wb = load_workbook(working)
     ws = wb["個案總表"]
@@ -49,6 +51,7 @@ def test_writer_copies_template_and_writes_record(tmp_path: Path) -> None:
     assert ws["S2"].value == "1.癌症篩檢與預防"
     assert ws["T2"].value == "1.假髮/頭巾/毛帽用品"
     assert wb["一月"]["A1"].value == "=SUM(個案總表!A2:A6)"
+    wb.close()
 
 
 def test_writer_preserves_style_and_column_width(tmp_path: Path) -> None:
@@ -58,14 +61,17 @@ def test_writer_preserves_style_and_column_width(tmp_path: Path) -> None:
     before = load_workbook(template)
     before_fill = before["個案總表"]["B1"].fill.fgColor.rgb
     before_width = before["個案總表"].column_dimensions["B"].width
+    before.close()
 
     writer = WorkbookWriter.create_from_template(template, working)
     writer.write_record(make_record())
     writer.save()
+    writer.close()
 
     after = load_workbook(working)
     assert after["個案總表"]["B1"].fill.fgColor.rgb == before_fill
     assert after["個案總表"].column_dimensions["B"].width == before_width
+    after.close()
 
 
 @pytest.mark.parametrize("suffix", [".xlsm", ".xltm"])
@@ -84,7 +90,8 @@ def test_workbook_writer_sets_keep_vba_for_macro_templates(
 
     monkeypatch.setattr(workbook_module, "load_workbook", fake_load_workbook)
 
-    WorkbookWriter(template)
+    writer = WorkbookWriter(template)
+    writer.close()
 
     assert captured.get("keep_vba") is True
 
@@ -104,7 +111,8 @@ def test_workbook_writer_does_not_set_keep_vba_for_xlsx(
 
     monkeypatch.setattr(workbook_module, "load_workbook", fake_load_workbook)
 
-    WorkbookWriter(template)
+    writer = WorkbookWriter(template)
+    writer.close()
 
     assert "keep_vba" not in captured
 
@@ -117,10 +125,59 @@ def test_existing_duplicate_keys_include_service_summary(tmp_path: Path) -> None
     writer = WorkbookWriter.create_from_template(template, working)
     writer.write_record(record)
     writer.save()
+    writer.close()
 
     reopened = WorkbookWriter(working)
 
     assert record.duplicate_key() in reopened.existing_duplicate_keys()
+    reopened.close()
+
+
+def test_writer_maps_numbered_services_to_numbered_columns(tmp_path: Path) -> None:
+    template = tmp_path / "template.xlsx"
+    working = tmp_path / "working.xlsx"
+    create_workbook_template(template)
+    record = make_record()
+    record.services = Services(
+        consultation={"health_medical": ["screening_prevention"]},
+        supplies=["wig_hat"],
+        internal_referrals=["social_welfare"],
+        external_referrals=["care_information"],
+        referral_outcomes=["received_service_help"],
+    )
+
+    writer = WorkbookWriter.create_from_template(template, working)
+    writer.write_record(record)
+    writer.save()
+    writer.close()
+
+    wb = load_workbook(working)
+    ws = wb["個案總表"]
+    internal_col = _column_for_header(ws, "轉介或連結院內資源3")
+    external_col = _column_for_header(ws, "轉介或連結院外資源9")
+    outcome_col = _column_for_header(ws, "轉介或連結資源成果4")
+    assert ws.cell(row=2, column=internal_col).value == "3.社福資源"
+    assert ws.cell(row=2, column=external_col).value == "9.照護資訊"
+    assert ws.cell(row=2, column=outcome_col).value == "4.獲得服務協助"
+    wb.close()
+
+    reopened = WorkbookWriter(working)
+
+    expected_summary = "|".join(
+        sorted(
+            [
+                "health_medical:screening_prevention",
+                "supplies:wig_hat",
+                "internal:social_welfare",
+                "external:care_information",
+                "outcomes:received_service_help",
+            ]
+        )
+    )
+    expected_key = ("2026-03-15", "王小明", "A123456", expected_summary)
+
+    assert expected_key in reopened.existing_duplicate_keys()
+    reopened.close()
 
 
 def test_existing_duplicate_keys_normalize_excel_date_and_whitespace(tmp_path: Path) -> None:
@@ -132,6 +189,7 @@ def test_existing_duplicate_keys_normalize_excel_date_and_whitespace(tmp_path: P
     writer = WorkbookWriter.create_from_template(template, working)
     writer.write_record(record)
     writer.save()
+    writer.close()
 
     wb = load_workbook(working)
     ws = wb["個案總表"]
@@ -142,10 +200,12 @@ def test_existing_duplicate_keys_normalize_excel_date_and_whitespace(tmp_path: P
     ws.cell(row=2, column=name_col, value=f" {record.name} ")
     ws.cell(row=2, column=id_col, value=f" {record.medical_record_no} ")
     wb.save(working)
+    wb.close()
 
     reopened = WorkbookWriter(working)
 
     assert record.duplicate_key() in reopened.existing_duplicate_keys()
+    reopened.close()
 
 
 def test_existing_duplicate_keys_include_raw_service_codes(tmp_path: Path) -> None:
@@ -163,6 +223,7 @@ def test_existing_duplicate_keys_include_raw_service_codes(tmp_path: Path) -> No
     ws.cell(row=2, column=_column_for_header(ws, "轉介或連結院外資源9"), value="some_external")
     ws.cell(row=2, column=_column_for_header(ws, "轉介或連結資源成果4"), value="some_outcome")
     wb.save(template)
+    wb.close()
 
     expected_summary = "|".join(
         sorted(
@@ -180,6 +241,46 @@ def test_existing_duplicate_keys_include_raw_service_codes(tmp_path: Path) -> No
     reopened = WorkbookWriter(template)
 
     assert expected_key in reopened.existing_duplicate_keys()
+    reopened.close()
+
+
+def test_workbook_writer_close_closes_workbook(tmp_path: Path) -> None:
+    template = tmp_path / "template.xlsx"
+    create_workbook_template(template)
+    writer = WorkbookWriter(template)
+    real_close = writer.workbook.close
+    called = False
+
+    def fake_close() -> None:
+        nonlocal called
+        called = True
+        real_close()
+
+    writer.workbook.close = fake_close  # type: ignore[method-assign]
+
+    writer.close()
+
+    assert called is True
+
+
+def test_workbook_writer_context_manager_closes_workbook(tmp_path: Path) -> None:
+    template = tmp_path / "template.xlsx"
+    create_workbook_template(template)
+    writer = WorkbookWriter(template)
+    real_close = writer.workbook.close
+    called = False
+
+    def fake_close() -> None:
+        nonlocal called
+        called = True
+        real_close()
+
+    writer.workbook.close = fake_close  # type: ignore[method-assign]
+
+    with writer as managed:
+        assert managed is writer
+
+    assert called is True
 
 
 @pytest.mark.parametrize(
@@ -202,12 +303,14 @@ def test_writer_sets_discharge_followup(
     writer = WorkbookWriter.create_from_template(template, working)
     writer.write_record(record)
     writer.save()
+    writer.close()
 
     wb = load_workbook(working)
     ws = wb["個案總表"]
     column = _column_for_header(ws, BASIC_COLUMN_BY_FIELD["discharge_followup"])
 
     assert ws.cell(row=2, column=column).value == expected
+    wb.close()
 
 
 def test_missing_patient_header_raises_value_error(tmp_path: Path) -> None:
@@ -220,6 +323,7 @@ def test_missing_patient_header_raises_value_error(tmp_path: Path) -> None:
     missing_cell = ws.cell(row=1, column=_column_for_header(ws, missing_header))
     missing_cell.value = None
     wb.save(template)
+    wb.close()
 
     with pytest.raises(ValueError, match=re.escape(missing_header)):
         WorkbookWriter(template)
@@ -235,9 +339,11 @@ def test_writer_leaves_newly_diagnosed_blank_when_none(tmp_path: Path) -> None:
     writer = WorkbookWriter.create_from_template(template, working)
     writer.write_record(record)
     writer.save()
+    writer.close()
 
     wb = load_workbook(working)
     ws = wb["個案總表"]
     column = _column_for_header(ws, BASIC_COLUMN_BY_FIELD["newly_diagnosed_within_year"])
 
     assert ws.cell(row=2, column=column).value is None
+    wb.close()

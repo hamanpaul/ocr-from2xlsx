@@ -117,6 +117,18 @@ def test_workbook_writer_does_not_set_keep_vba_for_xlsx(
     assert "keep_vba" not in captured
 
 
+@pytest.mark.parametrize("suffix", [".xlsm", ".xltm"])
+def test_create_from_template_rejects_macro_template_to_xlsx(
+    tmp_path: Path, suffix: str
+) -> None:
+    template = tmp_path / f"template{suffix}"
+    working = tmp_path / "working.xlsx"
+    create_workbook_template(template)
+
+    with pytest.raises(ValueError, match=re.escape("macro-enabled")):
+        WorkbookWriter.create_from_template(template, working)
+
+
 def test_existing_duplicate_keys_include_service_summary(tmp_path: Path) -> None:
     template = tmp_path / "template.xlsx"
     working = tmp_path / "working.xlsx"
@@ -178,6 +190,42 @@ def test_writer_maps_numbered_services_to_numbered_columns(tmp_path: Path) -> No
 
     assert expected_key in reopened.existing_duplicate_keys()
     reopened.close()
+
+
+def test_writer_routes_unmapped_service_to_sparse_column(tmp_path: Path) -> None:
+    template = tmp_path / "template.xlsx"
+    working = tmp_path / "working.xlsx"
+    create_workbook_template(template)
+    record = make_record()
+    record.services = Services(internal_referrals=["psychology"])
+
+    writer = WorkbookWriter.create_from_template(template, working)
+    writer.write_record(record)
+    writer.save()
+    writer.close()
+
+    wb = load_workbook(working)
+    ws = wb["個案總表"]
+    internal_col = _column_for_header(ws, "轉介或連結院內資源3")
+    assert ws.cell(row=2, column=internal_col).value == "psychology"
+    wb.close()
+
+    reopened = WorkbookWriter(working)
+    assert record.duplicate_key() in reopened.existing_duplicate_keys()
+    reopened.close()
+
+
+def test_writer_raises_when_sparse_service_columns_are_full(tmp_path: Path) -> None:
+    template = tmp_path / "template.xlsx"
+    working = tmp_path / "working.xlsx"
+    create_workbook_template(template)
+    record = make_record()
+    record.services = Services(internal_referrals=["social_welfare", "psychology"])
+
+    writer = WorkbookWriter.create_from_template(template, working)
+    with pytest.raises(ValueError, match=re.escape("No available workbook column for service psychology")):
+        writer.write_record(record)
+    writer.close()
 
 
 def test_existing_duplicate_keys_normalize_excel_date_and_whitespace(tmp_path: Path) -> None:

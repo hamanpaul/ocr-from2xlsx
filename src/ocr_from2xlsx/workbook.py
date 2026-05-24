@@ -82,6 +82,11 @@ class WorkbookWriter:
     def create_from_template(cls, template_path: Path | str, working_path: Path | str) -> "WorkbookWriter":
         template_path = Path(template_path)
         working_path = Path(working_path)
+        macro_suffixes = {".xlsm", ".xltm"}
+        template_suffix = template_path.suffix.lower()
+        working_suffix = working_path.suffix.lower()
+        if template_suffix in macro_suffixes and working_suffix not in macro_suffixes:
+            raise ValueError("Macro-enabled template requires macro-enabled output path.")
         working_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(template_path, working_path)
         return cls(working_path)
@@ -161,42 +166,49 @@ class WorkbookWriter:
     def _write_services(self, row: int, record: Record) -> None:
         for category, codes in record.services.consultation.items():
             prefix = _consultation_prefix(category)
-            for index, code in enumerate(codes, start=1):
+            for code in codes:
                 label = LABEL_BY_CODE.get(code, code)
-                header = self._service_header(prefix, index, label)
+                header = self._service_header(row, prefix, label, code)
                 if header:
                     self._set(row, header, label)
-        for index, code in enumerate(record.services.supplies, start=1):
+        for code in record.services.supplies:
             label = LABEL_BY_CODE.get(code, code)
-            header = self._service_header("提供實體用品及設備", index, label)
+            header = self._service_header(row, "提供實體用品及設備", label, code)
             if header:
                 self._set(row, header, label)
-        for index, code in enumerate(record.services.internal_referrals, start=1):
+        for code in record.services.internal_referrals:
             label = LABEL_BY_CODE.get(code, code)
-            header = self._service_header("轉介或連結院內資源", index, label)
+            header = self._service_header(row, "轉介或連結院內資源", label, code)
             if header:
                 self._set(row, header, label)
-        for index, code in enumerate(record.services.external_referrals, start=1):
+        for code in record.services.external_referrals:
             label = LABEL_BY_CODE.get(code, code)
-            header = self._service_header("轉介或連結院外資源", index, label)
+            header = self._service_header(row, "轉介或連結院外資源", label, code)
             if header:
                 self._set(row, header, label)
-        for index, code in enumerate(record.services.referral_outcomes, start=1):
+        for code in record.services.referral_outcomes:
             label = LABEL_BY_CODE.get(code, code)
-            header = self._service_header("轉介或連結資源成果", index, label)
+            header = self._service_header(row, "轉介或連結資源成果", label, code)
             if header:
                 self._set(row, header, label)
 
-    def _service_header(self, prefix: str, index: int, label: str) -> str | None:
+    def _service_header(self, row: int, prefix: str, label: str, code: str) -> str | None:
         match = _SERVICE_NUMBER_PATTERN.match(label)
         if match:
             candidate = f"{prefix}{match.group('number')}"
-            if candidate in self.header_map:
+            if candidate in self.header_map and self._service_cell_empty(row, candidate):
                 return candidate
-        candidate = f"{prefix}{index}"
-        if candidate in self.header_map:
-            return candidate
-        return None
+        candidates = [header for header in self.header_map if header.startswith(prefix)]
+        if not candidates:
+            return None
+        for header in candidates:
+            if self._service_cell_empty(row, header):
+                return header
+        raise ValueError(f"No available workbook column for service {code}")
+
+    def _service_cell_empty(self, row: int, header: str) -> bool:
+        column = self.header_map[header]
+        return self.sheet.cell(row=row, column=column).value in (None, "")
 
     def _service_summary_from_row(self, row: int) -> str:
         parts: list[str] = []

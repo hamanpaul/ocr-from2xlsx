@@ -26,17 +26,24 @@ The first implementation validates the workflow before real hand-written OCR is 
 4. Save the working XLSX after each confirmed record.
 5. Export a final XLSX and import report.
 
+Launch the native desktop UI:
+
+```powershell
+ocr-from2xlsx app
+```
+
 <!-- BEGIN: cli-help marker="ocr-from2xlsx-help" -->
 usage: ocr-from2xlsx [-h] [--version]
-                     {sample-json,validate-json,import-json} ...
+                     {sample-json,validate-json,import-json,app} ...
 
 Import normalized service-record JSON into the monthly report XLSX.
 
 positional arguments:
-  {sample-json,validate-json,import-json}
+  {sample-json,validate-json,import-json,app}
     sample-json         Generate deterministic sample service-record JSON.
     validate-json       Validate normalized service-record JSON.
     import-json         Import normalized JSON records into a working XLSX.
+    app                 Launch the native desktop review UI.
 
 options:
   -h, --help            show this help message and exit

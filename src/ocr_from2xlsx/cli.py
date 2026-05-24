@@ -56,6 +56,7 @@ def build_parser() -> argparse.ArgumentParser:
     import_parser.add_argument("--working", required=True, help="Working XLSX output path.")
     import_parser.add_argument("--report-json", required=True, help="Import report JSON path.")
     import_parser.add_argument("--report-csv", required=True, help="Import report CSV path.")
+    subparsers.add_parser("app", help="Launch the native desktop review UI.")
     return parser
 
 
@@ -133,5 +134,9 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         print(Path(args.working))
         return 1 if blocked_count else 0
+    if args.command == "app":
+        from ocr_from2xlsx.app import run_app
+
+        return run_app()
     parser.print_help()
     return 0

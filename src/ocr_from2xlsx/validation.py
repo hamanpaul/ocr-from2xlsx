@@ -35,7 +35,7 @@ def validate_record(
 
     try:
         date.fromisoformat(record.service_date)
-    except ValueError:
+    except (TypeError, ValueError):
         result.blockers.append("service_date.invalid")
 
     if record.identity not in IDENTITIES:

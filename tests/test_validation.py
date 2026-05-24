@@ -52,3 +52,12 @@ def test_low_confidence_is_warning_not_blocker() -> None:
 
     assert result.blockers == []
     assert "ocr.low_confidence" in result.warnings
+
+
+def test_missing_service_date_is_blocker() -> None:
+    record = make_record()
+    record.service_date = None  # type: ignore[assignment] - testing missing value handling
+
+    result = validate_record(record)
+
+    assert "service_date.invalid" in result.blockers

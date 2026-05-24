@@ -50,6 +50,16 @@ options:
   --version             Print package version and exit.
 <!-- END: cli-help marker="ocr-from2xlsx-help" -->
 
+## Packaging
+
+Build a portable executable:
+
+```powershell
+python build/package.py
+```
+
+Output: `dist/ocr-from2xlsx.exe`
+
 ## Version
 
 `VERSION` is the single source of truth for repository versioning. Update it together with `CHANGELOG.md` according to the selected `policy_profile`.

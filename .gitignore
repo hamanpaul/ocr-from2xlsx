@@ -9,6 +9,10 @@ __pycache__/
 .mypy_cache/
 dist/
 build/
+!build/
+!build/package.py
+!build/ocr-from2xlsx.spec
 *.egg-info/
 .eggs/
 *.spec
+!build/ocr-from2xlsx.spec

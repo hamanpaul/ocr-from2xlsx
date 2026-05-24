@@ -20,6 +20,7 @@
 - 新增 JSON 到 XLSX 的 CLI 匯入流程。
 - 新增 JSON、圖片資料夾與 UVC 攝影機 capture adapter 邊界。
 - 新增不開 localhost port 的 Tkinter 原生桌面審核介面。
+- 新增 PyInstaller 打包流程生成 portable Windows .exe。
 
 ### Fixed
 - 補齊服務摘要對應未列舉標籤時的 raw code 轉換，避免重複單漏判。

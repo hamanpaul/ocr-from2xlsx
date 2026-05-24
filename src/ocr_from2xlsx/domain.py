@@ -181,8 +181,11 @@ class Record:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Record":
+        record_id_value = data.get("record_id")
+        if record_id_value is None or str(record_id_value).strip() == "":
+            raise ValueError("record_id is required")
         return cls(
-            record_id=str(data["record_id"]),
+            record_id=str(record_id_value),
             source=SourceInfo.from_dict(data.get("source")),
             service_date=str(data.get("service_date") or ""),
             identity=str(data.get("identity") or ""),
@@ -222,6 +225,7 @@ class SourceBatch:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "SourceBatch":
+        data = _require_dict(data, "source_batch")
         return cls(
             created_at=str(data.get("created_at") or ""),
             source_type=str(data.get("source_type") or ""),
@@ -237,6 +241,8 @@ class Batch:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Batch":
+        if "schema_version" in data and data.get("schema_version") != SCHEMA_VERSION:
+            raise ValueError(f"Unsupported schema_version: {data.get('schema_version')!r}")
         if "records" in data:
             records_value = data.get("records")
             if not isinstance(records_value, list):
@@ -250,7 +256,7 @@ class Batch:
             records.append(Record.from_dict(item))
         return cls(
             schema_version=str(data.get("schema_version") or ""),
-            source_batch=SourceBatch.from_dict(data.get("source_batch") or {}),
+            source_batch=SourceBatch.from_dict(data.get("source_batch")),
             records=records,
         )
 

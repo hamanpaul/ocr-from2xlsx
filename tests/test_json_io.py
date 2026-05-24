@@ -80,6 +80,43 @@ def test_rejects_unknown_schema_version(tmp_path: Path) -> None:
         load_batch(path)
 
 
+def test_load_batch_rejects_source_batch_not_object(tmp_path: Path) -> None:
+    path = tmp_path / "records.json"
+    path.write_text(
+        json.dumps({"schema_version": SCHEMA_VERSION, "source_batch": "oops", "records": []}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="source_batch must be an object"):
+        load_batch(path)
+
+
+def test_load_batch_rejects_missing_record_id(tmp_path: Path) -> None:
+    record = make_record().to_dict()
+    del record["record_id"]
+    path = tmp_path / "records.json"
+    path.write_text(
+        json.dumps({"schema_version": SCHEMA_VERSION, "source_batch": {}, "records": [record]}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="record_id is required"):
+        load_batch(path)
+
+
+def test_load_batch_rejects_empty_record_id(tmp_path: Path) -> None:
+    record = make_record().to_dict()
+    record["record_id"] = ""
+    path = tmp_path / "records.json"
+    path.write_text(
+        json.dumps({"schema_version": SCHEMA_VERSION, "source_batch": {}, "records": [record]}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="record_id is required"):
+        load_batch(path)
+
+
 def test_load_batch_rejects_supplies_string(tmp_path: Path) -> None:
     record = make_record().to_dict()
     record["services"]["supplies"] = "wig_hat"
@@ -181,6 +218,11 @@ def test_service_month_label_rejects_invalid_service_date() -> None:
 
     with pytest.raises(ValueError, match="Invalid service_date: 'not-a-date'"):
         record.service_month_label()
+
+
+def test_batch_from_dict_rejects_unknown_schema_version() -> None:
+    with pytest.raises(ValueError, match="Unsupported schema_version"):
+        Batch.from_dict({"schema_version": "wrong", "source_batch": {}, "records": []})
 
 
 def test_load_batch_rejects_non_object_top_level(tmp_path: Path) -> None:

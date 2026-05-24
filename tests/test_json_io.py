@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
 
+from ocr_from2xlsx.constants import SCHEMA_VERSION
 from ocr_from2xlsx.domain import (
     Batch,
     OcrInfo,
@@ -75,4 +77,54 @@ def test_rejects_unknown_schema_version(tmp_path: Path) -> None:
     path.write_text('{"schema_version":"wrong","source_batch":{},"records":[]}', encoding="utf-8")
 
     with pytest.raises(ValueError, match="Unsupported schema_version"):
+        load_batch(path)
+
+
+def test_load_batch_rejects_supplies_string(tmp_path: Path) -> None:
+    record = make_record().to_dict()
+    record["services"]["supplies"] = "wig_hat"
+    path = tmp_path / "records.json"
+    path.write_text(
+        json.dumps({"schema_version": SCHEMA_VERSION, "source_batch": {}, "records": [record]}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="services.supplies must be a list"):
+        load_batch(path)
+
+
+def test_load_batch_rejects_consultation_value_string(tmp_path: Path) -> None:
+    record = make_record().to_dict()
+    record["services"]["consultation"] = {"health_medical": "screening_prevention"}
+    path = tmp_path / "records.json"
+    path.write_text(
+        json.dumps({"schema_version": SCHEMA_VERSION, "source_batch": {}, "records": [record]}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match=r"services\.consultation\.health_medical must be a list"):
+        load_batch(path)
+
+
+def test_service_month_label_requires_service_date() -> None:
+    record = make_record()
+    record.service_date = ""
+
+    with pytest.raises(ValueError, match="service_date is required to calculate service month"):
+        record.service_month_label()
+
+
+def test_service_month_label_rejects_invalid_service_date() -> None:
+    record = make_record()
+    record.service_date = "not-a-date"
+
+    with pytest.raises(ValueError, match="Invalid service_date: 'not-a-date'"):
+        record.service_month_label()
+
+
+def test_load_batch_rejects_non_object_top_level(tmp_path: Path) -> None:
+    path = tmp_path / "records.json"
+    path.write_text(json.dumps([]), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Expected JSON object at top level"):
         load_batch(path)

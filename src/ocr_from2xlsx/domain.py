@@ -11,6 +11,45 @@ def _none_if_empty(value: Any) -> Any:
     return None if value == "" else value
 
 
+def _require_list(value: Any, field_name: str) -> list[Any]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    raise ValueError(f"{field_name} must be a list")
+
+
+def _require_bool(value: Any, field_name: str) -> bool:
+    if isinstance(value, bool):
+        return value
+    raise ValueError(f"{field_name} must be a bool")
+
+
+def _optional_bool(value: Any, field_name: str) -> bool | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    raise ValueError(f"{field_name} must be a bool")
+
+
+def _require_consultation(value: Any, field_name: str) -> dict[str, list[str]]:
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise ValueError(f"{field_name} must be a dict")
+    consultation: dict[str, list[str]] = {}
+    for category, values in value.items():
+        if values is None:
+            items = []
+        elif isinstance(values, list):
+            items = values
+        else:
+            raise ValueError(f"{field_name}.{category} must be a list")
+        consultation[str(category)] = items
+    return consultation
+
+
 @dataclass(slots=True)
 class SourceInfo:
     image_path: str | None = None
@@ -41,8 +80,11 @@ class PatientFields:
             channel=_none_if_empty(data.get("channel")),
             disease_status=_none_if_empty(data.get("disease_status")),
             source=_none_if_empty(data.get("source")),
-            cancers=list(data.get("cancers") or []),
-            newly_diagnosed_within_year=data.get("newly_diagnosed_within_year"),
+            cancers=_require_list(data.get("cancers"), "patient_fields.cancers"),
+            newly_diagnosed_within_year=_optional_bool(
+                data.get("newly_diagnosed_within_year"),
+                "patient_fields.newly_diagnosed_within_year",
+            ),
         )
 
 
@@ -57,16 +99,12 @@ class Services:
     @classmethod
     def from_dict(cls, data: dict[str, Any] | None) -> "Services":
         data = data or {}
-        consultation = {
-            str(category): list(values or [])
-            for category, values in (data.get("consultation") or {}).items()
-        }
         return cls(
-            consultation=consultation,
-            supplies=list(data.get("supplies") or []),
-            internal_referrals=list(data.get("internal_referrals") or []),
-            external_referrals=list(data.get("external_referrals") or []),
-            referral_outcomes=list(data.get("referral_outcomes") or []),
+            consultation=_require_consultation(data.get("consultation"), "services.consultation"),
+            supplies=_require_list(data.get("supplies"), "services.supplies"),
+            internal_referrals=_require_list(data.get("internal_referrals"), "services.internal_referrals"),
+            external_referrals=_require_list(data.get("external_referrals"), "services.external_referrals"),
+            referral_outcomes=_require_list(data.get("referral_outcomes"), "services.referral_outcomes"),
         )
 
     def summary(self) -> str:
@@ -97,7 +135,7 @@ class OcrInfo:
         return cls(
             confidence=data.get("confidence"),
             raw_text=str(data.get("raw_text") or ""),
-            warnings=list(data.get("warnings") or []),
+            warnings=_require_list(data.get("warnings"), "ocr.warnings"),
         )
 
 
@@ -109,7 +147,11 @@ class ReviewInfo:
     @classmethod
     def from_dict(cls, data: dict[str, Any] | None) -> "ReviewInfo":
         data = data or {}
-        return cls(status=str(data.get("status") or "pending"), edited_by_user=bool(data.get("edited_by_user", False)))
+        if "edited_by_user" in data:
+            edited_by_user = _require_bool(data.get("edited_by_user"), "review.edited_by_user")
+        else:
+            edited_by_user = False
+        return cls(status=str(data.get("status") or "pending"), edited_by_user=edited_by_user)
 
 
 @dataclass(slots=True)
@@ -142,7 +184,7 @@ class Record:
             gender=str(data.get("gender") or ""),
             patient_fields=PatientFields.from_dict(data.get("patient_fields")),
             services=Services.from_dict(data.get("services")),
-            discharge_followup=data.get("discharge_followup"),
+            discharge_followup=_optional_bool(data.get("discharge_followup"), "discharge_followup"),
             notes=str(data.get("notes") or ""),
             ocr=OcrInfo.from_dict(data.get("ocr")),
             review=ReviewInfo.from_dict(data.get("review")),
@@ -152,7 +194,12 @@ class Record:
         return asdict(self)
 
     def service_month_label(self) -> str:
-        parsed = date.fromisoformat(self.service_date)
+        if not self.service_date:
+            raise ValueError("service_date is required to calculate service month")
+        try:
+            parsed = date.fromisoformat(self.service_date)
+        except ValueError as exc:
+            raise ValueError(f"Invalid service_date: {self.service_date!r}") from exc
         return f"{parsed.month}月"
 
     def duplicate_key(self) -> tuple[str, str, str, str]:

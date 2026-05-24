@@ -50,6 +50,16 @@ def _optional_bool(value: Any, field_name: str) -> bool | None:
     raise ValueError(f"{field_name} must be a bool")
 
 
+def _optional_float(value: Any, field_name: str) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        raise ValueError(f"{field_name} must be a number")
+    if isinstance(value, (int, float)):
+        return float(value)
+    raise ValueError(f"{field_name} must be a number")
+
+
 def _require_consultation(value: Any, field_name: str) -> dict[str, list[str]]:
     if value is None:
         return {}
@@ -148,7 +158,7 @@ class OcrInfo:
     def from_dict(cls, data: dict[str, Any] | None) -> "OcrInfo":
         data = _require_dict(data, "ocr")
         return cls(
-            confidence=data.get("confidence"),
+            confidence=_optional_float(data.get("confidence"), "ocr.confidence"),
             raw_text=str(data.get("raw_text") or ""),
             warnings=_require_list(data.get("warnings"), "ocr.warnings", item_type=str),
         )
@@ -188,6 +198,7 @@ class Record:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Record":
+        data = _require_dict(data, "record")
         record_id_value = data.get("record_id")
         record_id = "" if record_id_value is None else str(record_id_value).strip()
         if record_id == "":

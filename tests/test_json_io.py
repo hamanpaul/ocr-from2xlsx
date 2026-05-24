@@ -47,6 +47,18 @@ def make_record(record_id: str = "scan-0001") -> Record:
     )
 
 
+def test_ocr_info_casts_integer_confidence_to_float() -> None:
+    ocr = OcrInfo.from_dict({"confidence": 1, "raw_text": "raw", "warnings": []})
+
+    assert isinstance(ocr.confidence, float)
+    assert ocr.confidence == 1.0
+
+
+def test_ocr_info_rejects_string_confidence() -> None:
+    with pytest.raises(ValueError, match="ocr.confidence must be a number"):
+        OcrInfo.from_dict({"confidence": "0.9", "raw_text": "", "warnings": []})
+
+
 def test_batch_json_round_trip(tmp_path: Path) -> None:
     batch = Batch(
         source_batch=SourceBatch(
@@ -282,3 +294,8 @@ def test_record_from_dict_strips_record_id() -> None:
     record = Record.from_dict({"record_id": "  scan-1  "})
 
     assert record.record_id == "scan-1"
+
+
+def test_record_from_dict_rejects_non_object() -> None:
+    with pytest.raises(ValueError, match="record must be an object"):
+        Record.from_dict("oops")  # type: ignore[arg-type]

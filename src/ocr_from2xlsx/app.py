@@ -18,6 +18,7 @@ class ReviewApp(tk.Tk):
         self.current_index = -1
         self.session: ImportSession | None = None
         self.editing = False
+        self.written_indices: set[int] = set()
         self.fields: dict[str, tk.StringVar] = {}
         self._build_ui()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -80,6 +81,7 @@ class ReviewApp(tk.Tk):
         except (OSError, ValueError) as exc:
             messagebox.showerror("無法建立工作檔", str(exc))
             return
+        self.written_indices = set()
         self._push_status(f"工作檔: {working}")
 
     def _load_json(self) -> None:
@@ -93,6 +95,7 @@ class ReviewApp(tk.Tk):
             return
         self.current_index = -1
         self.editing = False
+        self.written_indices = set()
         self._push_status(f"已載入 {len(self.records)} 筆 JSON")
         self._next_record()
 
@@ -104,15 +107,20 @@ class ReviewApp(tk.Tk):
             messagebox.showerror("尚未保存", "目前資料已修改，請先使用「強制寫入」。")
             return
         if self.session and self.current_index >= 0:
-            current = self.records[self.current_index]
-            try:
-                result = self.session.accept_scan(current)
-            except (OSError, ValueError) as exc:
-                messagebox.showerror("寫入失敗", str(exc))
-                return
-            self._push_status(
-                f"{current.record_id}: {result.status} row={result.row_number} blockers={result.blockers}"
-            )
+            if self.current_index not in self.written_indices:
+                current = self.records[self.current_index]
+                try:
+                    result = self.session.accept_scan(current)
+                except (OSError, ValueError) as exc:
+                    messagebox.showerror("寫入失敗", str(exc))
+                    return
+                self._push_status(
+                    f"{current.record_id}: {result.status} row={result.row_number} blockers={result.blockers}"
+                )
+                if result.status == "blocked":
+                    return
+                if result.status in {"forced", "written"}:
+                    self.written_indices.add(self.current_index)
         self.editing = False
         self.current_index += 1
         if self.current_index >= len(self.records):
@@ -127,6 +135,9 @@ class ReviewApp(tk.Tk):
         if self.current_index < 0:
             messagebox.showerror("缺少資料", "請先載入 JSON 資料。")
             return
+        if self.current_index in self.written_indices:
+            messagebox.showinfo("提示", "目前資料已寫入，請切換下一筆。")
+            return
         record = self.records[self.current_index]
         self._apply_form_to_record(record)
         try:
@@ -135,12 +146,9 @@ class ReviewApp(tk.Tk):
             messagebox.showerror("寫入失敗", str(exc))
             return
         self._push_status(f"{result.record_id}: {result.status} row={result.row_number} blockers={result.blockers}")
-        self.editing = False
-        self.current_index += 1
-        if self.current_index >= len(self.records):
-            messagebox.showinfo("完成", "沒有更多資料。")
-            return
-        self._show_record(self.records[self.current_index])
+        if result.status in {"forced", "written"}:
+            self.written_indices.add(self.current_index)
+            self.editing = False
 
     def _show_record(self, record: Record) -> None:
         self.fields["record_id"].set(record.record_id)

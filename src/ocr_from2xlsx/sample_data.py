@@ -61,7 +61,9 @@ class _MissingServiceDate(str):
         return super().__getitem__(key)
 
 
-def _patient_fields(index: int) -> PatientFields:
+def _patient_fields(index: int, identity: str) -> PatientFields:
+    if identity != "patient":
+        return PatientFields()
     return PatientFields(
         nationality=NATIONALITIES[index % len(NATIONALITIES)],
         age_group=AGE_GROUPS[index % len(AGE_GROUPS)],
@@ -111,7 +113,7 @@ def _record(index: int, record_id: str, service_date: str) -> Record:
         gender=gender,
         source=SourceInfo(image_path=f"scan-{index + 1:04d}.jpg" if index % 5 == 0 else None),
         birthdate=birthdate,
-        patient_fields=_patient_fields(index),
+        patient_fields=_patient_fields(index, identity),
         services=_services(index),
         discharge_followup=None if index % 6 == 0 else index % 2 == 0,
         notes=f"Sample record {index + 1}",
@@ -124,7 +126,7 @@ def _record(index: int, record_id: str, service_date: str) -> Record:
 
 
 def generate_sample_batch(count: int = 100, template_name: str = "template.xlsx") -> Batch:
-    created_at = datetime.now().astimezone().isoformat(timespec="seconds")
+    created_at = "2026-05-24T00:00:00+08:00"
     source_batch = SourceBatch(
         created_at=created_at,
         source_type="manual",

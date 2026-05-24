@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import shutil
+from datetime import date, datetime
 from pathlib import Path
 
 from openpyxl import load_workbook
@@ -47,10 +48,28 @@ SUMMARY_PREFIX_BY_HEADER_PREFIX = {
 }
 
 
+def _normalize_duplicate_value(value: object) -> str:
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
+def _normalize_service_date(value: object) -> str:
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    return _normalize_duplicate_value(value)
+
+
 class WorkbookWriter:
     def __init__(self, working_path: Path | str) -> None:
         self.working_path = Path(working_path)
-        self.workbook = load_workbook(self.working_path)
+        suffix = self.working_path.suffix.lower()
+        if suffix in {".xlsm", ".xltm"}:
+            self.workbook = load_workbook(self.working_path, keep_vba=True)
+        else:
+            self.workbook = load_workbook(self.working_path)
         if WORKBOOK_SHEET not in self.workbook.sheetnames:
             raise ValueError(f"Missing sheet: {WORKBOOK_SHEET}")
         self.sheet = self.workbook[WORKBOOK_SHEET]
@@ -89,6 +108,13 @@ class WorkbookWriter:
             for index, cancer in enumerate(fields.cancers[:3], start=1):
                 self._set(row, f"癌別{index}\n(病人才填)", CANCER_LABELS.get(cancer, cancer))
 
+        discharge_followup = None
+        if record.discharge_followup is True:
+            discharge_followup = "是"
+        elif record.discharge_followup is False:
+            discharge_followup = "否"
+        self._set(row, BASIC_COLUMN_BY_FIELD["discharge_followup"], discharge_followup)
+
         self._write_services(row, record)
         return row
 
@@ -105,11 +131,12 @@ class WorkbookWriter:
         if not service_date_col or not name_col or not id_col:
             return keys
         for row in range(2, self.sheet.max_row + 1):
-            service_date = self.sheet.cell(row=row, column=service_date_col).value
-            name = self.sheet.cell(row=row, column=name_col).value
-            medical_id = self.sheet.cell(row=row, column=id_col).value
-            if service_date and name and medical_id:
-                keys.add((str(service_date), str(name), str(medical_id), self._service_summary_from_row(row)))
+            service_date = _normalize_service_date(self.sheet.cell(row=row, column=service_date_col).value)
+            name = _normalize_duplicate_value(self.sheet.cell(row=row, column=name_col).value)
+            medical_id = _normalize_duplicate_value(self.sheet.cell(row=row, column=id_col).value)
+            if not service_date or not name or not medical_id:
+                continue
+            keys.add((service_date, name, medical_id, self._service_summary_from_row(row)))
         return keys
 
     def _write_services(self, row: int, record: Record) -> None:

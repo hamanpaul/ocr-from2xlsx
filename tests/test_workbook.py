@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import re
+from datetime import datetime
 from pathlib import Path
 
 import pytest
 
 from openpyxl import load_workbook
 
+import ocr_from2xlsx.workbook as workbook_module
 from ocr_from2xlsx.constants import BASIC_COLUMN_BY_FIELD
 from ocr_from2xlsx.workbook import WorkbookWriter
 from tests.fixtures import create_workbook_template
@@ -66,6 +68,47 @@ def test_writer_preserves_style_and_column_width(tmp_path: Path) -> None:
     assert after["個案總表"].column_dimensions["B"].width == before_width
 
 
+@pytest.mark.parametrize("suffix", [".xlsm", ".xltm"])
+def test_workbook_writer_sets_keep_vba_for_macro_templates(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, suffix: str
+) -> None:
+    template = tmp_path / f"template{suffix}"
+    create_workbook_template(template)
+    captured: dict[str, object] = {}
+    real_load_workbook = load_workbook
+
+    def fake_load_workbook(path: Path, **kwargs: object):
+        captured.clear()
+        captured.update(kwargs)
+        return real_load_workbook(path, **kwargs)
+
+    monkeypatch.setattr(workbook_module, "load_workbook", fake_load_workbook)
+
+    WorkbookWriter(template)
+
+    assert captured.get("keep_vba") is True
+
+
+def test_workbook_writer_does_not_set_keep_vba_for_xlsx(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    template = tmp_path / "template.xlsx"
+    create_workbook_template(template)
+    captured: dict[str, object] = {}
+    real_load_workbook = load_workbook
+
+    def fake_load_workbook(path: Path, **kwargs: object):
+        captured.clear()
+        captured.update(kwargs)
+        return real_load_workbook(path, **kwargs)
+
+    monkeypatch.setattr(workbook_module, "load_workbook", fake_load_workbook)
+
+    WorkbookWriter(template)
+
+    assert "keep_vba" not in captured
+
+
 def test_existing_duplicate_keys_include_service_summary(tmp_path: Path) -> None:
     template = tmp_path / "template.xlsx"
     working = tmp_path / "working.xlsx"
@@ -74,6 +117,31 @@ def test_existing_duplicate_keys_include_service_summary(tmp_path: Path) -> None
     writer = WorkbookWriter.create_from_template(template, working)
     writer.write_record(record)
     writer.save()
+
+    reopened = WorkbookWriter(working)
+
+    assert record.duplicate_key() in reopened.existing_duplicate_keys()
+
+
+def test_existing_duplicate_keys_normalize_excel_date_and_whitespace(tmp_path: Path) -> None:
+    template = tmp_path / "template.xlsx"
+    working = tmp_path / "working.xlsx"
+    create_workbook_template(template)
+    record = make_record()
+
+    writer = WorkbookWriter.create_from_template(template, working)
+    writer.write_record(record)
+    writer.save()
+
+    wb = load_workbook(working)
+    ws = wb["個案總表"]
+    service_date_col = _column_for_header(ws, BASIC_COLUMN_BY_FIELD["service_date"])
+    name_col = _column_for_header(ws, BASIC_COLUMN_BY_FIELD["name"])
+    id_col = _column_for_header(ws, BASIC_COLUMN_BY_FIELD["medical_record_no"])
+    ws.cell(row=2, column=service_date_col, value=datetime(2026, 3, 15))
+    ws.cell(row=2, column=name_col, value=f" {record.name} ")
+    ws.cell(row=2, column=id_col, value=f" {record.medical_record_no} ")
+    wb.save(working)
 
     reopened = WorkbookWriter(working)
 
@@ -112,6 +180,34 @@ def test_existing_duplicate_keys_include_raw_service_codes(tmp_path: Path) -> No
     reopened = WorkbookWriter(template)
 
     assert expected_key in reopened.existing_duplicate_keys()
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (True, "是"),
+        (False, "否"),
+        (None, None),
+    ],
+)
+def test_writer_sets_discharge_followup(
+    tmp_path: Path, value: bool | None, expected: str | None
+) -> None:
+    template = tmp_path / "template.xlsx"
+    working = tmp_path / "working.xlsx"
+    create_workbook_template(template)
+    record = make_record()
+    record.discharge_followup = value
+
+    writer = WorkbookWriter.create_from_template(template, working)
+    writer.write_record(record)
+    writer.save()
+
+    wb = load_workbook(working)
+    ws = wb["個案總表"]
+    column = _column_for_header(ws, BASIC_COLUMN_BY_FIELD["discharge_followup"])
+
+    assert ws.cell(row=2, column=column).value == expected
 
 
 def test_missing_patient_header_raises_value_error(tmp_path: Path) -> None:

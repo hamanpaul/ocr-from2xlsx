@@ -46,6 +46,16 @@ def build_parser() -> argparse.ArgumentParser:
         description="Validate normalized service-record JSON.",
     )
     validate_parser.add_argument("--input", required=True, help="Input JSON path.")
+    import_parser = subparsers.add_parser(
+        "import-json",
+        help="Import confirmed JSON records into a working XLSX.",
+        description="Import confirmed JSON records into a working XLSX.",
+    )
+    import_parser.add_argument("--input", required=True, help="Input JSON path.")
+    import_parser.add_argument("--template", required=True, help="Template XLSX path.")
+    import_parser.add_argument("--working", required=True, help="Working XLSX output path.")
+    import_parser.add_argument("--report-json", required=True, help="Import report JSON path.")
+    import_parser.add_argument("--report-csv", required=True, help="Import report CSV path.")
     return parser
 
 
@@ -84,5 +94,41 @@ def main(argv: list[str] | None = None) -> int:
         warning_count = sum(len(result.warnings) for result in results.values())
         print(f"records={len(batch.records)} blockers={blocker_count} warnings={warning_count}")
         return 1 if blocker_count else 0
+    if args.command == "import-json":
+        from pathlib import Path
+
+        from ocr_from2xlsx.json_io import load_batch
+        from ocr_from2xlsx.session import ImportSession
+
+        accepted_count = 0
+        may_have_imports = False
+        try:
+            batch = load_batch(Path(args.input))
+            with ImportSession.start(Path(args.template), Path(args.working)) as session:
+                for record in batch.records:
+                    may_have_imports = True
+                    result = session.accept_scan(record)
+                    if result.status in {"forced", "written"}:
+                        accepted_count += 1
+                    may_have_imports = accepted_count > 0
+                try:
+                    session.write_report(Path(args.report_json), Path(args.report_csv))
+                except OSError as exc:
+                    message = f"error: {exc}; report writing did not complete"
+                    if accepted_count > 0:
+                        message = (
+                            f"error: {exc}; working XLSX may contain imported records "
+                            "but report writing did not complete"
+                        )
+                    print(message, file=sys.stderr)
+                    return 2
+        except (OSError, json.JSONDecodeError, ValueError) as exc:
+            message = f"error: {exc}"
+            if may_have_imports or accepted_count > 0:
+                message += "; working XLSX may contain imported records"
+            print(message, file=sys.stderr)
+            return 2
+        print(Path(args.working))
+        return 0
     parser.print_help()
     return 0

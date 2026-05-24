@@ -15,3 +15,4 @@
 - 新增 Python sdist 版本檔案打包設定。
 - 新增約 100 筆測試 JSON 產生器與 CLI subcommand。
 - 新增 JSON 驗證與重複單判斷。
+- 新增保留模板格式的 `個案總表` XLSX 寫入器。

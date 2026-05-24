@@ -169,6 +169,45 @@ def test_load_batch_rejects_patient_fields_list(tmp_path: Path) -> None:
         load_batch(path)
 
 
+def test_load_batch_rejects_patient_fields_age_group_non_string(tmp_path: Path) -> None:
+    record = make_record().to_dict()
+    record["patient_fields"]["age_group"] = 51
+    path = tmp_path / "records.json"
+    path.write_text(
+        json.dumps({"schema_version": SCHEMA_VERSION, "source_batch": {}, "records": [record]}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match=r"patient_fields\.age_group must be a string"):
+        load_batch(path)
+
+
+def test_load_batch_rejects_source_image_path_non_string(tmp_path: Path) -> None:
+    record = make_record().to_dict()
+    record["source"]["image_path"] = 123
+    path = tmp_path / "records.json"
+    path.write_text(
+        json.dumps({"schema_version": SCHEMA_VERSION, "source_batch": {}, "records": [record]}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match=r"source\.image_path must be a string"):
+        load_batch(path)
+
+
+def test_load_batch_rejects_birthdate_non_string(tmp_path: Path) -> None:
+    record = make_record().to_dict()
+    record["birthdate"] = 123
+    path = tmp_path / "records.json"
+    path.write_text(
+        json.dumps({"schema_version": SCHEMA_VERSION, "source_batch": {}, "records": [record]}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="birthdate must be a string"):
+        load_batch(path)
+
+
 def test_load_batch_rejects_records_not_list(tmp_path: Path) -> None:
     path = tmp_path / "records.json"
     path.write_text(
@@ -225,9 +264,21 @@ def test_batch_from_dict_rejects_unknown_schema_version() -> None:
         Batch.from_dict({"schema_version": "wrong", "source_batch": {}, "records": []})
 
 
+def test_batch_from_dict_defaults_schema_version() -> None:
+    batch = Batch.from_dict({"source_batch": {}, "records": []})
+
+    assert batch.schema_version == SCHEMA_VERSION
+
+
 def test_load_batch_rejects_non_object_top_level(tmp_path: Path) -> None:
     path = tmp_path / "records.json"
     path.write_text(json.dumps([]), encoding="utf-8")
 
     with pytest.raises(ValueError, match="Expected JSON object at top level"):
         load_batch(path)
+
+
+def test_record_from_dict_strips_record_id() -> None:
+    record = Record.from_dict({"record_id": "  scan-1  "})
+
+    assert record.record_id == "scan-1"

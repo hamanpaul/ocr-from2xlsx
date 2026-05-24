@@ -7,10 +7,6 @@ from typing import Any
 from ocr_from2xlsx.constants import SCHEMA_VERSION
 
 
-def _none_if_empty(value: Any) -> Any:
-    return None if value == "" else value
-
-
 def _require_dict(value: Any, field_name: str) -> dict[str, Any]:
     if value is None:
         return {}
@@ -36,6 +32,14 @@ def _require_bool(value: Any, field_name: str) -> bool:
     if isinstance(value, bool):
         return value
     raise ValueError(f"{field_name} must be a bool")
+
+
+def _optional_string(value: Any, field_name: str) -> str | None:
+    if value is None or value == "":
+        return None
+    if isinstance(value, str):
+        return value
+    raise ValueError(f"{field_name} must be a string")
 
 
 def _optional_bool(value: Any, field_name: str) -> bool | None:
@@ -66,7 +70,10 @@ class SourceInfo:
     @classmethod
     def from_dict(cls, data: dict[str, Any] | None) -> "SourceInfo":
         data = _require_dict(data, "source")
-        return cls(image_path=_none_if_empty(data.get("image_path")), capture_time=_none_if_empty(data.get("capture_time")))
+        return cls(
+            image_path=_optional_string(data.get("image_path"), "source.image_path"),
+            capture_time=_optional_string(data.get("capture_time"), "source.capture_time"),
+        )
 
 
 @dataclass(slots=True)
@@ -83,11 +90,11 @@ class PatientFields:
     def from_dict(cls, data: dict[str, Any] | None) -> "PatientFields":
         data = _require_dict(data, "patient_fields")
         return cls(
-            nationality=_none_if_empty(data.get("nationality")),
-            age_group=_none_if_empty(data.get("age_group")),
-            channel=_none_if_empty(data.get("channel")),
-            disease_status=_none_if_empty(data.get("disease_status")),
-            source=_none_if_empty(data.get("source")),
+            nationality=_optional_string(data.get("nationality"), "patient_fields.nationality"),
+            age_group=_optional_string(data.get("age_group"), "patient_fields.age_group"),
+            channel=_optional_string(data.get("channel"), "patient_fields.channel"),
+            disease_status=_optional_string(data.get("disease_status"), "patient_fields.disease_status"),
+            source=_optional_string(data.get("source"), "patient_fields.source"),
             cancers=_require_list(data.get("cancers"), "patient_fields.cancers", item_type=str),
             newly_diagnosed_within_year=_optional_bool(
                 data.get("newly_diagnosed_within_year"),
@@ -182,16 +189,17 @@ class Record:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Record":
         record_id_value = data.get("record_id")
-        if record_id_value is None or str(record_id_value).strip() == "":
+        record_id = "" if record_id_value is None else str(record_id_value).strip()
+        if record_id == "":
             raise ValueError("record_id is required")
         return cls(
-            record_id=str(record_id_value),
+            record_id=record_id,
             source=SourceInfo.from_dict(data.get("source")),
             service_date=str(data.get("service_date") or ""),
             identity=str(data.get("identity") or ""),
             name=str(data.get("name") or ""),
             medical_record_no=str(data.get("medical_record_no") or ""),
-            birthdate=_none_if_empty(data.get("birthdate")),
+            birthdate=_optional_string(data.get("birthdate"), "birthdate"),
             gender=str(data.get("gender") or ""),
             patient_fields=PatientFields.from_dict(data.get("patient_fields")),
             services=Services.from_dict(data.get("services")),
@@ -255,7 +263,7 @@ class Batch:
                 raise ValueError(f"records[{index}] must be an object")
             records.append(Record.from_dict(item))
         return cls(
-            schema_version=str(data.get("schema_version") or ""),
+            schema_version=SCHEMA_VERSION,
             source_batch=SourceBatch.from_dict(data.get("source_batch")),
             records=records,
         )

@@ -27,7 +27,7 @@ class ImageFolderSource:
             for path in self.folder.iterdir()
             if path.is_file() and path.suffix.lower() in self._extensions
         ]
-        return sorted(paths, key=lambda path: path.name.lower())
+        return sorted(paths, key=lambda path: (path.name.casefold(), path.name))
 
 
 class UvcCameraSource:

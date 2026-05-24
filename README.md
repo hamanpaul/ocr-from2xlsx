@@ -27,13 +27,17 @@ The first implementation validates the workflow before real hand-written OCR is 
 5. Export a final XLSX and import report.
 
 <!-- BEGIN: cli-help marker="ocr-from2xlsx-help" -->
-usage: ocr-from2xlsx [-h] [--version]
+usage: ocr-from2xlsx [-h] [--version] {sample-json} ...
 
 Import normalized service-record JSON into the monthly report XLSX.
 
+positional arguments:
+  {sample-json}
+    sample-json  Generate deterministic sample service-record JSON.
+
 options:
-  -h, --help  show this help message and exit
-  --version   Print package version and exit.
+  -h, --help     show this help message and exit
+  --version      Print package version and exit.
 <!-- END: cli-help marker="ocr-from2xlsx-help" -->
 
 ## Version

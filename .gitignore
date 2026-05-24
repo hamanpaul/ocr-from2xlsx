@@ -1,6 +1,7 @@
 *.xlsx
 *.xlsm
 output/
+.worktrees/
 .superpowers/
 __pycache__/
 .pytest_cache/

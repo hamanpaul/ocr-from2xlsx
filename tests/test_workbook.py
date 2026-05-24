@@ -194,6 +194,27 @@ def test_writer_maps_numbered_services_to_numbered_columns(tmp_path: Path) -> No
     reopened.close()
 
 
+def test_writer_raises_when_service_prefix_missing(tmp_path: Path) -> None:
+    template = tmp_path / "template.xlsx"
+    working = tmp_path / "working.xlsx"
+    create_workbook_template(template)
+
+    wb = load_workbook(template)
+    ws = wb["個案總表"]
+    missing_header = "提供實體用品及設備1"
+    ws.cell(row=1, column=_column_for_header(ws, missing_header)).value = None
+    wb.save(template)
+    wb.close()
+
+    record = make_record()
+    writer = WorkbookWriter.create_from_template(template, working)
+    with pytest.raises(
+        ValueError, match=re.escape("Missing workbook service columns for 提供實體用品及設備")
+    ):
+        writer.write_record(record)
+    writer.close()
+
+
 def test_writer_routes_unmapped_service_to_sparse_column(tmp_path: Path) -> None:
     template = tmp_path / "template.xlsx"
     working = tmp_path / "working.xlsx"

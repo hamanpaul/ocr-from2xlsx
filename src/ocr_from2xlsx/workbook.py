@@ -174,30 +174,25 @@ class WorkbookWriter:
             for code in codes:
                 label = LABEL_BY_CODE.get(code, code)
                 header = self._service_header(row, prefix, label, code)
-                if header:
-                    self._set(row, header, label)
+                self._set(row, header, label)
         for code in record.services.supplies:
             label = LABEL_BY_CODE.get(code, code)
             header = self._service_header(row, "提供實體用品及設備", label, code)
-            if header:
-                self._set(row, header, label)
+            self._set(row, header, label)
         for code in record.services.internal_referrals:
             label = LABEL_BY_CODE.get(code, code)
             header = self._service_header(row, "轉介或連結院內資源", label, code)
-            if header:
-                self._set(row, header, label)
+            self._set(row, header, label)
         for code in record.services.external_referrals:
             label = LABEL_BY_CODE.get(code, code)
             header = self._service_header(row, "轉介或連結院外資源", label, code)
-            if header:
-                self._set(row, header, label)
+            self._set(row, header, label)
         for code in record.services.referral_outcomes:
             label = LABEL_BY_CODE.get(code, code)
             header = self._service_header(row, "轉介或連結資源成果", label, code)
-            if header:
-                self._set(row, header, label)
+            self._set(row, header, label)
 
-    def _service_header(self, row: int, prefix: str, label: str, code: str) -> str | None:
+    def _service_header(self, row: int, prefix: str, label: str, code: str) -> str:
         match = _SERVICE_NUMBER_PATTERN.match(label)
         if match:
             candidate = f"{prefix}{match.group('number')}"
@@ -205,7 +200,7 @@ class WorkbookWriter:
                 return candidate
         candidates = [header for header in self.header_map if header.startswith(prefix)]
         if not candidates:
-            return None
+            raise ValueError(f"Missing workbook service columns for {prefix}")
         for header in candidates:
             if self._service_cell_empty(row, header):
                 return header

@@ -64,6 +64,53 @@ def test_import_json_cli_writes_workbook(tmp_path: Path, capsys) -> None:
     assert report[0]["status"] == "written"
 
 
+def test_import_json_cli_reports_blocked_records(tmp_path: Path, capsys) -> None:
+    template = tmp_path / "template.xlsx"
+    working = tmp_path / "working.xlsx"
+    input_json = tmp_path / "records.json"
+    report_json = tmp_path / "report.json"
+    report_csv = tmp_path / "report.csv"
+    create_workbook_template(template)
+    blocked_record = make_record()
+    blocked_record.service_date = ""
+    dump_batch(
+        Batch(
+            source_batch=SourceBatch(
+                created_at="2026-05-24T15:30:00+08:00",
+                source_type="json_import",
+                template_name="template.xlsx",
+            ),
+            records=[blocked_record],
+        ),
+        input_json,
+    )
+
+    exit_code = main(
+        [
+            "import-json",
+            "--input",
+            str(input_json),
+            "--template",
+            str(template),
+            "--working",
+            str(working),
+            "--report-json",
+            str(report_json),
+            "--report-csv",
+            str(report_csv),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert captured.out == f"{working}\n"
+    assert working.exists()
+    assert report_json.exists()
+    assert report_csv.exists()
+    report = json.loads(report_json.read_text(encoding="utf-8"))
+    assert report[0]["status"] == "blocked"
+
+
 def test_import_json_cli_reports_input_error_without_traceback(
     tmp_path: Path, capsys
 ) -> None:

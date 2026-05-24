@@ -36,7 +36,7 @@ positional arguments:
   {sample-json,validate-json,import-json}
     sample-json         Generate deterministic sample service-record JSON.
     validate-json       Validate normalized service-record JSON.
-    import-json         Import confirmed JSON records into a working XLSX.
+    import-json         Import normalized JSON records into a working XLSX.
 
 options:
   -h, --help            show this help message and exit

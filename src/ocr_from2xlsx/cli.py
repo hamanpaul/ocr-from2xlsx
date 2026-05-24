@@ -48,8 +48,8 @@ def build_parser() -> argparse.ArgumentParser:
     validate_parser.add_argument("--input", required=True, help="Input JSON path.")
     import_parser = subparsers.add_parser(
         "import-json",
-        help="Import confirmed JSON records into a working XLSX.",
-        description="Import confirmed JSON records into a working XLSX.",
+        help="Import normalized JSON records into a working XLSX.",
+        description="Import normalized JSON records into a working XLSX.",
     )
     import_parser.add_argument("--input", required=True, help="Input JSON path.")
     import_parser.add_argument("--template", required=True, help="Template XLSX path.")
@@ -101,6 +101,7 @@ def main(argv: list[str] | None = None) -> int:
         from ocr_from2xlsx.session import ImportSession
 
         accepted_count = 0
+        blocked_count = 0
         may_have_imports = False
         try:
             batch = load_batch(Path(args.input))
@@ -108,6 +109,8 @@ def main(argv: list[str] | None = None) -> int:
                 for record in batch.records:
                     may_have_imports = True
                     result = session.accept_scan(record)
+                    if result.status == "blocked":
+                        blocked_count += 1
                     if result.status in {"forced", "written"}:
                         accepted_count += 1
                     may_have_imports = accepted_count > 0
@@ -129,6 +132,6 @@ def main(argv: list[str] | None = None) -> int:
             print(message, file=sys.stderr)
             return 2
         print(Path(args.working))
-        return 0
+        return 1 if blocked_count else 0
     parser.print_help()
     return 0

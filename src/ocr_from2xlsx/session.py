@@ -9,6 +9,22 @@ from ocr_from2xlsx.report import ImportReport, ImportReportItem
 from ocr_from2xlsx.validation import validate_record
 from ocr_from2xlsx.workbook import WorkbookWriter
 
+_NON_WRITABLE_BLOCKERS = {
+    "service_date.invalid",
+    "identity.invalid",
+    "gender.invalid",
+}
+_NON_WRITABLE_PREFIXES = ("service.",)
+
+
+def _has_non_writable_blockers(blockers: list[str]) -> bool:
+    for blocker in blockers:
+        if blocker in _NON_WRITABLE_BLOCKERS:
+            return True
+        if blocker.startswith(_NON_WRITABLE_PREFIXES):
+            return True
+    return False
+
 
 def _duplicate_key_is_usable(record: Record) -> bool:
     if not record.service_date:
@@ -55,28 +71,46 @@ class ImportSession:
             if duplicate_key in self.batch_duplicate_keys:
                 blockers.append("duplicate.in_batch")
 
-        if blockers and not force:
-            report_item = ImportReportItem(
-                record_id=record.record_id,
-                status="blocked",
-                row_number=None,
-                blockers=blockers,
-                warnings=warnings,
-            )
-            self.report.add(report_item)
-            return AcceptResult(
-                record_id=record.record_id,
-                status="blocked",
-                row_number=None,
-                blockers=blockers,
-                warnings=warnings,
-            )
-
-        if duplicate_key is not None:
-            self.batch_duplicate_keys.add(duplicate_key)
+        if blockers:
+            if force and _has_non_writable_blockers(blockers):
+                if "force.non_writable" not in blockers:
+                    blockers.append("force.non_writable")
+                report_item = ImportReportItem(
+                    record_id=record.record_id,
+                    status="blocked",
+                    row_number=None,
+                    blockers=blockers,
+                    warnings=warnings,
+                )
+                self.report.add(report_item)
+                return AcceptResult(
+                    record_id=record.record_id,
+                    status="blocked",
+                    row_number=None,
+                    blockers=blockers,
+                    warnings=warnings,
+                )
+            if not force:
+                report_item = ImportReportItem(
+                    record_id=record.record_id,
+                    status="blocked",
+                    row_number=None,
+                    blockers=blockers,
+                    warnings=warnings,
+                )
+                self.report.add(report_item)
+                return AcceptResult(
+                    record_id=record.record_id,
+                    status="blocked",
+                    row_number=None,
+                    blockers=blockers,
+                    warnings=warnings,
+                )
 
         row_number = self.writer.write_record(record)
         self.writer.save()
+        if duplicate_key is not None:
+            self.batch_duplicate_keys.add(duplicate_key)
         status = "forced" if blockers else "written"
         report_item = ImportReportItem(
             record_id=record.record_id,

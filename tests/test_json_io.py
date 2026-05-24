@@ -129,6 +129,89 @@ def test_load_batch_rejects_empty_record_id(tmp_path: Path) -> None:
         load_batch(path)
 
 
+def test_load_batch_rejects_non_string_record_id(tmp_path: Path) -> None:
+    record = make_record().to_dict()
+    record["record_id"] = 123
+    path = tmp_path / "records.json"
+    path.write_text(
+        json.dumps({"schema_version": SCHEMA_VERSION, "source_batch": {}, "records": [record]}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="record_id must be a string"):
+        load_batch(path)
+
+
+def test_load_batch_accepts_missing_service_date(tmp_path: Path) -> None:
+    record = make_record().to_dict()
+    del record["service_date"]
+    path = tmp_path / "records.json"
+    path.write_text(
+        json.dumps({"schema_version": SCHEMA_VERSION, "source_batch": {}, "records": [record]}),
+        encoding="utf-8",
+    )
+
+    batch = load_batch(path)
+
+    assert batch.records[0].service_date == ""
+
+
+def test_load_batch_rejects_non_string_name(tmp_path: Path) -> None:
+    record = make_record().to_dict()
+    record["name"] = 123
+    path = tmp_path / "records.json"
+    path.write_text(
+        json.dumps({"schema_version": SCHEMA_VERSION, "source_batch": {}, "records": [record]}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="name must be a string"):
+        load_batch(path)
+
+
+def test_load_batch_rejects_non_string_source_batch_template_name(tmp_path: Path) -> None:
+    record = make_record().to_dict()
+    path = tmp_path / "records.json"
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": SCHEMA_VERSION,
+                "source_batch": {"template_name": 123},
+                "records": [record],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="source_batch.template_name must be a string"):
+        load_batch(path)
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "match"),
+    [
+        ("ocr.raw_text", 123, "ocr.raw_text must be a string"),
+        ("review.status", 123, "review.status must be a string"),
+    ],
+)
+def test_load_batch_rejects_non_string_ocr_review_fields(
+    tmp_path: Path, field: str, value: object, match: str
+) -> None:
+    record = make_record().to_dict()
+    if field == "ocr.raw_text":
+        record["ocr"]["raw_text"] = value
+    else:
+        record["review"]["status"] = value
+    path = tmp_path / "records.json"
+    path.write_text(
+        json.dumps({"schema_version": SCHEMA_VERSION, "source_batch": {}, "records": [record]}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match=match):
+        load_batch(path)
+
+
 def test_load_batch_rejects_supplies_string(tmp_path: Path) -> None:
     record = make_record().to_dict()
     record["services"]["supplies"] = "wig_hat"

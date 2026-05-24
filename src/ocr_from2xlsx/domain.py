@@ -42,6 +42,25 @@ def _optional_string(value: Any, field_name: str) -> str | None:
     raise ValueError(f"{field_name} must be a string")
 
 
+def _lenient_string(value: Any, field_name: str) -> str:
+    if value is None or value == "":
+        return ""
+    if isinstance(value, str):
+        return value
+    raise ValueError(f"{field_name} must be a string")
+
+
+def _require_non_empty_string(value: Any, field_name: str) -> str:
+    if value is None:
+        raise ValueError(f"{field_name} is required")
+    if not isinstance(value, str):
+        raise ValueError(f"{field_name} must be a string")
+    trimmed = value.strip()
+    if trimmed == "":
+        raise ValueError(f"{field_name} is required")
+    return trimmed
+
+
 def _optional_bool(value: Any, field_name: str) -> bool | None:
     if value is None:
         return None
@@ -159,7 +178,7 @@ class OcrInfo:
         data = _require_dict(data, "ocr")
         return cls(
             confidence=_optional_float(data.get("confidence"), "ocr.confidence"),
-            raw_text=str(data.get("raw_text") or ""),
+            raw_text=_lenient_string(data.get("raw_text"), "ocr.raw_text"),
             warnings=_require_list(data.get("warnings"), "ocr.warnings", item_type=str),
         )
 
@@ -176,7 +195,7 @@ class ReviewInfo:
             edited_by_user = _require_bool(data.get("edited_by_user"), "review.edited_by_user")
         else:
             edited_by_user = False
-        return cls(status=str(data.get("status") or "pending"), edited_by_user=edited_by_user)
+        return cls(status=_lenient_string(data.get("status"), "review.status"), edited_by_user=edited_by_user)
 
 
 @dataclass(slots=True)
@@ -199,23 +218,20 @@ class Record:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Record":
         data = _require_dict(data, "record")
-        record_id_value = data.get("record_id")
-        record_id = "" if record_id_value is None else str(record_id_value).strip()
-        if record_id == "":
-            raise ValueError("record_id is required")
+        record_id = _require_non_empty_string(data.get("record_id"), "record_id")
         return cls(
             record_id=record_id,
             source=SourceInfo.from_dict(data.get("source")),
-            service_date=str(data.get("service_date") or ""),
-            identity=str(data.get("identity") or ""),
-            name=str(data.get("name") or ""),
-            medical_record_no=str(data.get("medical_record_no") or ""),
+            service_date=_lenient_string(data.get("service_date"), "service_date"),
+            identity=_lenient_string(data.get("identity"), "identity"),
+            name=_lenient_string(data.get("name"), "name"),
+            medical_record_no=_lenient_string(data.get("medical_record_no"), "medical_record_no"),
             birthdate=_optional_string(data.get("birthdate"), "birthdate"),
-            gender=str(data.get("gender") or ""),
+            gender=_lenient_string(data.get("gender"), "gender"),
             patient_fields=PatientFields.from_dict(data.get("patient_fields")),
             services=Services.from_dict(data.get("services")),
             discharge_followup=_optional_bool(data.get("discharge_followup"), "discharge_followup"),
-            notes=str(data.get("notes") or ""),
+            notes=_lenient_string(data.get("notes"), "notes"),
             ocr=OcrInfo.from_dict(data.get("ocr")),
             review=ReviewInfo.from_dict(data.get("review")),
         )
@@ -246,9 +262,9 @@ class SourceBatch:
     def from_dict(cls, data: dict[str, Any]) -> "SourceBatch":
         data = _require_dict(data, "source_batch")
         return cls(
-            created_at=str(data.get("created_at") or ""),
-            source_type=str(data.get("source_type") or ""),
-            template_name=str(data.get("template_name") or ""),
+            created_at=_lenient_string(data.get("created_at"), "source_batch.created_at"),
+            source_type=_lenient_string(data.get("source_type"), "source_batch.source_type"),
+            template_name=_lenient_string(data.get("template_name"), "source_batch.template_name"),
         )
 
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from typing import TextIO
 
@@ -73,7 +74,11 @@ def main(argv: list[str] | None = None) -> int:
         from ocr_from2xlsx.json_io import load_batch
         from ocr_from2xlsx.validation import validate_batch
 
-        batch = load_batch(Path(args.input))
+        try:
+            batch = load_batch(Path(args.input))
+        except (OSError, json.JSONDecodeError, ValueError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
         results = validate_batch(batch)
         blocker_count = sum(len(result.blockers) for result in results.values())
         warning_count = sum(len(result.warnings) for result in results.values())

@@ -55,8 +55,9 @@ def validate_record(
     if record.ocr.confidence is not None and record.ocr.confidence < 0.7:
         result.warnings.append("ocr.low_confidence")
 
-    if existing_duplicate_keys and record.duplicate_key() in existing_duplicate_keys:
-        result.blockers.append("duplicate.existing_workbook")
+    if existing_duplicate_keys and _duplicate_key_is_usable(record):
+        if record.duplicate_key() in existing_duplicate_keys:
+            result.blockers.append("duplicate.existing_workbook")
 
     return result
 
@@ -66,15 +67,26 @@ def validate_batch(
     existing_duplicate_keys: set[tuple[str, str, str, str]] | None = None,
 ) -> dict[str, ValidationResult]:
     seen: set[tuple[str, str, str, str]] = set()
+    record_id_counts: dict[str, int] = {}
     results: dict[str, ValidationResult] = {}
     existing_duplicate_keys = existing_duplicate_keys or set()
     for record in batch.records:
         result = validate_record(record, existing_duplicate_keys)
-        key = record.duplicate_key()
-        if key in seen:
-            result.blockers.append("duplicate.in_batch")
-        seen.add(key)
-        results[record.record_id] = result
+        if _duplicate_key_is_usable(record):
+            key = record.duplicate_key()
+            if key in seen:
+                result.blockers.append("duplicate.in_batch")
+            else:
+                seen.add(key)
+        record_id_counts[record.record_id] = record_id_counts.get(record.record_id, 0) + 1
+        occurrence = record_id_counts[record.record_id]
+        if occurrence > 1:
+            _append_unique(result.blockers, "record_id.duplicate_in_batch")
+            first_result = results.get(record.record_id)
+            if first_result is not None:
+                _append_unique(first_result.blockers, "record_id.duplicate_in_batch")
+        result_key = record.record_id if occurrence == 1 else f"{record.record_id}#{occurrence}"
+        results[result_key] = result
     return results
 
 
@@ -131,3 +143,22 @@ def _validate_services(record: Record, result: ValidationResult) -> None:
     for code in record.services.referral_outcomes:
         if code not in OUTCOME_CODES:
             result.blockers.append(f"service.referral_outcomes.{code}.invalid")
+
+
+def _duplicate_key_is_usable(record: Record) -> bool:
+    if not record.service_date:
+        return False
+    try:
+        date.fromisoformat(record.service_date)
+    except (TypeError, ValueError):
+        return False
+    if not record.name or not record.name.strip():
+        return False
+    if not record.medical_record_no or not record.medical_record_no.strip():
+        return False
+    return True
+
+
+def _append_unique(values: list[str], item: str) -> None:
+    if item not in values:
+        values.append(item)

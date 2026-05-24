@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ocr-from2xlsx"
-version = "0.0.0"
+dynamic = ["version"]
 description = "Portable OCR-to-XLSX service-record import prototype"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -23,6 +23,9 @@ camera = [
 
 [project.scripts]
 ocr-from2xlsx = "ocr_from2xlsx.cli:main"
+
+[tool.setuptools.dynamic]
+version = { file = ["VERSION"] }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

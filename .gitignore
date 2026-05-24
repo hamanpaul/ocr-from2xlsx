@@ -9,4 +9,6 @@ __pycache__/
 .mypy_cache/
 dist/
 build/
+*.egg-info/
+.eggs/
 *.spec

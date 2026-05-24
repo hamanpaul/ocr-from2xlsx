@@ -42,6 +42,11 @@ SUMMARY_BY_HEADER_PREFIX_AND_LABEL = {
 
 SUMMARY_PREFIX_BY_HEADER_PREFIX = {
     "諮詢-健康與醫療系統": "health_medical",
+    "諮詢-症狀與副作用照護": "symptom_side_effect",
+    "諮詢-營養與飲食": "nutrition_diet",
+    "諮詢-社會心理情緒": "psychosocial_emotion",
+    "諮詢-經濟與社會資源": "financial_social",
+    "諮詢-照顧與支持": "care_support",
     "提供實體用品及設備": "supplies",
     "轉介或連結院內資源": "internal",
     "轉介或連結院外資源": "external",

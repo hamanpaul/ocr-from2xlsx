@@ -48,8 +48,10 @@ def test_writer_copies_template_and_writes_record(tmp_path: Path) -> None:
     assert ws["K2"].value == "51-60歲"
     assert ws["O2"].value == "8.乳癌"
     assert ws["R2"].value == "是"
-    assert ws["S2"].value == "1.癌症篩檢與預防"
-    assert ws["T2"].value == "1.假髮/頭巾/毛帽用品"
+    consult_col = _column_for_header(ws, "諮詢-健康與醫療系統1")
+    supplies_col = _column_for_header(ws, "提供實體用品及設備1")
+    assert ws.cell(row=2, column=consult_col).value == "1.癌症篩檢與預防"
+    assert ws.cell(row=2, column=supplies_col).value == "1.假髮/頭巾/毛帽用品"
     assert wb["一月"]["A1"].value == "=SUM(個案總表!A2:A6)"
     wb.close()
 
@@ -285,6 +287,27 @@ def test_existing_duplicate_keys_include_raw_service_codes(tmp_path: Path) -> No
         )
     )
     expected_key = ("2026-04-01", "李小美", "B987654", expected_summary)
+
+    reopened = WorkbookWriter(template)
+
+    assert expected_key in reopened.existing_duplicate_keys()
+    reopened.close()
+
+
+def test_existing_duplicate_keys_include_non_health_consultation_summary(tmp_path: Path) -> None:
+    template = tmp_path / "template.xlsx"
+    create_workbook_template(template)
+
+    wb = load_workbook(template)
+    ws = wb["個案總表"]
+    ws.cell(row=2, column=_column_for_header(ws, BASIC_COLUMN_BY_FIELD["service_date"]), value="2026-05-01")
+    ws.cell(row=2, column=_column_for_header(ws, BASIC_COLUMN_BY_FIELD["name"]), value="李大明")
+    ws.cell(row=2, column=_column_for_header(ws, BASIC_COLUMN_BY_FIELD["medical_record_no"]), value="C111111")
+    ws.cell(row=2, column=_column_for_header(ws, "諮詢-營養與飲食1"), value="nutrition_code")
+    wb.save(template)
+    wb.close()
+
+    expected_key = ("2026-05-01", "李大明", "C111111", "nutrition_diet:nutrition_code")
 
     reopened = WorkbookWriter(template)
 

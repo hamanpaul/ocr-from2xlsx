@@ -47,20 +47,6 @@ RESOURCE_CODE_LIST = sorted(RESOURCE_CODES)
 OUTCOME_CODE_LIST = sorted(OUTCOME_CODES)
 
 
-class _MissingServiceDate(str):
-    """Represent a missing date while keeping month slices deterministic."""
-
-    def __new__(cls, month: str) -> "_MissingServiceDate":
-        obj = super().__new__(cls, "")
-        obj._month = month
-        return obj
-
-    def __getitem__(self, key: object) -> str:
-        if isinstance(key, slice) and key.start == 5 and key.stop == 7:
-            return self._month
-        return super().__getitem__(key)
-
-
 def _patient_fields(index: int, identity: str) -> PatientFields:
     if identity != "patient":
         return PatientFields()
@@ -139,7 +125,7 @@ def generate_sample_batch(count: int = 100, template_name: str = "template.xlsx"
         month = f"{(index % 12) + 1:02d}"
         day = (index % 28) + 1
         date_value = f"2026-{month}-{day:02d}"
-        service_date = _MissingServiceDate(month) if missing_index == index else date_value
+        service_date = "" if missing_index == index else date_value
         record_id = f"sample-{index + 1:04d}"
         records.append(_record(index, record_id, service_date))
     if total >= 4:

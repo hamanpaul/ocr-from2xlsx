@@ -39,6 +39,12 @@ def build_parser() -> argparse.ArgumentParser:
         default="template.xlsx",
         help="Template name to store in source_batch.",
     )
+    validate_parser = subparsers.add_parser(
+        "validate-json",
+        help="Validate normalized service-record JSON.",
+        description="Validate normalized service-record JSON.",
+    )
+    validate_parser.add_argument("--input", required=True, help="Input JSON path.")
     return parser
 
 
@@ -61,5 +67,17 @@ def main(argv: list[str] | None = None) -> int:
         dump_batch(batch, output_path)
         print(output_path)
         return 0
+    if args.command == "validate-json":
+        from pathlib import Path
+
+        from ocr_from2xlsx.json_io import load_batch
+        from ocr_from2xlsx.validation import validate_batch
+
+        batch = load_batch(Path(args.input))
+        results = validate_batch(batch)
+        blocker_count = sum(len(result.blockers) for result in results.values())
+        warning_count = sum(len(result.warnings) for result in results.values())
+        print(f"records={len(batch.records)} blockers={blocker_count} warnings={warning_count}")
+        return 1 if blocker_count else 0
     parser.print_help()
     return 0

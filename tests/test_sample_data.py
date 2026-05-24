@@ -36,3 +36,26 @@ def test_sample_includes_duplicates_and_invalid_cases() -> None:
     assert len(set(keys)) < len(keys)
     assert missing_dates
     assert low_confidence
+
+
+def test_non_patient_records_have_empty_patient_fields() -> None:
+    batch = generate_sample_batch(count=30, template_name="template.xlsx")
+    non_patient_records = [record for record in batch.records if record.identity != "patient"]
+
+    assert non_patient_records
+    for record in non_patient_records:
+        fields = record.patient_fields
+        assert fields.cancers == []
+        assert fields.nationality is None
+        assert fields.age_group is None
+        assert fields.channel is None
+        assert fields.disease_status is None
+        assert fields.source is None
+        assert fields.newly_diagnosed_within_year is None
+
+
+def test_generate_sample_batch_is_deterministic() -> None:
+    first = generate_sample_batch(count=100, template_name="template.xlsx").to_dict()
+    second = generate_sample_batch(count=100, template_name="template.xlsx").to_dict()
+
+    assert first == second

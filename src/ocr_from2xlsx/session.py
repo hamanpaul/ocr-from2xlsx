@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
-from ocr_from2xlsx.domain import Record
+from ocr_from2xlsx.domain import Batch, Record
 from ocr_from2xlsx.report import ImportReport, ImportReportItem
 from ocr_from2xlsx.validation import validate_record
 from ocr_from2xlsx.workbook import WorkbookWriter
@@ -127,6 +127,12 @@ class ImportSession:
             blockers=blockers,
             warnings=warnings,
         )
+
+    def accept_scan_batch(self, batch: Batch, force: bool = False) -> list[AcceptResult]:
+        results: list[AcceptResult] = []
+        for record in batch.records:
+            results.append(self.accept_scan(record, force=force))
+        return results
 
     def write_report(self, json_path: Path | str, csv_path: Path | str) -> None:
         self.report.write_json(json_path)

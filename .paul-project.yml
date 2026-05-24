@@ -1,0 +1,14 @@
+policy_profile: flat
+policy_version: 1.0.0
+code_paths:
+  - ".paul-project.yml"
+  - "VERSION"
+  - "**/*.py"
+  - "**/*.rs"
+  - "**/*.sh"
+  - "src/**"
+  - "scripts/**"
+  - "pyproject.toml"
+  - "Cargo.toml"
+  - "Cargo.lock"
+  - ".github/**"

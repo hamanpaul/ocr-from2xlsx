@@ -147,6 +147,46 @@ def test_existing_duplicate_keys_include_service_summary(tmp_path: Path) -> None
     reopened.close()
 
 
+def test_existing_duplicate_keys_stops_after_consecutive_empty_rows(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    template = tmp_path / "template.xlsx"
+    working = tmp_path / "working.xlsx"
+    create_workbook_template(template)
+    record = make_record()
+    writer = WorkbookWriter.create_from_template(template, working)
+    writer.write_record(record)
+    writer.save()
+    writer.close()
+
+    wb = load_workbook(working)
+    ws = wb["個案總表"]
+    ws.cell(row=500, column=1, value="inflate")
+    wb.save(working)
+    wb.close()
+
+    reopened = WorkbookWriter(working)
+    max_row_seen = 0
+    real_cell = reopened.sheet.cell
+
+    def tracking_cell(*args: object, **kwargs: object):
+        nonlocal max_row_seen
+        row = kwargs.get("row")
+        if row is None and args:
+            row = args[0]
+        if isinstance(row, int) and row > max_row_seen:
+            max_row_seen = row
+        return real_cell(*args, **kwargs)
+
+    monkeypatch.setattr(reopened.sheet, "cell", tracking_cell)
+
+    keys = reopened.existing_duplicate_keys()
+    reopened.close()
+
+    assert record.duplicate_key() in keys
+    assert max_row_seen <= 2 + workbook_module.MAX_CONSECUTIVE_EMPTY_DUPLICATE_ROWS
+
+
 def test_writer_maps_numbered_services_to_numbered_columns(tmp_path: Path) -> None:
     template = tmp_path / "template.xlsx"
     working = tmp_path / "working.xlsx"

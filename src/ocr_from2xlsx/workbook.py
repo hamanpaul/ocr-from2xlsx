@@ -54,6 +54,7 @@ SUMMARY_PREFIX_BY_HEADER_PREFIX = {
 }
 
 _SERVICE_NUMBER_PATTERN = re.compile(r"^(?P<number>\d+)\.")
+MAX_CONSECUTIVE_EMPTY_DUPLICATE_ROWS = 25
 
 
 def _normalize_duplicate_value(value: object) -> str:
@@ -159,10 +160,17 @@ class WorkbookWriter:
         id_col = self.header_map.get(BASIC_COLUMN_BY_FIELD["medical_record_no"])
         if not service_date_col or not name_col or not id_col:
             return keys
+        consecutive_empty_rows = 0
         for row in range(2, self.sheet.max_row + 1):
             service_date = _normalize_service_date(self.sheet.cell(row=row, column=service_date_col).value)
             name = _normalize_duplicate_value(self.sheet.cell(row=row, column=name_col).value)
             medical_id = _normalize_duplicate_value(self.sheet.cell(row=row, column=id_col).value)
+            if not service_date and not name and not medical_id:
+                consecutive_empty_rows += 1
+                if consecutive_empty_rows >= MAX_CONSECUTIVE_EMPTY_DUPLICATE_ROWS:
+                    break
+                continue
+            consecutive_empty_rows = 0
             if not service_date or not name or not medical_id:
                 continue
             keys.add((service_date, name, medical_id, self._service_summary_from_row(row)))

@@ -106,6 +106,67 @@ def test_load_batch_rejects_consultation_value_string(tmp_path: Path) -> None:
         load_batch(path)
 
 
+def test_load_batch_rejects_services_string(tmp_path: Path) -> None:
+    record = make_record().to_dict()
+    record["services"] = "oops"
+    path = tmp_path / "records.json"
+    path.write_text(
+        json.dumps({"schema_version": SCHEMA_VERSION, "source_batch": {}, "records": [record]}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="services must be an object"):
+        load_batch(path)
+
+
+def test_load_batch_rejects_patient_fields_list(tmp_path: Path) -> None:
+    record = make_record().to_dict()
+    record["patient_fields"] = []
+    path = tmp_path / "records.json"
+    path.write_text(
+        json.dumps({"schema_version": SCHEMA_VERSION, "source_batch": {}, "records": [record]}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="patient_fields must be an object"):
+        load_batch(path)
+
+
+def test_load_batch_rejects_records_not_list(tmp_path: Path) -> None:
+    path = tmp_path / "records.json"
+    path.write_text(
+        json.dumps({"schema_version": SCHEMA_VERSION, "source_batch": {}, "records": "oops"}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="records must be a list"):
+        load_batch(path)
+
+
+def test_load_batch_rejects_record_item_not_object(tmp_path: Path) -> None:
+    path = tmp_path / "records.json"
+    path.write_text(
+        json.dumps({"schema_version": SCHEMA_VERSION, "source_batch": {}, "records": ["oops"]}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match=r"records\[0\] must be an object"):
+        load_batch(path)
+
+
+def test_load_batch_rejects_supplies_non_string(tmp_path: Path) -> None:
+    record = make_record().to_dict()
+    record["services"]["supplies"] = [123]
+    path = tmp_path / "records.json"
+    path.write_text(
+        json.dumps({"schema_version": SCHEMA_VERSION, "source_batch": {}, "records": [record]}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match=r"services\.supplies\[0\] must be a string"):
+        load_batch(path)
+
+
 def test_service_month_label_requires_service_date() -> None:
     record = make_record()
     record.service_date = ""

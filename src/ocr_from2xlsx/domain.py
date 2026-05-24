@@ -11,10 +11,23 @@ def _none_if_empty(value: Any) -> Any:
     return None if value == "" else value
 
 
-def _require_list(value: Any, field_name: str) -> list[Any]:
+def _require_dict(value: Any, field_name: str) -> dict[str, Any]:
+    if value is None:
+        return {}
+    if isinstance(value, dict):
+        return value
+    raise ValueError(f"{field_name} must be an object")
+
+
+def _require_list(value: Any, field_name: str, item_type: type | None = None) -> list[Any]:
     if value is None:
         return []
     if isinstance(value, list):
+        if item_type is not None:
+            label = "string" if item_type is str else item_type.__name__
+            for index, item in enumerate(value):
+                if not isinstance(item, item_type):
+                    raise ValueError(f"{field_name}[{index}] must be a {label}")
         return value
     raise ValueError(f"{field_name} must be a list")
 
@@ -40,12 +53,7 @@ def _require_consultation(value: Any, field_name: str) -> dict[str, list[str]]:
         raise ValueError(f"{field_name} must be a dict")
     consultation: dict[str, list[str]] = {}
     for category, values in value.items():
-        if values is None:
-            items = []
-        elif isinstance(values, list):
-            items = values
-        else:
-            raise ValueError(f"{field_name}.{category} must be a list")
+        items = _require_list(values, f"{field_name}.{category}", item_type=str)
         consultation[str(category)] = items
     return consultation
 
@@ -57,7 +65,7 @@ class SourceInfo:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any] | None) -> "SourceInfo":
-        data = data or {}
+        data = _require_dict(data, "source")
         return cls(image_path=_none_if_empty(data.get("image_path")), capture_time=_none_if_empty(data.get("capture_time")))
 
 
@@ -73,14 +81,14 @@ class PatientFields:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any] | None) -> "PatientFields":
-        data = data or {}
+        data = _require_dict(data, "patient_fields")
         return cls(
             nationality=_none_if_empty(data.get("nationality")),
             age_group=_none_if_empty(data.get("age_group")),
             channel=_none_if_empty(data.get("channel")),
             disease_status=_none_if_empty(data.get("disease_status")),
             source=_none_if_empty(data.get("source")),
-            cancers=_require_list(data.get("cancers"), "patient_fields.cancers"),
+            cancers=_require_list(data.get("cancers"), "patient_fields.cancers", item_type=str),
             newly_diagnosed_within_year=_optional_bool(
                 data.get("newly_diagnosed_within_year"),
                 "patient_fields.newly_diagnosed_within_year",
@@ -98,13 +106,13 @@ class Services:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any] | None) -> "Services":
-        data = data or {}
+        data = _require_dict(data, "services")
         return cls(
             consultation=_require_consultation(data.get("consultation"), "services.consultation"),
-            supplies=_require_list(data.get("supplies"), "services.supplies"),
-            internal_referrals=_require_list(data.get("internal_referrals"), "services.internal_referrals"),
-            external_referrals=_require_list(data.get("external_referrals"), "services.external_referrals"),
-            referral_outcomes=_require_list(data.get("referral_outcomes"), "services.referral_outcomes"),
+            supplies=_require_list(data.get("supplies"), "services.supplies", item_type=str),
+            internal_referrals=_require_list(data.get("internal_referrals"), "services.internal_referrals", item_type=str),
+            external_referrals=_require_list(data.get("external_referrals"), "services.external_referrals", item_type=str),
+            referral_outcomes=_require_list(data.get("referral_outcomes"), "services.referral_outcomes", item_type=str),
         )
 
     def summary(self) -> str:
@@ -131,11 +139,11 @@ class OcrInfo:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any] | None) -> "OcrInfo":
-        data = data or {}
+        data = _require_dict(data, "ocr")
         return cls(
             confidence=data.get("confidence"),
             raw_text=str(data.get("raw_text") or ""),
-            warnings=_require_list(data.get("warnings"), "ocr.warnings"),
+            warnings=_require_list(data.get("warnings"), "ocr.warnings", item_type=str),
         )
 
 
@@ -146,7 +154,7 @@ class ReviewInfo:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any] | None) -> "ReviewInfo":
-        data = data or {}
+        data = _require_dict(data, "review")
         if "edited_by_user" in data:
             edited_by_user = _require_bool(data.get("edited_by_user"), "review.edited_by_user")
         else:
@@ -229,10 +237,21 @@ class Batch:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Batch":
+        if "records" in data:
+            records_value = data.get("records")
+            if not isinstance(records_value, list):
+                raise ValueError("records must be a list")
+        else:
+            records_value = []
+        records: list[Record] = []
+        for index, item in enumerate(records_value):
+            if not isinstance(item, dict):
+                raise ValueError(f"records[{index}] must be an object")
+            records.append(Record.from_dict(item))
         return cls(
             schema_version=str(data.get("schema_version") or ""),
             source_batch=SourceBatch.from_dict(data.get("source_batch") or {}),
-            records=[Record.from_dict(item) for item in data.get("records") or []],
+            records=records,
         )
 
     def to_dict(self) -> dict[str, Any]:

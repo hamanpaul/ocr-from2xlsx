@@ -31,3 +31,4 @@
 - import-json 匯入途中失敗時，若已有記錄寫入，錯誤訊息會提示 working XLSX 可能已有部分資料。
 - import-json 有阻擋記錄時回傳對應 exit code，並更新 CLI help 描述。
 - 清理誤提交的 PyInstaller build 產物，避免 build cache 進入版本庫。
+- Policy Check workflow 改為直接傳入 PR metadata，避免 GitHub event payload 差異造成誤判。

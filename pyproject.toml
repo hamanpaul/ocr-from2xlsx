@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ocr-from2xlsx"
+dynamic = ["version"]
+description = "Portable OCR-to-XLSX service-record import prototype"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "openpyxl>=3.1.5",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.2",
+  "pyinstaller>=6.8",
+]
+camera = [
+  "opencv-python>=4.10",
+]
+
+[project.scripts]
+ocr-from2xlsx = "ocr_from2xlsx.cli:main"
+
+[tool.setuptools.dynamic]
+version = { file = ["VERSION"] }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

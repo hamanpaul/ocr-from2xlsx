@@ -12,3 +12,8 @@ code_paths:
   - "Cargo.toml"
   - "Cargo.lock"
   - ".github/**"
+cli:
+  - command: "ocr-from2xlsx"
+    help_args: ["--help"]
+    reflected_in: "README.md"
+    marker: "ocr-from2xlsx-help"

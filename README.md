@@ -1,28 +1,64 @@
 # ocr-from2xlsx
 
-> Portable Windows tool design for turning cancer resource center service-record OCR results into the existing monthly-report XLSX workbook.
+> Portable Windows prototype for turning cancer resource center service-record OCR results into the existing monthly-report XLSX workbook.
 
 ## Install
 
-This repository is currently in design/bootstrap state. No runtime package is available yet.
+Development install:
 
-Development starts from the committed design spec in:
+```powershell
+python -m pip install -e ".[dev]"
+```
 
-```text
-docs/superpowers/specs/2026-05-24-ocr-xlsx-import-design.md
+Optional camera support for UVC webcam experiments:
+
+```powershell
+python -m pip install -e ".[dev,camera]"
 ```
 
 ## Usage
 
-Planned first workflow:
+The first implementation validates the workflow before real hand-written OCR is integrated:
 
-1. Load the blank monthly-report XLSX template.
-2. Simulate or import OCR results as normalized JSON records.
-3. Review and edit each recognized service record.
-4. Write confirmed records into the `個案總表` sheet while preserving workbook formatting.
-5. Save a working XLSX after each confirmed record and export a final workbook plus import report.
+1. Generate or import normalized service-record JSON.
+2. Review records in the native desktop UI.
+3. Write confirmed records into the `個案總表` sheet.
+4. Save the working XLSX after each confirmed record.
+5. Export a final XLSX and import report.
 
-The first implementation will use Python for fast flow validation while keeping JSON and module boundaries friendly to a future Rust rewrite.
+Launch the native desktop UI:
+
+```powershell
+ocr-from2xlsx app
+```
+
+<!-- BEGIN: cli-help marker="ocr-from2xlsx-help" -->
+usage: ocr-from2xlsx [-h] [--version]
+                     {sample-json,validate-json,import-json,app} ...
+
+Import normalized service-record JSON into the monthly report XLSX.
+
+positional arguments:
+  {sample-json,validate-json,import-json,app}
+    sample-json         Generate deterministic sample service-record JSON.
+    validate-json       Validate normalized service-record JSON.
+    import-json         Import normalized JSON records into a working XLSX.
+    app                 Launch the native desktop review UI.
+
+options:
+  -h, --help            show this help message and exit
+  --version             Print package version and exit.
+<!-- END: cli-help marker="ocr-from2xlsx-help" -->
+
+## Packaging
+
+Build a portable executable:
+
+```powershell
+python build/package.py
+```
+
+Output: `dist/ocr-from2xlsx.exe`
 
 ## Version
 

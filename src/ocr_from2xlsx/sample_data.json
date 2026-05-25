@@ -1,0 +1,4698 @@
+{
+  "records": [
+    {
+      "birthdate": "1980-01-15",
+      "discharge_followup": null,
+      "gender": "female",
+      "identity": "patient",
+      "medical_record_no": "MR0001",
+      "name": "王小明",
+      "notes": "Sample record 1",
+      "ocr": {
+        "confidence": 0.65,
+        "raw_text": "raw-1",
+        "warnings": [
+          "low_confidence"
+        ]
+      },
+      "patient_fields": {
+        "age_group": "20_under",
+        "cancers": [
+          "breast_cancer"
+        ],
+        "channel": "active_followup",
+        "disease_status": "diagnosed_not_treated",
+        "nationality": "foreign",
+        "newly_diagnosed_within_year": true,
+        "source": "emergency"
+      },
+      "record_id": "sample-0001",
+      "review": {
+        "edited_by_user": true,
+        "status": "confirmed"
+      },
+      "service_date": "2026-01-01",
+      "services": {
+        "consultation": {
+          "care_support": [
+            "caregiver_support"
+          ]
+        },
+        "external_referrals": [
+          "long_term_care"
+        ],
+        "internal_referrals": [
+          "care_information"
+        ],
+        "referral_outcomes": [
+          "received_financial_aid"
+        ],
+        "supplies": [
+          "nutrition_products"
+        ]
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": "scan-0001.jpg"
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": false,
+      "gender": "male",
+      "identity": "family_caregiver",
+      "medical_record_no": "MR0002",
+      "name": "李小花",
+      "notes": "Sample record 2",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-2",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0002",
+      "review": {
+        "edited_by_user": false,
+        "status": "forced"
+      },
+      "service_date": "",
+      "services": {
+        "consultation": {
+          "financial_social": [
+            "housing_subsidy"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": true,
+      "gender": "other",
+      "identity": "public_other",
+      "medical_record_no": "MR0003",
+      "name": "陳大文",
+      "notes": "Sample record 3",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-3",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0003",
+      "review": {
+        "edited_by_user": false,
+        "status": "pending"
+      },
+      "service_date": "2026-03-03",
+      "services": {
+        "consultation": {
+          "health_medical": [
+            "healthy_lifestyle"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": false,
+      "gender": "female",
+      "identity": "patient",
+      "medical_record_no": "MR0004",
+      "name": "林小玉",
+      "notes": "Sample record 4",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-4",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": "41_50",
+        "cancers": [
+          "liver_cancer"
+        ],
+        "channel": "internal_referral",
+        "disease_status": "palliative",
+        "nationality": "local",
+        "newly_diagnosed_within_year": false,
+        "source": "emergency"
+      },
+      "record_id": "sample-0004",
+      "review": {
+        "edited_by_user": false,
+        "status": "skipped"
+      },
+      "service_date": "2026-04-04",
+      "services": {
+        "consultation": {
+          "nutrition_diet": [
+            "other"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": [
+          "wig_hat"
+        ]
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": "1984-05-15",
+      "discharge_followup": true,
+      "gender": "male",
+      "identity": "family_caregiver",
+      "medical_record_no": "MR0005",
+      "name": "張阿姨",
+      "notes": "Sample record 5",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-5",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0005",
+      "review": {
+        "edited_by_user": false,
+        "status": "written"
+      },
+      "service_date": "2026-05-05",
+      "services": {
+        "consultation": {
+          "psychosocial_emotion": [
+            "other"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [
+          "other_care_supplies"
+        ],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": false,
+      "gender": "other",
+      "identity": "public_other",
+      "medical_record_no": "MR0006",
+      "name": "黃先生",
+      "notes": "Sample record 6",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-6",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0006",
+      "review": {
+        "edited_by_user": false,
+        "status": "confirmed"
+      },
+      "service_date": "2026-06-06",
+      "services": {
+        "consultation": {
+          "symptom_side_effect": [
+            "treatment_side_effect"
+          ]
+        },
+        "external_referrals": [
+          "psychology"
+        ],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": "scan-0006.jpg"
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": null,
+      "gender": "female",
+      "identity": "patient",
+      "medical_record_no": "MR0007",
+      "name": "周小姐",
+      "notes": "Sample record 7",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-7",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": "71_over",
+        "cancers": [
+          "lung_cancer"
+        ],
+        "channel": "self_known",
+        "disease_status": "undiagnosed",
+        "nationality": "foreign",
+        "newly_diagnosed_within_year": true,
+        "source": "emergency"
+      },
+      "record_id": "sample-0007",
+      "review": {
+        "edited_by_user": false,
+        "status": "forced"
+      },
+      "service_date": "2026-07-07",
+      "services": {
+        "consultation": {
+          "care_support": [
+            "caregiver_support"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [
+          "received_service_help"
+        ],
+        "supplies": [
+          "other_equipment"
+        ]
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": false,
+      "gender": "male",
+      "identity": "family_caregiver",
+      "medical_record_no": "MR0008",
+      "name": "吳志強",
+      "notes": "Sample record 8",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-8",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0008",
+      "review": {
+        "edited_by_user": true,
+        "status": "pending"
+      },
+      "service_date": "2026-08-08",
+      "services": {
+        "consultation": {
+          "financial_social": [
+            "transportation_subsidy"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": "1988-09-15",
+      "discharge_followup": true,
+      "gender": "other",
+      "identity": "public_other",
+      "medical_record_no": "MR0009",
+      "name": "王小明",
+      "notes": "Sample record 9",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-9",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0009",
+      "review": {
+        "edited_by_user": false,
+        "status": "skipped"
+      },
+      "service_date": "2026-09-09",
+      "services": {
+        "consultation": {
+          "health_medical": [
+            "disease_treatment_knowledge"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [
+          "social_welfare"
+        ],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": false,
+      "gender": "female",
+      "identity": "patient",
+      "medical_record_no": "MR0010",
+      "name": "李小花",
+      "notes": "Sample record 10",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-10",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": "31_40",
+        "cancers": [
+          "stomach_cancer"
+        ],
+        "channel": "external_referral",
+        "disease_status": "followup",
+        "nationality": "local",
+        "newly_diagnosed_within_year": false,
+        "source": "emergency"
+      },
+      "record_id": "sample-0010",
+      "review": {
+        "edited_by_user": false,
+        "status": "written"
+      },
+      "service_date": "2026-10-10",
+      "services": {
+        "consultation": {
+          "nutrition_diet": [
+            "health_food"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": [
+          "other_care_supplies"
+        ]
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": true,
+      "gender": "male",
+      "identity": "family_caregiver",
+      "medical_record_no": "MR0011",
+      "name": "陳大文",
+      "notes": "Sample record 11",
+      "ocr": {
+        "confidence": 0.65,
+        "raw_text": "raw-11",
+        "warnings": [
+          "low_confidence"
+        ]
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0011",
+      "review": {
+        "edited_by_user": false,
+        "status": "confirmed"
+      },
+      "service_date": "2026-11-11",
+      "services": {
+        "consultation": {
+          "psychosocial_emotion": [
+            "other"
+          ]
+        },
+        "external_referrals": [
+          "long_term_care"
+        ],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": "scan-0011.jpg"
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": false,
+      "gender": "other",
+      "identity": "public_other",
+      "medical_record_no": "MR0012",
+      "name": "林小玉",
+      "notes": "Sample record 12",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-12",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0012",
+      "review": {
+        "edited_by_user": false,
+        "status": "forced"
+      },
+      "service_date": "2026-12-12",
+      "services": {
+        "consultation": {
+          "symptom_side_effect": [
+            "sexuality_fertility"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": "1982-04-15",
+      "discharge_followup": null,
+      "gender": "female",
+      "identity": "patient",
+      "medical_record_no": "MR0013",
+      "name": "張阿姨",
+      "notes": "Sample record 13",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-13",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": "61_70",
+        "cancers": [
+          "colon_cancer"
+        ],
+        "channel": "other",
+        "disease_status": "treating",
+        "nationality": "foreign",
+        "newly_diagnosed_within_year": true,
+        "source": "emergency"
+      },
+      "record_id": "sample-0013",
+      "review": {
+        "edited_by_user": false,
+        "status": "pending"
+      },
+      "service_date": "2026-01-13",
+      "services": {
+        "consultation": {
+          "care_support": [
+            "caregiver_support"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [
+          "nutrition"
+        ],
+        "referral_outcomes": [
+          "received_financial_aid"
+        ],
+        "supplies": [
+          "nutrition_products"
+        ]
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": false,
+      "gender": "male",
+      "identity": "family_caregiver",
+      "medical_record_no": "MR0014",
+      "name": "黃先生",
+      "notes": "Sample record 14",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-14",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0014",
+      "review": {
+        "edited_by_user": false,
+        "status": "skipped"
+      },
+      "service_date": "2026-02-14",
+      "services": {
+        "consultation": {
+          "financial_social": [
+            "rehab_supplies_aids"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": true,
+      "gender": "other",
+      "identity": "public_other",
+      "medical_record_no": "MR0015",
+      "name": "周小姐",
+      "notes": "Sample record 15",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-15",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0015",
+      "review": {
+        "edited_by_user": true,
+        "status": "written"
+      },
+      "service_date": "2026-03-15",
+      "services": {
+        "consultation": {
+          "health_medical": [
+            "second_opinion"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": false,
+      "gender": "female",
+      "identity": "patient",
+      "medical_record_no": "MR0016",
+      "name": "吳志強",
+      "notes": "Sample record 16",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-16",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": "21_30",
+        "cancers": [
+          "breast_cancer"
+        ],
+        "channel": "activity",
+        "disease_status": "diagnosed_refused",
+        "nationality": "local",
+        "newly_diagnosed_within_year": false,
+        "source": "emergency"
+      },
+      "record_id": "sample-0016",
+      "review": {
+        "edited_by_user": false,
+        "status": "confirmed"
+      },
+      "service_date": "2026-04-16",
+      "services": {
+        "consultation": {
+          "nutrition_diet": [
+            "other"
+          ]
+        },
+        "external_referrals": [
+          "psychology"
+        ],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": [
+          "wig_hat"
+        ]
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": "scan-0016.jpg"
+      }
+    },
+    {
+      "birthdate": "1986-08-15",
+      "discharge_followup": true,
+      "gender": "male",
+      "identity": "family_caregiver",
+      "medical_record_no": "MR0017",
+      "name": "王小明",
+      "notes": "Sample record 17",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-17",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0017",
+      "review": {
+        "edited_by_user": false,
+        "status": "forced"
+      },
+      "service_date": "2026-05-17",
+      "services": {
+        "consultation": {
+          "psychosocial_emotion": [
+            "other"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [
+          "psychology"
+        ],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": false,
+      "gender": "other",
+      "identity": "public_other",
+      "medical_record_no": "MR0018",
+      "name": "李小花",
+      "notes": "Sample record 18",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-18",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0018",
+      "review": {
+        "edited_by_user": false,
+        "status": "pending"
+      },
+      "service_date": "2026-06-18",
+      "services": {
+        "consultation": {
+          "symptom_side_effect": [
+            "pain_management"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": null,
+      "gender": "female",
+      "identity": "patient",
+      "medical_record_no": "MR0019",
+      "name": "陳大文",
+      "notes": "Sample record 19",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-19",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": "51_60",
+        "cancers": [
+          "liver_cancer"
+        ],
+        "channel": "introduced",
+        "disease_status": "recurrence_treating",
+        "nationality": "foreign",
+        "newly_diagnosed_within_year": true,
+        "source": "emergency"
+      },
+      "record_id": "sample-0019",
+      "review": {
+        "edited_by_user": false,
+        "status": "skipped"
+      },
+      "service_date": "2026-07-19",
+      "services": {
+        "consultation": {
+          "care_support": [
+            "caregiver_support"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [
+          "received_service_help"
+        ],
+        "supplies": [
+          "other_equipment"
+        ]
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": false,
+      "gender": "male",
+      "identity": "family_caregiver",
+      "medical_record_no": "MR0020",
+      "name": "林小玉",
+      "notes": "Sample record 20",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-20",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0020",
+      "review": {
+        "edited_by_user": false,
+        "status": "written"
+      },
+      "service_date": "2026-08-20",
+      "services": {
+        "consultation": {
+          "financial_social": [
+            "nutrition_subsidy"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": "1980-03-15",
+      "discharge_followup": true,
+      "gender": "other",
+      "identity": "public_other",
+      "medical_record_no": "MR0021",
+      "name": "張阿姨",
+      "notes": "Sample record 21",
+      "ocr": {
+        "confidence": 0.65,
+        "raw_text": "raw-21",
+        "warnings": [
+          "low_confidence"
+        ]
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0021",
+      "review": {
+        "edited_by_user": false,
+        "status": "confirmed"
+      },
+      "service_date": "2026-09-21",
+      "services": {
+        "consultation": {
+          "health_medical": [
+            "palliative_patient_rights"
+          ]
+        },
+        "external_referrals": [
+          "long_term_care"
+        ],
+        "internal_referrals": [
+          "care_information"
+        ],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": "scan-0021.jpg"
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": false,
+      "gender": "female",
+      "identity": "patient",
+      "medical_record_no": "MR0022",
+      "name": "黃先生",
+      "notes": "Sample record 22",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-22",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": "20_under",
+        "cancers": [
+          "lung_cancer"
+        ],
+        "channel": "active_followup",
+        "disease_status": "diagnosed_not_treated",
+        "nationality": "local",
+        "newly_diagnosed_within_year": false,
+        "source": "emergency"
+      },
+      "record_id": "sample-0022",
+      "review": {
+        "edited_by_user": true,
+        "status": "forced"
+      },
+      "service_date": "2026-10-22",
+      "services": {
+        "consultation": {
+          "nutrition_diet": [
+            "health_food"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": [
+          "other_care_supplies"
+        ]
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": true,
+      "gender": "male",
+      "identity": "family_caregiver",
+      "medical_record_no": "MR0023",
+      "name": "周小姐",
+      "notes": "Sample record 23",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-23",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0023",
+      "review": {
+        "edited_by_user": false,
+        "status": "pending"
+      },
+      "service_date": "2026-11-23",
+      "services": {
+        "consultation": {
+          "psychosocial_emotion": [
+            "other"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": false,
+      "gender": "other",
+      "identity": "public_other",
+      "medical_record_no": "MR0024",
+      "name": "吳志強",
+      "notes": "Sample record 24",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-24",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0024",
+      "review": {
+        "edited_by_user": false,
+        "status": "skipped"
+      },
+      "service_date": "2026-12-24",
+      "services": {
+        "consultation": {
+          "symptom_side_effect": [
+            "other"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": "1984-07-15",
+      "discharge_followup": null,
+      "gender": "female",
+      "identity": "patient",
+      "medical_record_no": "MR0025",
+      "name": "王小明",
+      "notes": "Sample record 25",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-25",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": "41_50",
+        "cancers": [
+          "stomach_cancer"
+        ],
+        "channel": "internal_referral",
+        "disease_status": "palliative",
+        "nationality": "foreign",
+        "newly_diagnosed_within_year": true,
+        "source": "emergency"
+      },
+      "record_id": "sample-0025",
+      "review": {
+        "edited_by_user": false,
+        "status": "written"
+      },
+      "service_date": "2026-01-25",
+      "services": {
+        "consultation": {
+          "care_support": [
+            "caregiver_support"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [
+          "other_care_supplies"
+        ],
+        "referral_outcomes": [
+          "received_financial_aid"
+        ],
+        "supplies": [
+          "nutrition_products"
+        ]
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": false,
+      "gender": "male",
+      "identity": "family_caregiver",
+      "medical_record_no": "MR0026",
+      "name": "李小花",
+      "notes": "Sample record 26",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-26",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0026",
+      "review": {
+        "edited_by_user": false,
+        "status": "confirmed"
+      },
+      "service_date": "2026-02-26",
+      "services": {
+        "consultation": {
+          "financial_social": [
+            "housing_subsidy"
+          ]
+        },
+        "external_referrals": [
+          "psychology"
+        ],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": "scan-0026.jpg"
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": true,
+      "gender": "other",
+      "identity": "public_other",
+      "medical_record_no": "MR0027",
+      "name": "陳大文",
+      "notes": "Sample record 27",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-27",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0027",
+      "review": {
+        "edited_by_user": false,
+        "status": "forced"
+      },
+      "service_date": "2026-03-27",
+      "services": {
+        "consultation": {
+          "health_medical": [
+            "healthy_lifestyle"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": false,
+      "gender": "female",
+      "identity": "patient",
+      "medical_record_no": "MR0028",
+      "name": "林小玉",
+      "notes": "Sample record 28",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-28",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": "71_over",
+        "cancers": [
+          "colon_cancer"
+        ],
+        "channel": "self_known",
+        "disease_status": "undiagnosed",
+        "nationality": "local",
+        "newly_diagnosed_within_year": false,
+        "source": "emergency"
+      },
+      "record_id": "sample-0028",
+      "review": {
+        "edited_by_user": false,
+        "status": "pending"
+      },
+      "service_date": "2026-04-28",
+      "services": {
+        "consultation": {
+          "nutrition_diet": [
+            "other"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": [
+          "wig_hat"
+        ]
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": "1988-02-15",
+      "discharge_followup": true,
+      "gender": "male",
+      "identity": "family_caregiver",
+      "medical_record_no": "MR0029",
+      "name": "張阿姨",
+      "notes": "Sample record 29",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-29",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0029",
+      "review": {
+        "edited_by_user": true,
+        "status": "skipped"
+      },
+      "service_date": "2026-05-01",
+      "services": {
+        "consultation": {
+          "psychosocial_emotion": [
+            "other"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [
+          "social_welfare"
+        ],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": false,
+      "gender": "other",
+      "identity": "public_other",
+      "medical_record_no": "MR0030",
+      "name": "黃先生",
+      "notes": "Sample record 30",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-30",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0030",
+      "review": {
+        "edited_by_user": false,
+        "status": "written"
+      },
+      "service_date": "2026-06-02",
+      "services": {
+        "consultation": {
+          "symptom_side_effect": [
+            "integrated_care"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": null,
+      "gender": "female",
+      "identity": "patient",
+      "medical_record_no": "MR0031",
+      "name": "周小姐",
+      "notes": "Sample record 31",
+      "ocr": {
+        "confidence": 0.65,
+        "raw_text": "raw-31",
+        "warnings": [
+          "low_confidence"
+        ]
+      },
+      "patient_fields": {
+        "age_group": "31_40",
+        "cancers": [
+          "breast_cancer"
+        ],
+        "channel": "external_referral",
+        "disease_status": "followup",
+        "nationality": "foreign",
+        "newly_diagnosed_within_year": true,
+        "source": "emergency"
+      },
+      "record_id": "sample-0031",
+      "review": {
+        "edited_by_user": false,
+        "status": "confirmed"
+      },
+      "service_date": "2026-07-03",
+      "services": {
+        "consultation": {
+          "care_support": [
+            "caregiver_support"
+          ]
+        },
+        "external_referrals": [
+          "long_term_care"
+        ],
+        "internal_referrals": [],
+        "referral_outcomes": [
+          "received_service_help"
+        ],
+        "supplies": [
+          "other_equipment"
+        ]
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": "scan-0031.jpg"
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": false,
+      "gender": "male",
+      "identity": "family_caregiver",
+      "medical_record_no": "MR0032",
+      "name": "吳志強",
+      "notes": "Sample record 32",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-32",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0032",
+      "review": {
+        "edited_by_user": false,
+        "status": "forced"
+      },
+      "service_date": "2026-08-04",
+      "services": {
+        "consultation": {
+          "financial_social": [
+            "transportation_subsidy"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": "1982-06-15",
+      "discharge_followup": true,
+      "gender": "other",
+      "identity": "public_other",
+      "medical_record_no": "MR0033",
+      "name": "王小明",
+      "notes": "Sample record 33",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-33",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0033",
+      "review": {
+        "edited_by_user": false,
+        "status": "pending"
+      },
+      "service_date": "2026-09-05",
+      "services": {
+        "consultation": {
+          "health_medical": [
+            "disease_treatment_knowledge"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [
+          "nutrition"
+        ],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": false,
+      "gender": "female",
+      "identity": "patient",
+      "medical_record_no": "MR0034",
+      "name": "李小花",
+      "notes": "Sample record 34",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-34",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": "61_70",
+        "cancers": [
+          "liver_cancer"
+        ],
+        "channel": "other",
+        "disease_status": "treating",
+        "nationality": "local",
+        "newly_diagnosed_within_year": false,
+        "source": "emergency"
+      },
+      "record_id": "sample-0034",
+      "review": {
+        "edited_by_user": false,
+        "status": "skipped"
+      },
+      "service_date": "2026-10-06",
+      "services": {
+        "consultation": {
+          "nutrition_diet": [
+            "health_food"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": [
+          "other_care_supplies"
+        ]
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": true,
+      "gender": "male",
+      "identity": "family_caregiver",
+      "medical_record_no": "MR0035",
+      "name": "陳大文",
+      "notes": "Sample record 35",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-35",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0035",
+      "review": {
+        "edited_by_user": false,
+        "status": "written"
+      },
+      "service_date": "2026-11-07",
+      "services": {
+        "consultation": {
+          "psychosocial_emotion": [
+            "other"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": false,
+      "gender": "other",
+      "identity": "public_other",
+      "medical_record_no": "MR0036",
+      "name": "林小玉",
+      "notes": "Sample record 36",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-36",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0036",
+      "review": {
+        "edited_by_user": true,
+        "status": "confirmed"
+      },
+      "service_date": "2026-12-08",
+      "services": {
+        "consultation": {
+          "symptom_side_effect": [
+            "fatigue_strength"
+          ]
+        },
+        "external_referrals": [
+          "psychology"
+        ],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": "scan-0036.jpg"
+      }
+    },
+    {
+      "birthdate": "1986-01-15",
+      "discharge_followup": null,
+      "gender": "female",
+      "identity": "patient",
+      "medical_record_no": "MR0037",
+      "name": "張阿姨",
+      "notes": "Sample record 37",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-37",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": "21_30",
+        "cancers": [
+          "lung_cancer"
+        ],
+        "channel": "activity",
+        "disease_status": "diagnosed_refused",
+        "nationality": "foreign",
+        "newly_diagnosed_within_year": true,
+        "source": "emergency"
+      },
+      "record_id": "sample-0037",
+      "review": {
+        "edited_by_user": false,
+        "status": "forced"
+      },
+      "service_date": "2026-01-09",
+      "services": {
+        "consultation": {
+          "care_support": [
+            "caregiver_support"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [
+          "psychology"
+        ],
+        "referral_outcomes": [
+          "received_financial_aid"
+        ],
+        "supplies": [
+          "nutrition_products"
+        ]
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": false,
+      "gender": "male",
+      "identity": "family_caregiver",
+      "medical_record_no": "MR0038",
+      "name": "黃先生",
+      "notes": "Sample record 38",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-38",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0038",
+      "review": {
+        "edited_by_user": false,
+        "status": "pending"
+      },
+      "service_date": "2026-02-10",
+      "services": {
+        "consultation": {
+          "financial_social": [
+            "rehab_supplies_aids"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": true,
+      "gender": "other",
+      "identity": "public_other",
+      "medical_record_no": "MR0039",
+      "name": "周小姐",
+      "notes": "Sample record 39",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-39",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0039",
+      "review": {
+        "edited_by_user": false,
+        "status": "skipped"
+      },
+      "service_date": "2026-03-11",
+      "services": {
+        "consultation": {
+          "health_medical": [
+            "second_opinion"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": false,
+      "gender": "female",
+      "identity": "patient",
+      "medical_record_no": "MR0040",
+      "name": "吳志強",
+      "notes": "Sample record 40",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-40",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": "51_60",
+        "cancers": [
+          "stomach_cancer"
+        ],
+        "channel": "introduced",
+        "disease_status": "recurrence_treating",
+        "nationality": "local",
+        "newly_diagnosed_within_year": false,
+        "source": "emergency"
+      },
+      "record_id": "sample-0040",
+      "review": {
+        "edited_by_user": false,
+        "status": "written"
+      },
+      "service_date": "2026-04-12",
+      "services": {
+        "consultation": {
+          "nutrition_diet": [
+            "other"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": [
+          "wig_hat"
+        ]
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": "1980-05-15",
+      "discharge_followup": true,
+      "gender": "male",
+      "identity": "family_caregiver",
+      "medical_record_no": "MR0041",
+      "name": "王小明",
+      "notes": "Sample record 41",
+      "ocr": {
+        "confidence": 0.65,
+        "raw_text": "raw-41",
+        "warnings": [
+          "low_confidence"
+        ]
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0041",
+      "review": {
+        "edited_by_user": false,
+        "status": "confirmed"
+      },
+      "service_date": "2026-05-13",
+      "services": {
+        "consultation": {
+          "psychosocial_emotion": [
+            "other"
+          ]
+        },
+        "external_referrals": [
+          "long_term_care"
+        ],
+        "internal_referrals": [
+          "care_information"
+        ],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": "scan-0041.jpg"
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": false,
+      "gender": "other",
+      "identity": "public_other",
+      "medical_record_no": "MR0042",
+      "name": "李小花",
+      "notes": "Sample record 42",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-42",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0042",
+      "review": {
+        "edited_by_user": false,
+        "status": "forced"
+      },
+      "service_date": "2026-06-14",
+      "services": {
+        "consultation": {
+          "symptom_side_effect": [
+            "wound_care"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": null,
+      "gender": "female",
+      "identity": "patient",
+      "medical_record_no": "MR0043",
+      "name": "陳大文",
+      "notes": "Sample record 43",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-43",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": "20_under",
+        "cancers": [
+          "colon_cancer"
+        ],
+        "channel": "active_followup",
+        "disease_status": "diagnosed_not_treated",
+        "nationality": "foreign",
+        "newly_diagnosed_within_year": true,
+        "source": "emergency"
+      },
+      "record_id": "sample-0043",
+      "review": {
+        "edited_by_user": true,
+        "status": "pending"
+      },
+      "service_date": "2026-07-15",
+      "services": {
+        "consultation": {
+          "care_support": [
+            "caregiver_support"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [
+          "received_service_help"
+        ],
+        "supplies": [
+          "other_equipment"
+        ]
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": false,
+      "gender": "male",
+      "identity": "family_caregiver",
+      "medical_record_no": "MR0044",
+      "name": "林小玉",
+      "notes": "Sample record 44",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-44",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0044",
+      "review": {
+        "edited_by_user": false,
+        "status": "skipped"
+      },
+      "service_date": "2026-08-16",
+      "services": {
+        "consultation": {
+          "financial_social": [
+            "nutrition_subsidy"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": "1984-09-15",
+      "discharge_followup": true,
+      "gender": "other",
+      "identity": "public_other",
+      "medical_record_no": "MR0045",
+      "name": "張阿姨",
+      "notes": "Sample record 45",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-45",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0045",
+      "review": {
+        "edited_by_user": false,
+        "status": "written"
+      },
+      "service_date": "2026-09-17",
+      "services": {
+        "consultation": {
+          "health_medical": [
+            "palliative_patient_rights"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [
+          "other_care_supplies"
+        ],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": false,
+      "gender": "female",
+      "identity": "patient",
+      "medical_record_no": "MR0046",
+      "name": "黃先生",
+      "notes": "Sample record 46",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-46",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": "41_50",
+        "cancers": [
+          "breast_cancer"
+        ],
+        "channel": "internal_referral",
+        "disease_status": "palliative",
+        "nationality": "local",
+        "newly_diagnosed_within_year": false,
+        "source": "emergency"
+      },
+      "record_id": "sample-0046",
+      "review": {
+        "edited_by_user": false,
+        "status": "confirmed"
+      },
+      "service_date": "2026-10-18",
+      "services": {
+        "consultation": {
+          "nutrition_diet": [
+            "health_food"
+          ]
+        },
+        "external_referrals": [
+          "psychology"
+        ],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": [
+          "other_care_supplies"
+        ]
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": "scan-0046.jpg"
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": true,
+      "gender": "male",
+      "identity": "family_caregiver",
+      "medical_record_no": "MR0047",
+      "name": "周小姐",
+      "notes": "Sample record 47",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-47",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0047",
+      "review": {
+        "edited_by_user": false,
+        "status": "forced"
+      },
+      "service_date": "2026-11-19",
+      "services": {
+        "consultation": {
+          "psychosocial_emotion": [
+            "other"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": false,
+      "gender": "other",
+      "identity": "public_other",
+      "medical_record_no": "MR0048",
+      "name": "吳志強",
+      "notes": "Sample record 48",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-48",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0048",
+      "review": {
+        "edited_by_user": false,
+        "status": "pending"
+      },
+      "service_date": "2026-12-20",
+      "services": {
+        "consultation": {
+          "symptom_side_effect": [
+            "treatment_side_effect"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": "1988-04-15",
+      "discharge_followup": null,
+      "gender": "female",
+      "identity": "patient",
+      "medical_record_no": "MR0049",
+      "name": "王小明",
+      "notes": "Sample record 49",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-49",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": "71_over",
+        "cancers": [
+          "liver_cancer"
+        ],
+        "channel": "self_known",
+        "disease_status": "undiagnosed",
+        "nationality": "foreign",
+        "newly_diagnosed_within_year": true,
+        "source": "emergency"
+      },
+      "record_id": "sample-0049",
+      "review": {
+        "edited_by_user": false,
+        "status": "skipped"
+      },
+      "service_date": "2026-01-21",
+      "services": {
+        "consultation": {
+          "care_support": [
+            "caregiver_support"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [
+          "social_welfare"
+        ],
+        "referral_outcomes": [
+          "received_financial_aid"
+        ],
+        "supplies": [
+          "nutrition_products"
+        ]
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": false,
+      "gender": "male",
+      "identity": "family_caregiver",
+      "medical_record_no": "MR0050",
+      "name": "李小花",
+      "notes": "Sample record 50",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-50",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0050",
+      "review": {
+        "edited_by_user": true,
+        "status": "written"
+      },
+      "service_date": "2026-02-22",
+      "services": {
+        "consultation": {
+          "financial_social": [
+            "housing_subsidy"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": true,
+      "gender": "other",
+      "identity": "public_other",
+      "medical_record_no": "MR0051",
+      "name": "陳大文",
+      "notes": "Sample record 51",
+      "ocr": {
+        "confidence": 0.65,
+        "raw_text": "raw-51",
+        "warnings": [
+          "low_confidence"
+        ]
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0051",
+      "review": {
+        "edited_by_user": false,
+        "status": "confirmed"
+      },
+      "service_date": "2026-03-23",
+      "services": {
+        "consultation": {
+          "health_medical": [
+            "healthy_lifestyle"
+          ]
+        },
+        "external_referrals": [
+          "long_term_care"
+        ],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": "scan-0051.jpg"
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": false,
+      "gender": "female",
+      "identity": "patient",
+      "medical_record_no": "MR0052",
+      "name": "林小玉",
+      "notes": "Sample record 52",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-52",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": "31_40",
+        "cancers": [
+          "lung_cancer"
+        ],
+        "channel": "external_referral",
+        "disease_status": "followup",
+        "nationality": "local",
+        "newly_diagnosed_within_year": false,
+        "source": "emergency"
+      },
+      "record_id": "sample-0052",
+      "review": {
+        "edited_by_user": false,
+        "status": "forced"
+      },
+      "service_date": "2026-04-24",
+      "services": {
+        "consultation": {
+          "nutrition_diet": [
+            "other"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": [
+          "wig_hat"
+        ]
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": "1982-08-15",
+      "discharge_followup": true,
+      "gender": "male",
+      "identity": "family_caregiver",
+      "medical_record_no": "MR0053",
+      "name": "張阿姨",
+      "notes": "Sample record 53",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-53",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0053",
+      "review": {
+        "edited_by_user": false,
+        "status": "pending"
+      },
+      "service_date": "2026-05-25",
+      "services": {
+        "consultation": {
+          "psychosocial_emotion": [
+            "other"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [
+          "nutrition"
+        ],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": false,
+      "gender": "other",
+      "identity": "public_other",
+      "medical_record_no": "MR0054",
+      "name": "黃先生",
+      "notes": "Sample record 54",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-54",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0054",
+      "review": {
+        "edited_by_user": false,
+        "status": "skipped"
+      },
+      "service_date": "2026-06-26",
+      "services": {
+        "consultation": {
+          "symptom_side_effect": [
+            "sexuality_fertility"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": null,
+      "gender": "female",
+      "identity": "patient",
+      "medical_record_no": "MR0055",
+      "name": "周小姐",
+      "notes": "Sample record 55",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-55",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": "61_70",
+        "cancers": [
+          "stomach_cancer"
+        ],
+        "channel": "other",
+        "disease_status": "treating",
+        "nationality": "foreign",
+        "newly_diagnosed_within_year": true,
+        "source": "emergency"
+      },
+      "record_id": "sample-0055",
+      "review": {
+        "edited_by_user": false,
+        "status": "written"
+      },
+      "service_date": "2026-07-27",
+      "services": {
+        "consultation": {
+          "care_support": [
+            "caregiver_support"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [
+          "received_service_help"
+        ],
+        "supplies": [
+          "other_equipment"
+        ]
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": false,
+      "gender": "male",
+      "identity": "family_caregiver",
+      "medical_record_no": "MR0056",
+      "name": "吳志強",
+      "notes": "Sample record 56",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-56",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0056",
+      "review": {
+        "edited_by_user": false,
+        "status": "confirmed"
+      },
+      "service_date": "2026-08-28",
+      "services": {
+        "consultation": {
+          "financial_social": [
+            "transportation_subsidy"
+          ]
+        },
+        "external_referrals": [
+          "psychology"
+        ],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": "scan-0056.jpg"
+      }
+    },
+    {
+      "birthdate": "1986-03-15",
+      "discharge_followup": true,
+      "gender": "other",
+      "identity": "public_other",
+      "medical_record_no": "MR0057",
+      "name": "王小明",
+      "notes": "Sample record 57",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-57",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0057",
+      "review": {
+        "edited_by_user": true,
+        "status": "forced"
+      },
+      "service_date": "2026-09-01",
+      "services": {
+        "consultation": {
+          "health_medical": [
+            "disease_treatment_knowledge"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [
+          "psychology"
+        ],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": false,
+      "gender": "female",
+      "identity": "patient",
+      "medical_record_no": "MR0058",
+      "name": "李小花",
+      "notes": "Sample record 58",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-58",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": "21_30",
+        "cancers": [
+          "colon_cancer"
+        ],
+        "channel": "activity",
+        "disease_status": "diagnosed_refused",
+        "nationality": "local",
+        "newly_diagnosed_within_year": false,
+        "source": "emergency"
+      },
+      "record_id": "sample-0058",
+      "review": {
+        "edited_by_user": false,
+        "status": "pending"
+      },
+      "service_date": "2026-10-02",
+      "services": {
+        "consultation": {
+          "nutrition_diet": [
+            "health_food"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": [
+          "other_care_supplies"
+        ]
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": true,
+      "gender": "male",
+      "identity": "family_caregiver",
+      "medical_record_no": "MR0059",
+      "name": "陳大文",
+      "notes": "Sample record 59",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-59",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0059",
+      "review": {
+        "edited_by_user": false,
+        "status": "skipped"
+      },
+      "service_date": "2026-11-03",
+      "services": {
+        "consultation": {
+          "psychosocial_emotion": [
+            "other"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": false,
+      "gender": "other",
+      "identity": "public_other",
+      "medical_record_no": "MR0060",
+      "name": "林小玉",
+      "notes": "Sample record 60",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-60",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0060",
+      "review": {
+        "edited_by_user": false,
+        "status": "written"
+      },
+      "service_date": "2026-12-04",
+      "services": {
+        "consultation": {
+          "symptom_side_effect": [
+            "pain_management"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": "1980-07-15",
+      "discharge_followup": null,
+      "gender": "female",
+      "identity": "patient",
+      "medical_record_no": "MR0061",
+      "name": "張阿姨",
+      "notes": "Sample record 61",
+      "ocr": {
+        "confidence": 0.65,
+        "raw_text": "raw-61",
+        "warnings": [
+          "low_confidence"
+        ]
+      },
+      "patient_fields": {
+        "age_group": "51_60",
+        "cancers": [
+          "breast_cancer"
+        ],
+        "channel": "introduced",
+        "disease_status": "recurrence_treating",
+        "nationality": "foreign",
+        "newly_diagnosed_within_year": true,
+        "source": "emergency"
+      },
+      "record_id": "sample-0061",
+      "review": {
+        "edited_by_user": false,
+        "status": "confirmed"
+      },
+      "service_date": "2026-01-05",
+      "services": {
+        "consultation": {
+          "care_support": [
+            "caregiver_support"
+          ]
+        },
+        "external_referrals": [
+          "long_term_care"
+        ],
+        "internal_referrals": [
+          "care_information"
+        ],
+        "referral_outcomes": [
+          "received_financial_aid"
+        ],
+        "supplies": [
+          "nutrition_products"
+        ]
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": "scan-0061.jpg"
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": false,
+      "gender": "male",
+      "identity": "family_caregiver",
+      "medical_record_no": "MR0062",
+      "name": "黃先生",
+      "notes": "Sample record 62",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-62",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0062",
+      "review": {
+        "edited_by_user": false,
+        "status": "forced"
+      },
+      "service_date": "2026-02-06",
+      "services": {
+        "consultation": {
+          "financial_social": [
+            "rehab_supplies_aids"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": true,
+      "gender": "other",
+      "identity": "public_other",
+      "medical_record_no": "MR0063",
+      "name": "周小姐",
+      "notes": "Sample record 63",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-63",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0063",
+      "review": {
+        "edited_by_user": false,
+        "status": "pending"
+      },
+      "service_date": "2026-03-07",
+      "services": {
+        "consultation": {
+          "health_medical": [
+            "second_opinion"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": false,
+      "gender": "female",
+      "identity": "patient",
+      "medical_record_no": "MR0064",
+      "name": "吳志強",
+      "notes": "Sample record 64",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-64",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": "20_under",
+        "cancers": [
+          "liver_cancer"
+        ],
+        "channel": "active_followup",
+        "disease_status": "diagnosed_not_treated",
+        "nationality": "local",
+        "newly_diagnosed_within_year": false,
+        "source": "emergency"
+      },
+      "record_id": "sample-0064",
+      "review": {
+        "edited_by_user": true,
+        "status": "skipped"
+      },
+      "service_date": "2026-04-08",
+      "services": {
+        "consultation": {
+          "nutrition_diet": [
+            "other"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": [
+          "wig_hat"
+        ]
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": "1984-02-15",
+      "discharge_followup": true,
+      "gender": "male",
+      "identity": "family_caregiver",
+      "medical_record_no": "MR0065",
+      "name": "王小明",
+      "notes": "Sample record 65",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-65",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0065",
+      "review": {
+        "edited_by_user": false,
+        "status": "written"
+      },
+      "service_date": "2026-05-09",
+      "services": {
+        "consultation": {
+          "psychosocial_emotion": [
+            "other"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [
+          "other_care_supplies"
+        ],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": false,
+      "gender": "other",
+      "identity": "public_other",
+      "medical_record_no": "MR0066",
+      "name": "李小花",
+      "notes": "Sample record 66",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-66",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0066",
+      "review": {
+        "edited_by_user": false,
+        "status": "confirmed"
+      },
+      "service_date": "2026-06-10",
+      "services": {
+        "consultation": {
+          "symptom_side_effect": [
+            "other"
+          ]
+        },
+        "external_referrals": [
+          "psychology"
+        ],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": "scan-0066.jpg"
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": null,
+      "gender": "female",
+      "identity": "patient",
+      "medical_record_no": "MR0067",
+      "name": "陳大文",
+      "notes": "Sample record 67",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-67",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": "41_50",
+        "cancers": [
+          "lung_cancer"
+        ],
+        "channel": "internal_referral",
+        "disease_status": "palliative",
+        "nationality": "foreign",
+        "newly_diagnosed_within_year": true,
+        "source": "emergency"
+      },
+      "record_id": "sample-0067",
+      "review": {
+        "edited_by_user": false,
+        "status": "forced"
+      },
+      "service_date": "2026-07-11",
+      "services": {
+        "consultation": {
+          "care_support": [
+            "caregiver_support"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [
+          "received_service_help"
+        ],
+        "supplies": [
+          "other_equipment"
+        ]
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": false,
+      "gender": "male",
+      "identity": "family_caregiver",
+      "medical_record_no": "MR0068",
+      "name": "林小玉",
+      "notes": "Sample record 68",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-68",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0068",
+      "review": {
+        "edited_by_user": false,
+        "status": "pending"
+      },
+      "service_date": "2026-08-12",
+      "services": {
+        "consultation": {
+          "financial_social": [
+            "nutrition_subsidy"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": "1988-06-15",
+      "discharge_followup": true,
+      "gender": "other",
+      "identity": "public_other",
+      "medical_record_no": "MR0069",
+      "name": "張阿姨",
+      "notes": "Sample record 69",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-69",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0069",
+      "review": {
+        "edited_by_user": false,
+        "status": "skipped"
+      },
+      "service_date": "2026-09-13",
+      "services": {
+        "consultation": {
+          "health_medical": [
+            "palliative_patient_rights"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [
+          "social_welfare"
+        ],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": false,
+      "gender": "female",
+      "identity": "patient",
+      "medical_record_no": "MR0070",
+      "name": "黃先生",
+      "notes": "Sample record 70",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-70",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": "71_over",
+        "cancers": [
+          "stomach_cancer"
+        ],
+        "channel": "self_known",
+        "disease_status": "undiagnosed",
+        "nationality": "local",
+        "newly_diagnosed_within_year": false,
+        "source": "emergency"
+      },
+      "record_id": "sample-0070",
+      "review": {
+        "edited_by_user": false,
+        "status": "written"
+      },
+      "service_date": "2026-10-14",
+      "services": {
+        "consultation": {
+          "nutrition_diet": [
+            "health_food"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": [
+          "other_care_supplies"
+        ]
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": true,
+      "gender": "male",
+      "identity": "family_caregiver",
+      "medical_record_no": "MR0071",
+      "name": "周小姐",
+      "notes": "Sample record 71",
+      "ocr": {
+        "confidence": 0.65,
+        "raw_text": "raw-71",
+        "warnings": [
+          "low_confidence"
+        ]
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0071",
+      "review": {
+        "edited_by_user": true,
+        "status": "confirmed"
+      },
+      "service_date": "2026-11-15",
+      "services": {
+        "consultation": {
+          "psychosocial_emotion": [
+            "other"
+          ]
+        },
+        "external_referrals": [
+          "long_term_care"
+        ],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": "scan-0071.jpg"
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": false,
+      "gender": "other",
+      "identity": "public_other",
+      "medical_record_no": "MR0072",
+      "name": "吳志強",
+      "notes": "Sample record 72",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-72",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0072",
+      "review": {
+        "edited_by_user": false,
+        "status": "forced"
+      },
+      "service_date": "2026-12-16",
+      "services": {
+        "consultation": {
+          "symptom_side_effect": [
+            "integrated_care"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": "1982-01-15",
+      "discharge_followup": null,
+      "gender": "female",
+      "identity": "patient",
+      "medical_record_no": "MR0073",
+      "name": "王小明",
+      "notes": "Sample record 73",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-73",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": "31_40",
+        "cancers": [
+          "colon_cancer"
+        ],
+        "channel": "external_referral",
+        "disease_status": "followup",
+        "nationality": "foreign",
+        "newly_diagnosed_within_year": true,
+        "source": "emergency"
+      },
+      "record_id": "sample-0073",
+      "review": {
+        "edited_by_user": false,
+        "status": "pending"
+      },
+      "service_date": "2026-01-17",
+      "services": {
+        "consultation": {
+          "care_support": [
+            "caregiver_support"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [
+          "nutrition"
+        ],
+        "referral_outcomes": [
+          "received_financial_aid"
+        ],
+        "supplies": [
+          "nutrition_products"
+        ]
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": false,
+      "gender": "male",
+      "identity": "family_caregiver",
+      "medical_record_no": "MR0074",
+      "name": "李小花",
+      "notes": "Sample record 74",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-74",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0074",
+      "review": {
+        "edited_by_user": false,
+        "status": "skipped"
+      },
+      "service_date": "2026-02-18",
+      "services": {
+        "consultation": {
+          "financial_social": [
+            "housing_subsidy"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": true,
+      "gender": "other",
+      "identity": "public_other",
+      "medical_record_no": "MR0075",
+      "name": "陳大文",
+      "notes": "Sample record 75",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-75",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0075",
+      "review": {
+        "edited_by_user": false,
+        "status": "written"
+      },
+      "service_date": "2026-03-19",
+      "services": {
+        "consultation": {
+          "health_medical": [
+            "healthy_lifestyle"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": false,
+      "gender": "female",
+      "identity": "patient",
+      "medical_record_no": "MR0076",
+      "name": "林小玉",
+      "notes": "Sample record 76",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-76",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": "61_70",
+        "cancers": [
+          "breast_cancer"
+        ],
+        "channel": "other",
+        "disease_status": "treating",
+        "nationality": "local",
+        "newly_diagnosed_within_year": false,
+        "source": "emergency"
+      },
+      "record_id": "sample-0076",
+      "review": {
+        "edited_by_user": false,
+        "status": "confirmed"
+      },
+      "service_date": "2026-04-20",
+      "services": {
+        "consultation": {
+          "nutrition_diet": [
+            "other"
+          ]
+        },
+        "external_referrals": [
+          "psychology"
+        ],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": [
+          "wig_hat"
+        ]
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": "scan-0076.jpg"
+      }
+    },
+    {
+      "birthdate": "1986-05-15",
+      "discharge_followup": true,
+      "gender": "male",
+      "identity": "family_caregiver",
+      "medical_record_no": "MR0077",
+      "name": "張阿姨",
+      "notes": "Sample record 77",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-77",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0077",
+      "review": {
+        "edited_by_user": false,
+        "status": "forced"
+      },
+      "service_date": "2026-05-21",
+      "services": {
+        "consultation": {
+          "psychosocial_emotion": [
+            "other"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [
+          "psychology"
+        ],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": false,
+      "gender": "other",
+      "identity": "public_other",
+      "medical_record_no": "MR0078",
+      "name": "黃先生",
+      "notes": "Sample record 78",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-78",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0078",
+      "review": {
+        "edited_by_user": true,
+        "status": "pending"
+      },
+      "service_date": "2026-06-22",
+      "services": {
+        "consultation": {
+          "symptom_side_effect": [
+            "fatigue_strength"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": null,
+      "gender": "female",
+      "identity": "patient",
+      "medical_record_no": "MR0079",
+      "name": "周小姐",
+      "notes": "Sample record 79",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-79",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": "21_30",
+        "cancers": [
+          "liver_cancer"
+        ],
+        "channel": "activity",
+        "disease_status": "diagnosed_refused",
+        "nationality": "foreign",
+        "newly_diagnosed_within_year": true,
+        "source": "emergency"
+      },
+      "record_id": "sample-0079",
+      "review": {
+        "edited_by_user": false,
+        "status": "skipped"
+      },
+      "service_date": "2026-07-23",
+      "services": {
+        "consultation": {
+          "care_support": [
+            "caregiver_support"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [
+          "received_service_help"
+        ],
+        "supplies": [
+          "other_equipment"
+        ]
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": false,
+      "gender": "male",
+      "identity": "family_caregiver",
+      "medical_record_no": "MR0080",
+      "name": "吳志強",
+      "notes": "Sample record 80",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-80",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0080",
+      "review": {
+        "edited_by_user": false,
+        "status": "written"
+      },
+      "service_date": "2026-08-24",
+      "services": {
+        "consultation": {
+          "financial_social": [
+            "transportation_subsidy"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": "1980-09-15",
+      "discharge_followup": true,
+      "gender": "other",
+      "identity": "public_other",
+      "medical_record_no": "MR0081",
+      "name": "王小明",
+      "notes": "Sample record 81",
+      "ocr": {
+        "confidence": 0.65,
+        "raw_text": "raw-81",
+        "warnings": [
+          "low_confidence"
+        ]
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0081",
+      "review": {
+        "edited_by_user": false,
+        "status": "confirmed"
+      },
+      "service_date": "2026-09-25",
+      "services": {
+        "consultation": {
+          "health_medical": [
+            "disease_treatment_knowledge"
+          ]
+        },
+        "external_referrals": [
+          "long_term_care"
+        ],
+        "internal_referrals": [
+          "care_information"
+        ],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": "scan-0081.jpg"
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": false,
+      "gender": "female",
+      "identity": "patient",
+      "medical_record_no": "MR0082",
+      "name": "李小花",
+      "notes": "Sample record 82",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-82",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": "51_60",
+        "cancers": [
+          "lung_cancer"
+        ],
+        "channel": "introduced",
+        "disease_status": "recurrence_treating",
+        "nationality": "local",
+        "newly_diagnosed_within_year": false,
+        "source": "emergency"
+      },
+      "record_id": "sample-0082",
+      "review": {
+        "edited_by_user": false,
+        "status": "forced"
+      },
+      "service_date": "2026-10-26",
+      "services": {
+        "consultation": {
+          "nutrition_diet": [
+            "health_food"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": [
+          "other_care_supplies"
+        ]
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": true,
+      "gender": "male",
+      "identity": "family_caregiver",
+      "medical_record_no": "MR0083",
+      "name": "陳大文",
+      "notes": "Sample record 83",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-83",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0083",
+      "review": {
+        "edited_by_user": false,
+        "status": "pending"
+      },
+      "service_date": "2026-11-27",
+      "services": {
+        "consultation": {
+          "psychosocial_emotion": [
+            "other"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": false,
+      "gender": "other",
+      "identity": "public_other",
+      "medical_record_no": "MR0084",
+      "name": "林小玉",
+      "notes": "Sample record 84",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-84",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0084",
+      "review": {
+        "edited_by_user": false,
+        "status": "skipped"
+      },
+      "service_date": "2026-12-28",
+      "services": {
+        "consultation": {
+          "symptom_side_effect": [
+            "wound_care"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": "1984-04-15",
+      "discharge_followup": null,
+      "gender": "female",
+      "identity": "patient",
+      "medical_record_no": "MR0085",
+      "name": "張阿姨",
+      "notes": "Sample record 85",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-85",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": "20_under",
+        "cancers": [
+          "stomach_cancer"
+        ],
+        "channel": "active_followup",
+        "disease_status": "diagnosed_not_treated",
+        "nationality": "foreign",
+        "newly_diagnosed_within_year": true,
+        "source": "emergency"
+      },
+      "record_id": "sample-0085",
+      "review": {
+        "edited_by_user": true,
+        "status": "written"
+      },
+      "service_date": "2026-01-01",
+      "services": {
+        "consultation": {
+          "care_support": [
+            "caregiver_support"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [
+          "other_care_supplies"
+        ],
+        "referral_outcomes": [
+          "received_financial_aid"
+        ],
+        "supplies": [
+          "nutrition_products"
+        ]
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": false,
+      "gender": "male",
+      "identity": "family_caregiver",
+      "medical_record_no": "MR0086",
+      "name": "黃先生",
+      "notes": "Sample record 86",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-86",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0086",
+      "review": {
+        "edited_by_user": false,
+        "status": "confirmed"
+      },
+      "service_date": "2026-02-02",
+      "services": {
+        "consultation": {
+          "financial_social": [
+            "rehab_supplies_aids"
+          ]
+        },
+        "external_referrals": [
+          "psychology"
+        ],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": "scan-0086.jpg"
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": true,
+      "gender": "other",
+      "identity": "public_other",
+      "medical_record_no": "MR0087",
+      "name": "周小姐",
+      "notes": "Sample record 87",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-87",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0087",
+      "review": {
+        "edited_by_user": false,
+        "status": "forced"
+      },
+      "service_date": "2026-03-03",
+      "services": {
+        "consultation": {
+          "health_medical": [
+            "second_opinion"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": false,
+      "gender": "female",
+      "identity": "patient",
+      "medical_record_no": "MR0088",
+      "name": "吳志強",
+      "notes": "Sample record 88",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-88",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": "41_50",
+        "cancers": [
+          "colon_cancer"
+        ],
+        "channel": "internal_referral",
+        "disease_status": "palliative",
+        "nationality": "local",
+        "newly_diagnosed_within_year": false,
+        "source": "emergency"
+      },
+      "record_id": "sample-0088",
+      "review": {
+        "edited_by_user": false,
+        "status": "pending"
+      },
+      "service_date": "2026-04-04",
+      "services": {
+        "consultation": {
+          "nutrition_diet": [
+            "other"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": [
+          "wig_hat"
+        ]
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": "1988-08-15",
+      "discharge_followup": true,
+      "gender": "male",
+      "identity": "family_caregiver",
+      "medical_record_no": "MR0089",
+      "name": "王小明",
+      "notes": "Sample record 89",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-89",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0089",
+      "review": {
+        "edited_by_user": false,
+        "status": "skipped"
+      },
+      "service_date": "2026-05-05",
+      "services": {
+        "consultation": {
+          "psychosocial_emotion": [
+            "other"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [
+          "social_welfare"
+        ],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": false,
+      "gender": "other",
+      "identity": "public_other",
+      "medical_record_no": "MR0090",
+      "name": "李小花",
+      "notes": "Sample record 90",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-90",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0090",
+      "review": {
+        "edited_by_user": false,
+        "status": "written"
+      },
+      "service_date": "2026-06-06",
+      "services": {
+        "consultation": {
+          "symptom_side_effect": [
+            "treatment_side_effect"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": null,
+      "gender": "female",
+      "identity": "patient",
+      "medical_record_no": "MR0091",
+      "name": "陳大文",
+      "notes": "Sample record 91",
+      "ocr": {
+        "confidence": 0.65,
+        "raw_text": "raw-91",
+        "warnings": [
+          "low_confidence"
+        ]
+      },
+      "patient_fields": {
+        "age_group": "71_over",
+        "cancers": [
+          "breast_cancer"
+        ],
+        "channel": "self_known",
+        "disease_status": "undiagnosed",
+        "nationality": "foreign",
+        "newly_diagnosed_within_year": true,
+        "source": "emergency"
+      },
+      "record_id": "sample-0091",
+      "review": {
+        "edited_by_user": false,
+        "status": "confirmed"
+      },
+      "service_date": "2026-07-07",
+      "services": {
+        "consultation": {
+          "care_support": [
+            "caregiver_support"
+          ]
+        },
+        "external_referrals": [
+          "long_term_care"
+        ],
+        "internal_referrals": [],
+        "referral_outcomes": [
+          "received_service_help"
+        ],
+        "supplies": [
+          "other_equipment"
+        ]
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": "scan-0091.jpg"
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": false,
+      "gender": "male",
+      "identity": "family_caregiver",
+      "medical_record_no": "MR0092",
+      "name": "林小玉",
+      "notes": "Sample record 92",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-92",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0092",
+      "review": {
+        "edited_by_user": true,
+        "status": "forced"
+      },
+      "service_date": "2026-08-08",
+      "services": {
+        "consultation": {
+          "financial_social": [
+            "nutrition_subsidy"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": "1982-03-15",
+      "discharge_followup": true,
+      "gender": "other",
+      "identity": "public_other",
+      "medical_record_no": "MR0093",
+      "name": "張阿姨",
+      "notes": "Sample record 93",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-93",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0093",
+      "review": {
+        "edited_by_user": false,
+        "status": "pending"
+      },
+      "service_date": "2026-09-09",
+      "services": {
+        "consultation": {
+          "health_medical": [
+            "palliative_patient_rights"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [
+          "nutrition"
+        ],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": false,
+      "gender": "female",
+      "identity": "patient",
+      "medical_record_no": "MR0094",
+      "name": "黃先生",
+      "notes": "Sample record 94",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-94",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": "31_40",
+        "cancers": [
+          "liver_cancer"
+        ],
+        "channel": "external_referral",
+        "disease_status": "followup",
+        "nationality": "local",
+        "newly_diagnosed_within_year": false,
+        "source": "emergency"
+      },
+      "record_id": "sample-0094",
+      "review": {
+        "edited_by_user": false,
+        "status": "skipped"
+      },
+      "service_date": "2026-10-10",
+      "services": {
+        "consultation": {
+          "nutrition_diet": [
+            "health_food"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": [
+          "other_care_supplies"
+        ]
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": true,
+      "gender": "male",
+      "identity": "family_caregiver",
+      "medical_record_no": "MR0095",
+      "name": "周小姐",
+      "notes": "Sample record 95",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-95",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0095",
+      "review": {
+        "edited_by_user": false,
+        "status": "written"
+      },
+      "service_date": "2026-11-11",
+      "services": {
+        "consultation": {
+          "psychosocial_emotion": [
+            "other"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": false,
+      "gender": "other",
+      "identity": "public_other",
+      "medical_record_no": "MR0096",
+      "name": "吳志強",
+      "notes": "Sample record 96",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-96",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0096",
+      "review": {
+        "edited_by_user": false,
+        "status": "confirmed"
+      },
+      "service_date": "2026-12-12",
+      "services": {
+        "consultation": {
+          "symptom_side_effect": [
+            "sexuality_fertility"
+          ]
+        },
+        "external_referrals": [
+          "psychology"
+        ],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": "scan-0096.jpg"
+      }
+    },
+    {
+      "birthdate": "1986-07-15",
+      "discharge_followup": null,
+      "gender": "female",
+      "identity": "patient",
+      "medical_record_no": "MR0097",
+      "name": "王小明",
+      "notes": "Sample record 97",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-97",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": "61_70",
+        "cancers": [
+          "lung_cancer"
+        ],
+        "channel": "other",
+        "disease_status": "treating",
+        "nationality": "foreign",
+        "newly_diagnosed_within_year": true,
+        "source": "emergency"
+      },
+      "record_id": "sample-0097",
+      "review": {
+        "edited_by_user": false,
+        "status": "forced"
+      },
+      "service_date": "2026-01-13",
+      "services": {
+        "consultation": {
+          "care_support": [
+            "caregiver_support"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [
+          "psychology"
+        ],
+        "referral_outcomes": [
+          "received_financial_aid"
+        ],
+        "supplies": [
+          "nutrition_products"
+        ]
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": false,
+      "gender": "male",
+      "identity": "family_caregiver",
+      "medical_record_no": "MR0098",
+      "name": "李小花",
+      "notes": "Sample record 98",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-98",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0098",
+      "review": {
+        "edited_by_user": false,
+        "status": "pending"
+      },
+      "service_date": "2026-02-14",
+      "services": {
+        "consultation": {
+          "financial_social": [
+            "housing_subsidy"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": null,
+      "discharge_followup": true,
+      "gender": "other",
+      "identity": "public_other",
+      "medical_record_no": "MR0099",
+      "name": "陳大文",
+      "notes": "Sample record 99",
+      "ocr": {
+        "confidence": 0.92,
+        "raw_text": "raw-99",
+        "warnings": []
+      },
+      "patient_fields": {
+        "age_group": null,
+        "cancers": [],
+        "channel": null,
+        "disease_status": null,
+        "nationality": null,
+        "newly_diagnosed_within_year": null,
+        "source": null
+      },
+      "record_id": "sample-0099",
+      "review": {
+        "edited_by_user": true,
+        "status": "skipped"
+      },
+      "service_date": "2026-03-15",
+      "services": {
+        "consultation": {
+          "health_medical": [
+            "healthy_lifestyle"
+          ]
+        },
+        "external_referrals": [],
+        "internal_referrals": [],
+        "referral_outcomes": [],
+        "supplies": []
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": null
+      }
+    },
+    {
+      "birthdate": "1980-01-15",
+      "discharge_followup": null,
+      "gender": "female",
+      "identity": "patient",
+      "medical_record_no": "MR0001",
+      "name": "王小明",
+      "notes": "Sample record 1",
+      "ocr": {
+        "confidence": 0.65,
+        "raw_text": "raw-1",
+        "warnings": [
+          "low_confidence"
+        ]
+      },
+      "patient_fields": {
+        "age_group": "20_under",
+        "cancers": [
+          "breast_cancer"
+        ],
+        "channel": "active_followup",
+        "disease_status": "diagnosed_not_treated",
+        "nationality": "foreign",
+        "newly_diagnosed_within_year": true,
+        "source": "emergency"
+      },
+      "record_id": "sample-0100",
+      "review": {
+        "edited_by_user": true,
+        "status": "confirmed"
+      },
+      "service_date": "2026-01-01",
+      "services": {
+        "consultation": {
+          "care_support": [
+            "caregiver_support"
+          ]
+        },
+        "external_referrals": [
+          "long_term_care"
+        ],
+        "internal_referrals": [
+          "care_information"
+        ],
+        "referral_outcomes": [
+          "received_financial_aid"
+        ],
+        "supplies": [
+          "nutrition_products"
+        ]
+      },
+      "source": {
+        "capture_time": null,
+        "image_path": "scan-0001.jpg"
+      }
+    }
+  ],
+  "schema_version": "service_record.v1",
+  "source_batch": {
+    "created_at": "2026-05-24T00:00:00+08:00",
+    "source_type": "manual",
+    "template_name": "template.xlsx"
+  }
+}

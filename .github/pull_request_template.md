@@ -13,7 +13,7 @@
 - [ ] `CHANGELOG.md` `[Unreleased]` has matching entries, or this PR is docs-only / test-only / chore-only.
 - [ ] `VERSION` is consistent with the intended release state.
 - [ ] This PR body checklist is fully checked.
-- [ ] `python -m policy_check --repo .` reports no failures.
+- [ ] GitHub Actions `Policy Check` workflow passes.
 - [ ] Any repo-specific test, lint, and build commands required by this change have passed.
 - [ ] Any skipped checks use only allowed policy exemption labels and include a reason.
 

@@ -21,6 +21,7 @@
 - 新增 JSON、圖片資料夾與 UVC 攝影機 capture adapter 邊界。
 - 新增不開 localhost port 的 Tkinter 原生桌面審核介面。
 - 新增 PyInstaller 打包流程生成 portable Windows .exe。
+- 新增 PR template，對齊 policy checklist。
 
 ### Fixed
 - 補齊服務摘要對應未列舉標籤時的 raw code 轉換，避免重複單漏判。
@@ -29,3 +30,4 @@
 - 避免被阻擋的匯入記錄預先佔用重複鍵，並確認寫入結果。
 - import-json 匯入途中失敗時，若已有記錄寫入，錯誤訊息會提示 working XLSX 可能已有部分資料。
 - import-json 有阻擋記錄時回傳對應 exit code，並更新 CLI help 描述。
+- 清理誤提交的 PyInstaller build 產物，避免 build cache 進入版本庫。

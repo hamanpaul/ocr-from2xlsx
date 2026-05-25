@@ -74,4 +74,15 @@ jobs:
             args+=(--pr-head-ref "$PR_HEAD_REF")
           fi
 
+          set +e
           python "${args[@]}"
+          status=$?
+          set -e
+
+          if [[ -n "${GITHUB_STEP_SUMMARY:-}" && -f "${GITHUB_STEP_SUMMARY}" ]]; then
+            echo "=== policy_check summary ==="
+            cat "${GITHUB_STEP_SUMMARY}"
+            echo "=== end policy_check summary ==="
+          fi
+
+          exit "$status"

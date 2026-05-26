@@ -397,3 +397,27 @@ def test_import_json_cli_warns_when_accept_fails_after_write(
     assert working.exists()
     assert "working XLSX may contain imported records" in captured.err
     assert "Traceback" not in captured.err
+
+
+def test_prepare_records_cli_writes_batch_json_from_pdf_fixture(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
+) -> None:
+    fixture_dir = Path(__file__).parent / "fixtures" / "pdf"
+    output_json = tmp_path / "prepared.json"
+
+    exit_code = main(
+        [
+            "prepare-records",
+            "--input",
+            str(fixture_dir / "for testing only.pdf"),
+            "--output",
+            str(output_json),
+            "--ocr-fixture",
+            str(fixture_dir / "for testing only.ocr.json"),
+        ]
+    )
+
+    assert exit_code == 0
+    assert output_json.exists()
+    captured = capsys.readouterr()
+    assert captured.out == f"{output_json}\n"

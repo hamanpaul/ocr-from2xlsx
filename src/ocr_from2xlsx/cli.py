@@ -56,6 +56,19 @@ def build_parser() -> argparse.ArgumentParser:
     import_parser.add_argument("--working", required=True, help="Working XLSX output path.")
     import_parser.add_argument("--report-json", required=True, help="Import report JSON path.")
     import_parser.add_argument("--report-csv", required=True, help="Import report CSV path.")
+    prepare_parser = subparsers.add_parser(
+        "prepare-records",
+        help="Prepare normalized JSON records from PDF or image inputs.",
+        description="Prepare normalized JSON records from PDF or image inputs.",
+    )
+    prepare_parser.add_argument("--input", required=True, action="append", help="Input PDF or image path.")
+    prepare_parser.add_argument("--output", required=True, help="Output JSON path.")
+    prepare_parser.add_argument("--ocr-fixture", help="Fixture OCR payload path for deterministic tests.")
+    prepare_parser.add_argument(
+        "--template-id",
+        default="service_record.v1",
+        help="Form template identifier.",
+    )
     subparsers.add_parser("app", help="Launch the native desktop review UI.")
     return parser
 
@@ -134,6 +147,29 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         print(Path(args.working))
         return 1 if blocked_count else 0
+    if args.command == "prepare-records":
+        from pathlib import Path
+
+        from ocr_from2xlsx.form_template import service_record_template
+        from ocr_from2xlsx.json_io import dump_batch
+        from ocr_from2xlsx.ocr_backend import FixtureOcrBackend
+        from ocr_from2xlsx.prepare_records import prepare_records_from_paths
+
+        if not args.ocr_fixture:
+            print("error: --ocr-fixture is required for deterministic preparation", file=sys.stderr)
+            return 2
+
+        template = service_record_template()
+        batch = prepare_records_from_paths(
+            input_paths=[Path(value) for value in args.input],
+            output_dir=Path(args.output).parent,
+            template=template,
+            backend=FixtureOcrBackend.from_path(Path(args.ocr_fixture)),
+        )
+        output_path = Path(args.output)
+        dump_batch(batch, output_path)
+        print(output_path)
+        return 0
     if args.command == "app":
         from ocr_from2xlsx.app import run_app
 

@@ -18,13 +18,17 @@ python -m pip install -e ".[dev,camera]"
 
 ## Usage
 
-The first implementation validates the workflow before real hand-written OCR is integrated:
-
-1. Generate or import normalized service-record JSON.
-2. Review records in the native desktop UI.
+1. Prepare normalized JSON from PDF or image inputs.
+2. Validate or review the prepared records.
 3. Write confirmed records into the `個案總表` sheet.
 4. Save the working XLSX after each confirmed record.
 5. Export a final XLSX and import report.
+
+```powershell
+ocr-from2xlsx prepare-records --input "tests\fixtures\pdf\for testing only.pdf" --output prepared.json --ocr-fixture "tests\fixtures\pdf\for testing only.ocr.json"
+```
+
+Current capture boundaries cover normalized JSON, image folders, UVC cameras, and PDF page metadata so scanned service-record PDFs can be verified as stable input fixtures before OCR is added.
 
 Launch the native desktop UI:
 
@@ -34,15 +38,17 @@ ocr-from2xlsx app
 
 <!-- BEGIN: cli-help marker="ocr-from2xlsx-help" -->
 usage: ocr-from2xlsx [-h] [--version]
-                     {sample-json,validate-json,import-json,app} ...
+                     {sample-json,validate-json,import-json,prepare-records,app}
+                     ...
 
 Import normalized service-record JSON into the monthly report XLSX.
 
 positional arguments:
-  {sample-json,validate-json,import-json,app}
+  {sample-json,validate-json,import-json,prepare-records,app}
     sample-json         Generate deterministic sample service-record JSON.
     validate-json       Validate normalized service-record JSON.
     import-json         Import normalized JSON records into a working XLSX.
+    prepare-records     Prepare normalized JSON records from PDF inputs.
     app                 Launch the native desktop review UI.
 
 options:

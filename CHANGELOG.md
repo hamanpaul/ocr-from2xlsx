@@ -8,6 +8,8 @@
 ## [Unreleased]
 
 ### Added
+- 新增 `prepare-records` 前處理流程，將固定版型 PDF/影像轉成 normalized JSON 後再交給既有匯入流程。
+- 新增 `for testing only.pdf` 的人工標註 gold fixture 與端到端 regression 測試。
 - 新增 `prepare-records` CLI，將 PDF/影像輸入前處理為 normalized JSON。
 - 以 `hamanpaul/new-project-template` 建立專案骨架。
 - 導入 `hamanpaul/paulsha-conventions` policy metadata、agent convention files 與 Policy Check workflow。

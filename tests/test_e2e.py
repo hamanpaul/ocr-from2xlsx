@@ -10,6 +10,7 @@ from ocr_from2xlsx.constants import (
     IDENTITY_LABELS,
     WORKBOOK_SHEET,
 )
+from ocr_from2xlsx.cli import main
 from ocr_from2xlsx.json_io import load_batch
 from ocr_from2xlsx.session import ImportSession
 from tests.fixtures import create_workbook_template
@@ -95,3 +96,55 @@ def test_end_to_end_import(tmp_path: Path) -> None:
         template_wb.close()
         if working_wb is not None:
             working_wb.close()
+
+
+def test_end_to_end_prepare_records_then_import_json(tmp_path: Path) -> None:
+    fixture_dir = Path(__file__).parent / "fixtures" / "pdf"
+    prepared_json = tmp_path / "prepared.json"
+    template_path = tmp_path / "template.xlsx"
+    working_path = tmp_path / "working.xlsx"
+    report_json = tmp_path / "report.json"
+    report_csv = tmp_path / "report.csv"
+    create_workbook_template(template_path)
+
+    assert (
+        main(
+            [
+                "prepare-records",
+                "--input",
+                str(fixture_dir / "for testing only.pdf"),
+                "--output",
+                str(prepared_json),
+                "--ocr-fixture",
+                str(fixture_dir / "for testing only.ocr.json"),
+            ]
+        )
+        == 0
+    )
+
+    assert (
+        main(
+            [
+                "import-json",
+                "--input",
+                str(prepared_json),
+                "--template",
+                str(template_path),
+                "--working",
+                str(working_path),
+                "--report-json",
+                str(report_json),
+                "--report-csv",
+                str(report_csv),
+            ]
+        )
+        == 0
+    )
+
+    wb = _load_workbook(working_path)
+    try:
+        ws = wb[WORKBOOK_SHEET]
+        name_col = _column_for_header(ws, BASIC_COLUMN_BY_FIELD["name"])
+        assert ws.cell(row=2, column=name_col).value == "AI test"
+    finally:
+        wb.close()

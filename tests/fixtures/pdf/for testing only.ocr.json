@@ -1,0 +1,43 @@
+{
+  "pages": [
+    {
+      "document_name": "for testing only.pdf",
+      "page_number": 1,
+      "record": {
+        "record_id": "pdf-0001",
+        "service_date": "2026-05-26",
+        "identity": "patient",
+        "name": "AI test",
+        "medical_record_no": "TRAINING-ONLY",
+        "gender": "female",
+        "patient_fields": {
+          "nationality": "local",
+          "age_group": "51_60",
+          "channel": "internal_referral",
+          "disease_status": "treating",
+          "source": "outpatient",
+          "cancers": ["breast_cancer"],
+          "newly_diagnosed_within_year": false
+        },
+        "services": {
+          "consultation": {
+            "health_medical": ["screening_prevention"]
+          },
+          "supplies": [],
+          "internal_referrals": [],
+          "external_referrals": [],
+          "referral_outcomes": []
+        },
+        "ocr": {
+          "confidence": 0.98,
+          "raw_text": "AI test, training only",
+          "warnings": [],
+          "field_confidences": {
+            "name": 0.99,
+            "service_date": 0.97
+          }
+        }
+      }
+    }
+  ]
+}

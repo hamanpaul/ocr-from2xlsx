@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from openpyxl import load_workbook
 
-from ocr_from2xlsx.cli import main
+from ocr_from2xlsx.cli import build_parser, main
 from ocr_from2xlsx.domain import Batch, SourceBatch
 from ocr_from2xlsx.json_io import dump_batch
 from ocr_from2xlsx.session import ImportSession
@@ -423,6 +423,18 @@ def test_prepare_records_cli_writes_batch_json_from_pdf_fixture(
     assert captured.out == f"{output_json}\n"
 
 
+def test_prepare_records_help_mentions_pdf_inputs_only(capsys) -> None:
+    parser = build_parser()
+
+    with pytest.raises(SystemExit):
+        parser.parse_args(["prepare-records", "--help"])
+
+    captured = capsys.readouterr()
+    help_text = captured.out
+    assert "Input PDF path." in help_text
+    assert "Input PDF or image path." not in help_text
+
+
 def test_prepare_records_cli_requires_ocr_fixture(
     tmp_path: Path, capsys
 ) -> None:
@@ -469,4 +481,54 @@ def test_prepare_records_cli_rejects_unknown_template_id(
     captured = capsys.readouterr()
     assert exit_code == 2
     assert "Unsupported template_id" in captured.err
+    assert "Traceback" not in captured.err
+
+
+def test_prepare_records_cli_reports_missing_input_without_traceback(
+    tmp_path: Path, capsys
+) -> None:
+    fixture_dir = Path(__file__).parent / "fixtures" / "pdf"
+    output_json = tmp_path / "prepared.json"
+    missing_input = tmp_path / "missing.pdf"
+
+    exit_code = main(
+        [
+            "prepare-records",
+            "--input",
+            str(missing_input),
+            "--output",
+            str(output_json),
+            "--ocr-fixture",
+            str(fixture_dir / "for testing only.ocr.json"),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert captured.err.startswith("error: ")
+    assert "Traceback" not in captured.err
+
+
+def test_prepare_records_cli_reports_missing_ocr_fixture_without_traceback(
+    tmp_path: Path, capsys
+) -> None:
+    fixture_dir = Path(__file__).parent / "fixtures" / "pdf"
+    output_json = tmp_path / "prepared.json"
+    missing_fixture = tmp_path / "missing.ocr.json"
+
+    exit_code = main(
+        [
+            "prepare-records",
+            "--input",
+            str(fixture_dir / "for testing only.pdf"),
+            "--output",
+            str(output_json),
+            "--ocr-fixture",
+            str(missing_fixture),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert captured.err.startswith("error: ")
     assert "Traceback" not in captured.err

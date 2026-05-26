@@ -66,10 +66,10 @@ def build_parser() -> argparse.ArgumentParser:
     import_parser.add_argument("--report-csv", required=True, help="Import report CSV path.")
     prepare_parser = subparsers.add_parser(
         "prepare-records",
-        help="Prepare normalized JSON records from PDF or image inputs.",
-        description="Prepare normalized JSON records from PDF or image inputs.",
+        help="Prepare normalized JSON records from PDF inputs.",
+        description="Prepare normalized JSON records from PDF inputs.",
     )
-    prepare_parser.add_argument("--input", required=True, action="append", help="Input PDF or image path.")
+    prepare_parser.add_argument("--input", required=True, action="append", help="Input PDF path.")
     prepare_parser.add_argument("--output", required=True, help="Output JSON path.")
     prepare_parser.add_argument(
         "--ocr-fixture",
@@ -168,17 +168,17 @@ def main(argv: list[str] | None = None) -> int:
 
         try:
             template = _resolve_template(args.template_id)
-        except ValueError as exc:
+            batch = prepare_records_from_paths(
+                input_paths=[Path(value) for value in args.input],
+                output_dir=Path(args.output).parent,
+                template=template,
+                backend=FixtureOcrBackend.from_path(Path(args.ocr_fixture)),
+            )
+            output_path = Path(args.output)
+            dump_batch(batch, output_path)
+        except Exception as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 2
-        batch = prepare_records_from_paths(
-            input_paths=[Path(value) for value in args.input],
-            output_dir=Path(args.output).parent,
-            template=template,
-            backend=FixtureOcrBackend.from_path(Path(args.ocr_fixture)),
-        )
-        output_path = Path(args.output)
-        dump_batch(batch, output_path)
         print(output_path)
         return 0
     if args.command == "app":

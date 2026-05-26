@@ -113,10 +113,15 @@ def test_end_to_end_prepare_records_then_import_json(tmp_path: Path) -> None:
     fixed_now = datetime(2026, 5, 26, 0, 0, 0, tzinfo=timezone(timedelta(hours=8)))
     original_datetime = prepare_records_module.datetime
 
+    class _FixedNow:
+        @staticmethod
+        def astimezone():
+            return fixed_now
+
     class _FixedDateTime:
         @staticmethod
         def now():
-            return fixed_now
+            return _FixedNow()
 
     prepare_records_module.datetime = _FixedDateTime
     try:

@@ -421,3 +421,52 @@ def test_prepare_records_cli_writes_batch_json_from_pdf_fixture(
     assert output_json.exists()
     captured = capsys.readouterr()
     assert captured.out == f"{output_json}\n"
+
+
+def test_prepare_records_cli_requires_ocr_fixture(
+    tmp_path: Path, capsys
+) -> None:
+    fixture_dir = Path(__file__).parent / "fixtures" / "pdf"
+    output_json = tmp_path / "prepared.json"
+
+    with pytest.raises(SystemExit) as excinfo:
+        main(
+            [
+                "prepare-records",
+                "--input",
+                str(fixture_dir / "for testing only.pdf"),
+                "--output",
+                str(output_json),
+            ]
+        )
+
+    captured = capsys.readouterr()
+    assert excinfo.value.code == 2
+    assert "--ocr-fixture" in captured.err
+    assert "required" in captured.err
+
+
+def test_prepare_records_cli_rejects_unknown_template_id(
+    tmp_path: Path, capsys
+) -> None:
+    fixture_dir = Path(__file__).parent / "fixtures" / "pdf"
+    output_json = tmp_path / "prepared.json"
+
+    exit_code = main(
+        [
+            "prepare-records",
+            "--input",
+            str(fixture_dir / "for testing only.pdf"),
+            "--output",
+            str(output_json),
+            "--ocr-fixture",
+            str(fixture_dir / "for testing only.ocr.json"),
+            "--template-id",
+            "service_record.v2",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert "unknown template id" in captured.err
+    assert "Traceback" not in captured.err

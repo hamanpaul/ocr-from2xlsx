@@ -21,6 +21,14 @@ class LfHelpArgumentParser(argparse.ArgumentParser):
         _write_help_text(self.format_help(), file)
 
 
+def _resolve_template(template_id: str):
+    from ocr_from2xlsx.form_template import service_record_template
+
+    if template_id == "service_record.v1":
+        return service_record_template()
+    raise ValueError(f"unknown template id: {template_id}")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = LfHelpArgumentParser(
         prog="ocr-from2xlsx",
@@ -63,11 +71,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     prepare_parser.add_argument("--input", required=True, action="append", help="Input PDF or image path.")
     prepare_parser.add_argument("--output", required=True, help="Output JSON path.")
-    prepare_parser.add_argument("--ocr-fixture", help="Fixture OCR payload path for deterministic tests.")
+    prepare_parser.add_argument(
+        "--ocr-fixture",
+        required=True,
+        help="Fixture OCR payload path required for deterministic preparation.",
+    )
     prepare_parser.add_argument(
         "--template-id",
         default="service_record.v1",
-        help="Form template identifier.",
+        help="Form template identifier (currently only service_record.v1 is supported).",
     )
     subparsers.add_parser("app", help="Launch the native desktop review UI.")
     return parser
@@ -150,16 +162,15 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "prepare-records":
         from pathlib import Path
 
-        from ocr_from2xlsx.form_template import service_record_template
         from ocr_from2xlsx.json_io import dump_batch
         from ocr_from2xlsx.ocr_backend import FixtureOcrBackend
         from ocr_from2xlsx.prepare_records import prepare_records_from_paths
 
-        if not args.ocr_fixture:
-            print("error: --ocr-fixture is required for deterministic preparation", file=sys.stderr)
+        try:
+            template = _resolve_template(args.template_id)
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
             return 2
-
-        template = service_record_template()
         batch = prepare_records_from_paths(
             input_paths=[Path(value) for value in args.input],
             output_dir=Path(args.output).parent,

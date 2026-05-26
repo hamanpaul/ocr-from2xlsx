@@ -34,3 +34,4 @@
 - 清理誤提交的 PyInstaller build 產物，避免 build cache 進入版本庫。
 - Policy Check workflow 改為直接傳入 PR metadata，避免 GitHub event payload 差異造成誤判。
 - 失敗的 PDF 頁面模板檢查不再先建立輸出目錄，避免留下空資料夾。
+- Fixture OCR backend 會深拷貝頁面記錄，避免巢狀 `source` / `review` 狀態在多次抽取間互相污染。

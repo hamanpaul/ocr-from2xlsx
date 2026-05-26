@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -28,7 +29,7 @@ class FixtureOcrBackend:
 
     def extract(self, page: PreparedPage) -> dict[str, object]:
         key = (Path(page.source.document_path or "").name, page.source.page_number or 0)
-        record = dict(self.pages[key])
+        record = copy.deepcopy(self.pages[key])
         ocr = dict(record.get("ocr", {}))
         ocr.setdefault("backend", "fixture")
         ocr.setdefault("model", "manual-gold")

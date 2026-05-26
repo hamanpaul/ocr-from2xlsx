@@ -28,7 +28,7 @@ python -m pip install -e ".[dev,camera]"
 ocr-from2xlsx prepare-records --input "tests\fixtures\pdf\for testing only.pdf" --output prepared.json --ocr-fixture "tests\fixtures\pdf\for testing only.ocr.json"
 ```
 
-Current capture boundaries cover normalized JSON, image folders, UVC cameras, and PDF page metadata so scanned service-record PDFs can be verified as stable input fixtures before OCR is added.
+Current capture boundaries cover normalized JSON, image folders, UVC cameras, and PDF page metadata so scanned service-record PDFs can be prepared through the fixture-backed `prepare-records` flow before import.
 
 Launch the native desktop UI:
 

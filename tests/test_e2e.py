@@ -39,6 +39,17 @@ def _load_workbook(path: Path):
     return load_workbook(path, keep_vba=keep_vba)
 
 
+class _FixedDatetime:
+    def __init__(self, fixed_now: datetime) -> None:
+        self._fixed_now = fixed_now
+
+    def now(self):
+        return self
+
+    def astimezone(self):
+        return self._fixed_now
+
+
 def test_end_to_end_import(tmp_path: Path) -> None:
     repo_root = Path(__file__).resolve().parents[1]
     sample_path = repo_root / "src" / "ocr_from2xlsx" / "sample_data.json"
@@ -113,17 +124,7 @@ def test_end_to_end_prepare_records_then_import_json(tmp_path: Path) -> None:
     fixed_now = datetime(2026, 5, 26, 0, 0, 0, tzinfo=timezone(timedelta(hours=8)))
     original_datetime = prepare_records_module.datetime
 
-    class _FixedNow:
-        @staticmethod
-        def astimezone():
-            return fixed_now
-
-    class _FixedDateTime:
-        @staticmethod
-        def now():
-            return _FixedNow()
-
-    prepare_records_module.datetime = _FixedDateTime
+    prepare_records_module.datetime = _FixedDatetime(fixed_now)
     try:
         assert (
             main(

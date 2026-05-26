@@ -25,6 +25,7 @@
 - 新增 PR template，對齊 policy checklist。
 
 ### Fixed
+- `prepare-records` 的錯誤處理縮限為 `OSError`、`json.JSONDecodeError`、`ValueError`。
 - 補齊服務摘要對應未列舉標籤時的 raw code 轉換，避免重複單漏判。
 - 讀取工作簿時要求完整病人/基本欄位與癌別欄位，缺漏即明確報錯。
 - 病人欄位的「一年內新診斷」為空值時不再寫入「否」。

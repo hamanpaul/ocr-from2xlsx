@@ -176,7 +176,7 @@ def main(argv: list[str] | None = None) -> int:
             )
             output_path = Path(args.output)
             dump_batch(batch, output_path)
-        except Exception as exc:
+        except (OSError, json.JSONDecodeError, ValueError) as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 2
         print(output_path)

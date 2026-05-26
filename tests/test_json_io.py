@@ -117,6 +117,33 @@ def test_batch_json_round_trip_keeps_pdf_source_and_ocr_metadata(tmp_path: Path)
     assert loaded.records[0].ocr.field_confidences == {"name": 0.99, "service_date": 0.95}
 
 
+def test_load_batch_accepts_integral_float_page_number(tmp_path: Path) -> None:
+    record = make_record().to_dict()
+    record["source"]["page_number"] = 1.0
+    path = tmp_path / "records.json"
+    path.write_text(
+        json.dumps({"schema_version": SCHEMA_VERSION, "source_batch": {}, "records": [record]}),
+        encoding="utf-8",
+    )
+
+    batch = load_batch(path)
+
+    assert batch.records[0].source.page_number == 1
+
+
+def test_load_batch_rejects_non_integral_float_page_number(tmp_path: Path) -> None:
+    record = make_record().to_dict()
+    record["source"]["page_number"] = 1.5
+    path = tmp_path / "records.json"
+    path.write_text(
+        json.dumps({"schema_version": SCHEMA_VERSION, "source_batch": {}, "records": [record]}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="source.page_number must be an int"):
+        load_batch(path)
+
+
 def test_rejects_unknown_schema_version(tmp_path: Path) -> None:
     path = tmp_path / "records.json"
     path.write_text('{"schema_version":"wrong","source_batch":{},"records":[]}', encoding="utf-8")

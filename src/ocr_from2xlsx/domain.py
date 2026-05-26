@@ -82,9 +82,13 @@ def _optional_float(value: Any, field_name: str) -> float | None:
 def _optional_int(value: Any, field_name: str) -> int | None:
     if value is None:
         return None
-    if isinstance(value, bool) or not isinstance(value, int):
+    if isinstance(value, bool):
         raise ValueError(f"{field_name} must be an int")
-    return value
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    raise ValueError(f"{field_name} must be an int")
 
 
 def _require_float_map(value: Any, field_name: str) -> dict[str, float]:

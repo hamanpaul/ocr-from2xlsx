@@ -26,7 +26,7 @@ def _resolve_template(template_id: str):
 
     if template_id == "service_record.v1":
         return service_record_template()
-    raise ValueError(f"Unsupported template_id: {template_id}")
+    raise ValueError(f"Unsupported template_id: {template_id!r}")
 
 
 def build_parser() -> argparse.ArgumentParser:

@@ -8,6 +8,7 @@
 ## [Unreleased]
 
 ### Added
+- 新增 `prepare-records` CLI，將 PDF/影像輸入前處理為 normalized JSON。
 - 以 `hamanpaul/new-project-template` 建立專案骨架。
 - 導入 `hamanpaul/paulsha-conventions` policy metadata、agent convention files 與 Policy Check workflow。
 - 新增 OCR-to-XLSX 服務紀錄匯入工具設計規格。

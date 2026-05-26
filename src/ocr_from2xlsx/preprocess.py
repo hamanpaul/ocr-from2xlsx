@@ -56,8 +56,8 @@ class PreparedPage:
 
 def prepare_pdf_page(page: PdfPage, output_dir: Path | str, template: FormTemplate) -> PreparedPage:
     output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
     _validate_page_size(page, template)
+    output_dir.mkdir(parents=True, exist_ok=True)
     image_path = _output_image_path(page, output_dir)
     with fitz.open(page.document_path) as document:
         pixmap = document.load_page(page.page_number - 1).get_pixmap(dpi=200)

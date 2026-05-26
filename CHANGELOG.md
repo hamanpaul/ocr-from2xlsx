@@ -19,6 +19,7 @@
 - 新增每筆確認即寫入保存的匯入工作階段與報告模型。
 - 新增 JSON 到 XLSX 的 CLI 匯入流程。
 - 新增 JSON、圖片資料夾與 UVC 攝影機 capture adapter 邊界。
+- 新增 PDF 文件 capture adapter，可讀取測試掃描檔頁數與頁面尺寸 metadata。
 - 新增不開 localhost port 的 Tkinter 原生桌面審核介面。
 - 新增 PyInstaller 打包流程生成 portable Windows .exe。
 - 新增 PR template，對齊 policy checklist。
@@ -32,3 +33,4 @@
 - import-json 有阻擋記錄時回傳對應 exit code，並更新 CLI help 描述。
 - 清理誤提交的 PyInstaller build 產物，避免 build cache 進入版本庫。
 - Policy Check workflow 改為直接傳入 PR metadata，避免 GitHub event payload 差異造成誤判。
+- 失敗的 PDF 頁面模板檢查不再先建立輸出目錄，避免留下空資料夾。

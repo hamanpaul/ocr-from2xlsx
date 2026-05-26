@@ -62,6 +62,9 @@ def test_prepare_pdf_page_rejects_mismatched_template_size(tmp_path: Path) -> No
     fixture_path = Path(__file__).parent / "fixtures" / "pdf" / "for testing only.pdf"
     page = PdfDocumentSource(fixture_path).pages()[0]
     template = FormTemplate(template_id="service_record.v1", page_size_points=(620.0, 800.0), zones={})
+    output_dir = tmp_path / "prepared"
 
     with pytest.raises(ValueError, match="template"):
-        prepare_pdf_page(page, output_dir=tmp_path, template=template)
+        prepare_pdf_page(page, output_dir=output_dir, template=template)
+
+    assert not output_dir.exists()

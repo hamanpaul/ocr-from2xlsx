@@ -18,7 +18,7 @@ python -m pip install -e ".[dev,camera]"
 
 ## Usage
 
-1. Prepare normalized JSON from PDF or image inputs.
+1. Prepare normalized JSON from PDF inputs.
 2. Validate or review the prepared records.
 3. Write confirmed records into the `個案總表` sheet.
 4. Save the working XLSX after each confirmed record.

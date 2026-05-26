@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
+from datetime import datetime, timedelta, timezone
 
 from openpyxl import load_workbook
 
+import ocr_from2xlsx.prepare_records as prepare_records_module
 from ocr_from2xlsx.constants import (
     BASIC_COLUMN_BY_FIELD,
     GENDER_LABELS,
@@ -100,26 +103,42 @@ def test_end_to_end_import(tmp_path: Path) -> None:
 
 def test_end_to_end_prepare_records_then_import_json(tmp_path: Path) -> None:
     fixture_dir = Path(__file__).parent / "fixtures" / "pdf"
+    expected_path = fixture_dir / "for testing only.expected.json"
     prepared_json = tmp_path / "prepared.json"
     template_path = tmp_path / "template.xlsx"
     working_path = tmp_path / "working.xlsx"
     report_json = tmp_path / "report.json"
     report_csv = tmp_path / "report.csv"
     create_workbook_template(template_path)
+    fixed_now = datetime(2026, 5, 26, 0, 0, 0, tzinfo=timezone(timedelta(hours=8)))
+    original_datetime = prepare_records_module.datetime
 
-    assert (
-        main(
-            [
-                "prepare-records",
-                "--input",
-                str(fixture_dir / "for testing only.pdf"),
-                "--output",
-                str(prepared_json),
-                "--ocr-fixture",
-                str(fixture_dir / "for testing only.ocr.json"),
-            ]
+    class _FixedDateTime:
+        @staticmethod
+        def now():
+            return fixed_now
+
+    prepare_records_module.datetime = _FixedDateTime
+    try:
+        assert (
+            main(
+                [
+                    "prepare-records",
+                    "--input",
+                    str(fixture_dir / "for testing only.pdf"),
+                    "--output",
+                    str(prepared_json),
+                    "--ocr-fixture",
+                    str(fixture_dir / "for testing only.ocr.json"),
+                ]
+            )
+            == 0
         )
-        == 0
+    finally:
+        prepare_records_module.datetime = original_datetime
+
+    assert json.loads(prepared_json.read_text(encoding="utf-8")) == json.loads(
+        expected_path.read_text(encoding="utf-8")
     )
 
     assert (

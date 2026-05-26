@@ -468,5 +468,5 @@ def test_prepare_records_cli_rejects_unknown_template_id(
 
     captured = capsys.readouterr()
     assert exit_code == 2
-    assert "unknown template id" in captured.err
+    assert "Unsupported template_id" in captured.err
     assert "Traceback" not in captured.err

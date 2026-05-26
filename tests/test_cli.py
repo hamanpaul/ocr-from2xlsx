@@ -532,3 +532,29 @@ def test_prepare_records_cli_reports_missing_ocr_fixture_without_traceback(
     assert exit_code == 2
     assert captured.err.startswith("error: ")
     assert "Traceback" not in captured.err
+
+
+def test_prepare_records_cli_reports_malformed_ocr_fixture_without_traceback(
+    tmp_path: Path, capsys
+) -> None:
+    fixture_dir = Path(__file__).parent / "fixtures" / "pdf"
+    output_json = tmp_path / "prepared.json"
+    malformed_fixture = tmp_path / "malformed.ocr.json"
+    malformed_fixture.write_text("{\"unexpected\": []}", encoding="utf-8")
+
+    exit_code = main(
+        [
+            "prepare-records",
+            "--input",
+            str(fixture_dir / "for testing only.pdf"),
+            "--output",
+            str(output_json),
+            "--ocr-fixture",
+            str(malformed_fixture),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert captured.err.startswith("error: ")
+    assert "Traceback" not in captured.err

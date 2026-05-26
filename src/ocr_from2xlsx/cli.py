@@ -112,7 +112,7 @@ def main(argv: list[str] | None = None) -> int:
 
         try:
             batch = load_batch(Path(args.input))
-        except (OSError, json.JSONDecodeError, ValueError) as exc:
+        except (OSError, json.JSONDecodeError, ValueError, KeyError, IndexError, TypeError) as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 2
         results = validate_batch(batch)
@@ -176,7 +176,7 @@ def main(argv: list[str] | None = None) -> int:
             )
             output_path = Path(args.output)
             dump_batch(batch, output_path)
-        except (OSError, json.JSONDecodeError, ValueError) as exc:
+        except (OSError, json.JSONDecodeError, ValueError, KeyError, IndexError, TypeError) as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 2
         print(output_path)

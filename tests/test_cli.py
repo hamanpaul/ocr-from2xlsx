@@ -435,6 +435,18 @@ def test_prepare_records_help_mentions_pdf_inputs_only(capsys) -> None:
     assert "Input PDF or image path." not in help_text
 
 
+def test_root_help_mentions_pdf_prep_workflow(capsys) -> None:
+    parser = build_parser()
+
+    assert parser.description is not None
+    assert "PDF" in parser.description
+
+    with pytest.raises(SystemExit):
+        parser.parse_args(["--help"])
+
+    capsys.readouterr()
+
+
 def test_prepare_records_cli_requires_ocr_fixture(
     tmp_path: Path, capsys
 ) -> None:
@@ -541,6 +553,53 @@ def test_prepare_records_cli_reports_malformed_ocr_fixture_without_traceback(
     output_json = tmp_path / "prepared.json"
     malformed_fixture = tmp_path / "malformed.ocr.json"
     malformed_fixture.write_text("{\"unexpected\": []}", encoding="utf-8")
+
+    exit_code = main(
+        [
+            "prepare-records",
+            "--input",
+            str(fixture_dir / "for testing only.pdf"),
+            "--output",
+            str(output_json),
+            "--ocr-fixture",
+            str(malformed_fixture),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert captured.err.startswith("error: ")
+    assert "Traceback" not in captured.err
+
+
+def test_prepare_records_cli_reports_non_object_source_without_traceback(
+    tmp_path: Path, capsys
+) -> None:
+    fixture_dir = Path(__file__).parent / "fixtures" / "pdf"
+    output_json = tmp_path / "prepared.json"
+    malformed_fixture = tmp_path / "malformed-source.ocr.json"
+    malformed_fixture.write_text(
+        json.dumps(
+            {
+                "pages": [
+                    {
+                        "document_name": "for testing only.pdf",
+                        "page_number": 1,
+                        "record": {
+                            "record_id": "pdf-0001",
+                            "service_date": "2026-05-26",
+                            "identity": "patient",
+                            "name": "AI test",
+                            "medical_record_no": "TRAINING-ONLY",
+                            "gender": "female",
+                            "source": "broken",
+                        },
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
 
     exit_code = main(
         [

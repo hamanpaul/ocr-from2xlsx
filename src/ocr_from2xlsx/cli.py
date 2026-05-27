@@ -18,7 +18,10 @@ def _write_help_text(help_text: str, file: TextIO | None = None) -> None:
 
 class LfHelpArgumentParser(argparse.ArgumentParser):
     def print_help(self, file: TextIO | None = None) -> None:
-        _write_help_text(self.format_help(), file)
+        help_text = self.format_help()
+        if self.description and self.description not in help_text:
+            help_text = f"{self.description}\n\n{help_text}"
+        _write_help_text(help_text, file)
 
 
 def _resolve_template(template_id: str):
@@ -32,7 +35,7 @@ def _resolve_template(template_id: str):
 def build_parser() -> argparse.ArgumentParser:
     parser = LfHelpArgumentParser(
         prog="ocr-from2xlsx",
-        description="Import normalized service-record JSON into the monthly report XLSX.",
+        description="Prepare PDF records or import normalized service-record JSON into the monthly report XLSX.",
     )
     parser.add_argument("--version", action="store_true", help="Print package version and exit.")
     subparsers = parser.add_subparsers(dest="command", parser_class=LfHelpArgumentParser)

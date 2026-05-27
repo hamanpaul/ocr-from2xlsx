@@ -22,20 +22,25 @@ def prepare_records_from_paths(
     created_at = created_at or datetime.now().astimezone().isoformat(timespec="seconds")
     records = []
     for input_path in input_paths:
-        page = PdfDocumentSource(input_path).pages()[0]
-        prepared = prepare_pdf_page(page, output_dir=output_dir, template=template)
-        raw_record = backend.extract(prepared)
-        raw_record.setdefault("source", {})
-        raw_record["source"].update(
-            {
-                "kind": prepared.source.kind,
-                "document_path": prepared.source.document_path,
-                "page_number": prepared.source.page_number,
-                "preprocessed_image_path": prepared.image_path.name,
-                "template_id": prepared.source.template_id,
-            }
-        )
-        records.append(normalize_raw_record(raw_record))
+        for page in PdfDocumentSource(input_path).pages():
+            prepared = prepare_pdf_page(page, output_dir=output_dir, template=template)
+            raw_record = backend.extract(prepared)
+            source = raw_record.get("source")
+            if source is None:
+                source = {}
+            elif not isinstance(source, dict):
+                raise ValueError("source must be an object")
+            source.update(
+                {
+                    "kind": prepared.source.kind,
+                    "document_path": prepared.source.document_path,
+                    "page_number": prepared.source.page_number,
+                    "preprocessed_image_path": prepared.image_path.name,
+                    "template_id": prepared.source.template_id,
+                }
+            )
+            raw_record["source"] = source
+            records.append(normalize_raw_record(raw_record))
     return Batch(
         source_batch=SourceBatch(
             created_at=created_at,

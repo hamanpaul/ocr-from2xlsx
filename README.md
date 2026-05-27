@@ -37,11 +37,14 @@ ocr-from2xlsx app
 ```
 
 <!-- BEGIN: cli-help marker="ocr-from2xlsx-help" -->
+Prepare PDF records or import normalized service-record JSON into the monthly report XLSX.
+
 usage: ocr-from2xlsx [-h] [--version]
                      {sample-json,validate-json,import-json,prepare-records,app}
                      ...
 
-Import normalized service-record JSON into the monthly report XLSX.
+Prepare PDF records or import normalized service-record JSON into the monthly
+report XLSX.
 
 positional arguments:
   {sample-json,validate-json,import-json,prepare-records,app}

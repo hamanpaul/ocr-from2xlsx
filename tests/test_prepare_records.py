@@ -168,3 +168,47 @@ def test_prepare_records_from_paths_rejects_non_object_source_metadata(
             backend=FixtureOcrBackend.from_path(ocr_path),
             created_at="2026-05-26T00:00:00+08:00",
         )
+
+
+def test_prepare_records_from_paths_rejects_null_source_metadata(
+    tmp_path: Path,
+) -> None:
+    pdf_path = tmp_path / "single-page.pdf"
+    ocr_path = tmp_path / "single-page.ocr.json"
+
+    document = fitz.open()
+    document.new_page(width=595.44, height=841.68)
+    document.save(pdf_path)
+    document.close()
+
+    ocr_path.write_text(
+        json.dumps(
+            {
+                "pages": [
+                    {
+                        "document_name": pdf_path.name,
+                        "page_number": 1,
+                        "record": {
+                            "record_id": "pdf-0001",
+                            "service_date": "2026-05-26",
+                            "identity": "patient",
+                            "name": "AI test",
+                            "medical_record_no": "TRAINING-ONLY",
+                            "gender": "female",
+                            "source": None,
+                        },
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="source"):
+        prepare_records_from_paths(
+            input_paths=[pdf_path],
+            output_dir=tmp_path,
+            template=service_record_template(),
+            backend=FixtureOcrBackend.from_path(ocr_path),
+            created_at="2026-05-26T00:00:00+08:00",
+        )

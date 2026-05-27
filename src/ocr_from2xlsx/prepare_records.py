@@ -25,11 +25,12 @@ def prepare_records_from_paths(
         for page in PdfDocumentSource(input_path).pages():
             prepared = prepare_pdf_page(page, output_dir=output_dir, template=template)
             raw_record = backend.extract(prepared)
-            source = raw_record.get("source")
-            if source is None:
+            if "source" in raw_record:
+                source = raw_record["source"]
+                if not isinstance(source, dict):
+                    raise ValueError("source must be an object")
+            else:
                 source = {}
-            elif not isinstance(source, dict):
-                raise ValueError("source must be an object")
             source.update(
                 {
                     "kind": prepared.source.kind,

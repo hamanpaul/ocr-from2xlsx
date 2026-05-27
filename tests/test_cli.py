@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import fitz
 import pytest
 from openpyxl import load_workbook
 
@@ -616,4 +617,104 @@ def test_prepare_records_cli_reports_non_object_source_without_traceback(
     captured = capsys.readouterr()
     assert exit_code == 2
     assert captured.err.startswith("error: ")
+    assert "Traceback" not in captured.err
+
+
+def test_prepare_records_cli_reports_null_source_without_traceback(
+    tmp_path: Path, capsys
+) -> None:
+    fixture_dir = Path(__file__).parent / "fixtures" / "pdf"
+    output_json = tmp_path / "prepared.json"
+    malformed_fixture = tmp_path / "null-source.ocr.json"
+    malformed_fixture.write_text(
+        json.dumps(
+            {
+                "pages": [
+                    {
+                        "document_name": "for testing only.pdf",
+                        "page_number": 1,
+                        "record": {
+                            "record_id": "pdf-0001",
+                            "service_date": "2026-05-26",
+                            "identity": "patient",
+                            "name": "AI test",
+                            "medical_record_no": "TRAINING-ONLY",
+                            "gender": "female",
+                            "source": None,
+                        },
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    exit_code = main(
+        [
+            "prepare-records",
+            "--input",
+            str(fixture_dir / "for testing only.pdf"),
+            "--output",
+            str(output_json),
+            "--ocr-fixture",
+            str(malformed_fixture),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert captured.err.startswith("error: ")
+    assert "Traceback" not in captured.err
+
+
+def test_prepare_records_cli_reports_missing_ocr_fixture_page_without_traceback(
+    tmp_path: Path, capsys
+) -> None:
+    pdf_path = tmp_path / "two-page.pdf"
+    output_json = tmp_path / "prepared.json"
+    missing_page_fixture = tmp_path / "missing-page.ocr.json"
+    document = fitz.open()
+    document.new_page(width=595.44, height=841.68)
+    document.new_page(width=595.44, height=841.68)
+    document.save(pdf_path)
+    document.close()
+    missing_page_fixture.write_text(
+        json.dumps(
+            {
+                "pages": [
+                    {
+                        "document_name": pdf_path.name,
+                        "page_number": 1,
+                        "record": {
+                            "record_id": "pdf-0001",
+                            "service_date": "2026-05-26",
+                            "identity": "patient",
+                            "name": "AI test",
+                            "medical_record_no": "TRAINING-ONLY",
+                            "gender": "female",
+                        },
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    exit_code = main(
+        [
+            "prepare-records",
+            "--input",
+            str(pdf_path),
+            "--output",
+            str(output_json),
+            "--ocr-fixture",
+            str(missing_page_fixture),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert captured.err.startswith("error: ")
+    assert pdf_path.name in captured.err
+    assert "page 2" in captured.err
     assert "Traceback" not in captured.err

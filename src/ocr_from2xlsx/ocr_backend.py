@@ -29,6 +29,11 @@ class FixtureOcrBackend:
 
     def extract(self, page: PreparedPage) -> dict[str, object]:
         key = (Path(page.source.document_path or "").name, page.source.page_number or 0)
+        if key not in self.pages:
+            document_name, page_number = key
+            raise ValueError(
+                f"Missing OCR fixture entry for {document_name!r} page {page_number}"
+            )
         record = copy.deepcopy(self.pages[key])
         ocr = dict(record.get("ocr", {}))
         ocr.setdefault("backend", "fixture")

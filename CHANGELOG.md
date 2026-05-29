@@ -26,6 +26,7 @@
 - 新增不開 localhost port 的 Tkinter 原生桌面審核介面。
 - 新增 PyInstaller 打包流程生成 portable Windows .exe。
 - 新增 PR template，對齊 policy checklist。
+- 新增 `PluginOcrBackend`，以 subprocess 啟動外部 OCR 插件，透過 stdin/stdout 進行 `ocr_plugin.v1` JSON 協議通訊。
 
 ### Fixed
 - `prepare-records` 的錯誤處理擴充為 `OSError`、`json.JSONDecodeError`、`ValueError`、`KeyError`、`IndexError`、`TypeError`。

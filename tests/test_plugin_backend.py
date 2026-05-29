@@ -85,3 +85,13 @@ def test_constructor_raises_without_manifest(tmp_path: Path) -> None:
 
     with pytest.raises(PluginManifestError):
         PluginOcrBackend(plugin_dir)
+
+
+def test_extract_uses_committed_fixture_manifest_with_python_placeholder(tmp_path: Path) -> None:
+    # Exercises the real echo_plugin.json (command uses the "__PYTHON__" placeholder),
+    # confirming PluginOcrBackend substitutes sys.executable and round-trips.
+    backend = PluginOcrBackend(_FIXTURE)
+
+    record = backend.extract(_prepared_page(tmp_path))
+
+    assert record["name"] == "Plugin Echo"

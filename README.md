@@ -59,6 +59,31 @@ options:
   --version             Print package version and exit.
 <!-- END: cli-help marker="ocr-from2xlsx-help" -->
 
+## OCR plugin (portable, offline)
+
+`prepare-records` can read OCR results from an external, portable OCR plugin instead of a fixture:
+
+```powershell
+ocr-from2xlsx prepare-records `
+  --input "scan.pdf" `
+  --output output\prepared.json `
+  --ocr-backend plugin `
+  --ocr-plugin-dir path\to\plugins\paddleocr
+```
+
+The plugin directory must contain a `plugin.json` manifest:
+
+```json
+{ "contract_version": "ocr_plugin.v1", "command": ["__PYTHON__", "main.py"] }
+```
+
+`__PYTHON__` is replaced with the running interpreter. The plugin receives an `ocr_plugin.v1`
+request on stdin and returns `{ "contract_version": "ocr_plugin.v1", "record": { ... } }` on stdout.
+If no plugin is found (via `--ocr-plugin-dir`, `OCR_PLUGIN_DIR`, or the default
+`plugins/paddleocr` next to the executable), `prepare-records` exits with an error so you can fall
+back to `--ocr-backend fixture` or the review UI. The PaddleOCR plugin itself is built separately
+(see the design spec).
+
 ## Packaging
 
 Build a portable executable:

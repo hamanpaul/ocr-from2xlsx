@@ -92,6 +92,7 @@ def test_load_manifest_reads_command(tmp_path: Path) -> None:
     manifest = load_manifest(plugin_dir)
 
     assert manifest.command == ["python", "main.py"]
+    assert manifest.contract_version == "ocr_plugin.v1"
 
 
 def test_load_manifest_rejects_missing_file(tmp_path: Path) -> None:
@@ -100,6 +101,27 @@ def test_load_manifest_rejects_missing_file(tmp_path: Path) -> None:
 
     with pytest.raises(PluginManifestError, match="plugin.json"):
         load_manifest(plugin_dir)
+
+
+def test_load_manifest_rejects_wrong_contract_version(tmp_path: Path) -> None:
+    plugin_dir = tmp_path / "plugin"
+    plugin_dir.mkdir()
+    (plugin_dir / "plugin.json").write_text(
+        '{"contract_version":"ocr_plugin.v9","command":["python","main.py"]}',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(PluginManifestError, match="contract_version"):
+        load_manifest(plugin_dir)
+
+
+def test_resolve_plugin_dir_raises_when_env_points_to_missing(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setenv("OCR_PLUGIN_DIR", str(tmp_path / "gone"))
+
+    with pytest.raises(PluginUnavailableError):
+        resolve_plugin_dir(explicit_dir=None)
 
 
 def test_load_manifest_rejects_empty_command(tmp_path: Path) -> None:

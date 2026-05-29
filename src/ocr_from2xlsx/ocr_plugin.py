@@ -104,7 +104,10 @@ def load_manifest(plugin_dir: Path | str) -> PluginManifest:
         raise PluginManifestError(
             f"{MANIFEST_NAME} 'command' must be a non-empty list of strings"
         )
-    return PluginManifest(
-        contract_version=str(data.get("contract_version") or ""),
-        command=[str(part) for part in command],
-    )
+    contract_version = str(data.get("contract_version") or "")
+    if contract_version != OCR_PLUGIN_CONTRACT_VERSION:
+        raise PluginManifestError(
+            f"Unsupported plugin manifest contract_version: {contract_version!r}; "
+            f"expected {OCR_PLUGIN_CONTRACT_VERSION!r}"
+        )
+    return PluginManifest(contract_version=contract_version, command=[str(part) for part in command])

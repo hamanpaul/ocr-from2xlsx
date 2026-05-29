@@ -88,7 +88,7 @@ def test_constructor_raises_without_manifest(tmp_path: Path) -> None:
 
 
 def test_extract_uses_committed_fixture_manifest_with_python_placeholder(tmp_path: Path) -> None:
-    # Exercises the real echo_plugin.json (command uses the "__PYTHON__" placeholder),
+    # Exercises the committed fixture plugin.json (command uses the "__PYTHON__" placeholder),
     # confirming PluginOcrBackend substitutes sys.executable and round-trips.
     backend = PluginOcrBackend(_FIXTURE)
 

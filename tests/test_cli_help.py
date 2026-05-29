@@ -26,5 +26,5 @@ def test_help_output_uses_lf_line_endings() -> None:
     assert result.returncode == 0
     assert b"\r\n" not in result.stdout
     assert b"\n" in result.stdout
-    assert b"Import normalized service-record JSON into the monthly report XLSX." in result.stdout
+    assert b"Prepare PDF records or import normalized service-record JSON into the monthly report XLSX." in result.stdout
     assert b"Import normalized JSON records into a working XLSX." in result.stdout

@@ -1,15 +1,19 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
+from datetime import datetime, timedelta, timezone
 
 from openpyxl import load_workbook
 
+import ocr_from2xlsx.prepare_records as prepare_records_module
 from ocr_from2xlsx.constants import (
     BASIC_COLUMN_BY_FIELD,
     GENDER_LABELS,
     IDENTITY_LABELS,
     WORKBOOK_SHEET,
 )
+from ocr_from2xlsx.cli import main
 from ocr_from2xlsx.json_io import load_batch
 from ocr_from2xlsx.session import ImportSession
 from tests.fixtures import create_workbook_template
@@ -33,6 +37,17 @@ def _non_empty_rows(sheet, column: int) -> list[int]:
 def _load_workbook(path: Path):
     keep_vba = path.suffix.lower() in {".xlsm", ".xltm"}
     return load_workbook(path, keep_vba=keep_vba)
+
+
+class _FixedDatetime:
+    def __init__(self, fixed_now: datetime) -> None:
+        self._fixed_now = fixed_now
+
+    def now(self):
+        return self
+
+    def astimezone(self):
+        return self._fixed_now
 
 
 def test_end_to_end_import(tmp_path: Path) -> None:
@@ -95,3 +110,66 @@ def test_end_to_end_import(tmp_path: Path) -> None:
         template_wb.close()
         if working_wb is not None:
             working_wb.close()
+
+
+def test_end_to_end_prepare_records_then_import_json(tmp_path: Path) -> None:
+    fixture_dir = Path(__file__).parent / "fixtures" / "pdf"
+    expected_path = fixture_dir / "for testing only.expected.json"
+    prepared_json = tmp_path / "prepared.json"
+    template_path = tmp_path / "template.xlsx"
+    working_path = tmp_path / "working.xlsx"
+    report_json = tmp_path / "report.json"
+    report_csv = tmp_path / "report.csv"
+    create_workbook_template(template_path)
+    fixed_now = datetime(2026, 5, 26, 0, 0, 0, tzinfo=timezone(timedelta(hours=8)))
+    original_datetime = prepare_records_module.datetime
+
+    prepare_records_module.datetime = _FixedDatetime(fixed_now)
+    try:
+        assert (
+            main(
+                [
+                    "prepare-records",
+                    "--input",
+                    str(fixture_dir / "for testing only.pdf"),
+                    "--output",
+                    str(prepared_json),
+                    "--ocr-fixture",
+                    str(fixture_dir / "for testing only.ocr.json"),
+                ]
+            )
+            == 0
+        )
+    finally:
+        prepare_records_module.datetime = original_datetime
+
+    assert json.loads(prepared_json.read_text(encoding="utf-8")) == json.loads(
+        expected_path.read_text(encoding="utf-8")
+    )
+
+    assert (
+        main(
+            [
+                "import-json",
+                "--input",
+                str(prepared_json),
+                "--template",
+                str(template_path),
+                "--working",
+                str(working_path),
+                "--report-json",
+                str(report_json),
+                "--report-csv",
+                str(report_csv),
+            ]
+        )
+        == 0
+    )
+
+    wb = _load_workbook(working_path)
+    try:
+        ws = wb[WORKBOOK_SHEET]
+        name_col = _column_for_header(ws, BASIC_COLUMN_BY_FIELD["name"])
+        assert ws.cell(row=2, column=name_col).value == "AI test"
+    finally:
+        wb.close()

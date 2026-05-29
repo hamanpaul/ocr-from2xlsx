@@ -1,10 +1,19 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator
 
 from ocr_from2xlsx.domain import Record
 from ocr_from2xlsx.json_io import load_batch
+
+
+@dataclass(frozen=True, slots=True)
+class PdfPage:
+    document_path: Path
+    page_number: int
+    width_points: float
+    height_points: float
 
 
 class JsonRecordSource:
@@ -28,6 +37,27 @@ class ImageFolderSource:
             if path.is_file() and path.suffix.lower() in self._extensions
         ]
         return sorted(paths, key=lambda path: (path.name.casefold(), path.name))
+
+
+class PdfDocumentSource:
+    def __init__(self, path: Path | str) -> None:
+        self.path = Path(path)
+
+    def pages(self) -> list[PdfPage]:
+        from pypdf import PdfReader
+
+        reader = PdfReader(str(self.path))
+        pages: list[PdfPage] = []
+        for index, page in enumerate(reader.pages, start=1):
+            pages.append(
+                PdfPage(
+                    document_path=self.path,
+                    page_number=index,
+                    width_points=float(page.mediabox.width),
+                    height_points=float(page.mediabox.height),
+                )
+            )
+        return pages
 
 
 class UvcCameraSource:

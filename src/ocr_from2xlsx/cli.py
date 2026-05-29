@@ -18,13 +18,24 @@ def _write_help_text(help_text: str, file: TextIO | None = None) -> None:
 
 class LfHelpArgumentParser(argparse.ArgumentParser):
     def print_help(self, file: TextIO | None = None) -> None:
-        _write_help_text(self.format_help(), file)
+        help_text = self.format_help()
+        if self.description and self.description not in help_text:
+            help_text = f"{self.description}\n\n{help_text}"
+        _write_help_text(help_text, file)
+
+
+def _resolve_template(template_id: str):
+    from ocr_from2xlsx.form_template import service_record_template
+
+    if template_id == "service_record.v1":
+        return service_record_template()
+    raise ValueError(f"Unsupported template_id: {template_id!r}")
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = LfHelpArgumentParser(
         prog="ocr-from2xlsx",
-        description="Import normalized service-record JSON into the monthly report XLSX.",
+        description="Prepare PDF records or import normalized service-record JSON into the monthly report XLSX.",
     )
     parser.add_argument("--version", action="store_true", help="Print package version and exit.")
     subparsers = parser.add_subparsers(dest="command", parser_class=LfHelpArgumentParser)
@@ -56,6 +67,23 @@ def build_parser() -> argparse.ArgumentParser:
     import_parser.add_argument("--working", required=True, help="Working XLSX output path.")
     import_parser.add_argument("--report-json", required=True, help="Import report JSON path.")
     import_parser.add_argument("--report-csv", required=True, help="Import report CSV path.")
+    prepare_parser = subparsers.add_parser(
+        "prepare-records",
+        help="Prepare normalized JSON records from PDF inputs.",
+        description="Prepare normalized JSON records from PDF inputs.",
+    )
+    prepare_parser.add_argument("--input", required=True, action="append", help="Input PDF path.")
+    prepare_parser.add_argument("--output", required=True, help="Output JSON path.")
+    prepare_parser.add_argument(
+        "--ocr-fixture",
+        required=True,
+        help="Fixture OCR payload path required for deterministic preparation.",
+    )
+    prepare_parser.add_argument(
+        "--template-id",
+        default="service_record.v1",
+        help="Form template identifier (currently only service_record.v1 is supported).",
+    )
     subparsers.add_parser("app", help="Launch the native desktop review UI.")
     return parser
 
@@ -87,7 +115,7 @@ def main(argv: list[str] | None = None) -> int:
 
         try:
             batch = load_batch(Path(args.input))
-        except (OSError, json.JSONDecodeError, ValueError) as exc:
+        except (OSError, json.JSONDecodeError, ValueError, KeyError, IndexError, TypeError) as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 2
         results = validate_batch(batch)
@@ -134,6 +162,28 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         print(Path(args.working))
         return 1 if blocked_count else 0
+    if args.command == "prepare-records":
+        from pathlib import Path
+
+        from ocr_from2xlsx.json_io import dump_batch
+        from ocr_from2xlsx.ocr_backend import FixtureOcrBackend
+        from ocr_from2xlsx.prepare_records import prepare_records_from_paths
+
+        try:
+            template = _resolve_template(args.template_id)
+            batch = prepare_records_from_paths(
+                input_paths=[Path(value) for value in args.input],
+                output_dir=Path(args.output).parent,
+                template=template,
+                backend=FixtureOcrBackend.from_path(Path(args.ocr_fixture)),
+            )
+            output_path = Path(args.output)
+            dump_batch(batch, output_path)
+        except (OSError, json.JSONDecodeError, ValueError, KeyError, IndexError, TypeError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        print(output_path)
+        return 0
     if args.command == "app":
         from ocr_from2xlsx.app import run_app
 

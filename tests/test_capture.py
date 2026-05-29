@@ -5,7 +5,12 @@ from pathlib import Path
 
 import pytest
 
-from ocr_from2xlsx.capture import ImageFolderSource, JsonRecordSource, UvcCameraSource
+from ocr_from2xlsx.capture import (
+    ImageFolderSource,
+    JsonRecordSource,
+    PdfDocumentSource,
+    UvcCameraSource,
+)
 from ocr_from2xlsx.json_io import dump_batch
 from ocr_from2xlsx.sample_data import generate_sample_batch
 
@@ -54,6 +59,19 @@ def test_image_folder_source_sorts_case_collisions(
     monkeypatch.setattr(Path, "iterdir", _iterdir_in_order(tmp_path, [lower, upper]))
 
     assert [path.name for path in source.image_paths()] == ["A.png", "a.png"]
+
+
+def test_pdf_document_source_reads_fixture_page_metadata() -> None:
+    fixture_path = Path(__file__).parent / "fixtures" / "pdf" / "for testing only.pdf"
+
+    source = PdfDocumentSource(fixture_path)
+    pages = source.pages()
+
+    assert len(pages) == 1
+    assert pages[0].document_path == fixture_path
+    assert pages[0].page_number == 1
+    assert pages[0].width_points == pytest.approx(595.44, abs=0.5)
+    assert pages[0].height_points == pytest.approx(841.68, abs=0.5)
 
 
 def test_uvc_camera_source_returns_false_without_cv2() -> None:

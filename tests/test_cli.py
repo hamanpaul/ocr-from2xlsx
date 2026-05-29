@@ -3,10 +3,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import fitz
 import pytest
 from openpyxl import load_workbook
 
-from ocr_from2xlsx.cli import main
+from ocr_from2xlsx.cli import build_parser, main
 from ocr_from2xlsx.domain import Batch, SourceBatch
 from ocr_from2xlsx.json_io import dump_batch
 from ocr_from2xlsx.session import ImportSession
@@ -396,4 +397,324 @@ def test_import_json_cli_warns_when_accept_fails_after_write(
     assert exit_code == 2
     assert working.exists()
     assert "working XLSX may contain imported records" in captured.err
+    assert "Traceback" not in captured.err
+
+
+def test_prepare_records_cli_writes_batch_json_from_pdf_fixture(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
+) -> None:
+    fixture_dir = Path(__file__).parent / "fixtures" / "pdf"
+    output_json = tmp_path / "prepared.json"
+
+    exit_code = main(
+        [
+            "prepare-records",
+            "--input",
+            str(fixture_dir / "for testing only.pdf"),
+            "--output",
+            str(output_json),
+            "--ocr-fixture",
+            str(fixture_dir / "for testing only.ocr.json"),
+        ]
+    )
+
+    assert exit_code == 0
+    assert output_json.exists()
+    captured = capsys.readouterr()
+    assert captured.out == f"{output_json}\n"
+
+
+def test_prepare_records_help_mentions_pdf_inputs_only(capsys) -> None:
+    parser = build_parser()
+
+    with pytest.raises(SystemExit):
+        parser.parse_args(["prepare-records", "--help"])
+
+    captured = capsys.readouterr()
+    help_text = captured.out
+    assert "Input PDF path." in help_text
+    assert "Input PDF or image path." not in help_text
+
+
+def test_root_help_mentions_pdf_prep_workflow(capsys) -> None:
+    parser = build_parser()
+
+    assert parser.description is not None
+    assert "PDF" in parser.description
+
+    with pytest.raises(SystemExit):
+        parser.parse_args(["--help"])
+
+    capsys.readouterr()
+
+
+def test_prepare_records_cli_requires_ocr_fixture(
+    tmp_path: Path, capsys
+) -> None:
+    fixture_dir = Path(__file__).parent / "fixtures" / "pdf"
+    output_json = tmp_path / "prepared.json"
+
+    with pytest.raises(SystemExit) as excinfo:
+        main(
+            [
+                "prepare-records",
+                "--input",
+                str(fixture_dir / "for testing only.pdf"),
+                "--output",
+                str(output_json),
+            ]
+        )
+
+    captured = capsys.readouterr()
+    assert excinfo.value.code == 2
+    assert "--ocr-fixture" in captured.err
+    assert "required" in captured.err
+
+
+def test_prepare_records_cli_rejects_unknown_template_id(
+    tmp_path: Path, capsys
+) -> None:
+    fixture_dir = Path(__file__).parent / "fixtures" / "pdf"
+    output_json = tmp_path / "prepared.json"
+
+    exit_code = main(
+        [
+            "prepare-records",
+            "--input",
+            str(fixture_dir / "for testing only.pdf"),
+            "--output",
+            str(output_json),
+            "--ocr-fixture",
+            str(fixture_dir / "for testing only.ocr.json"),
+            "--template-id",
+            "service_record.v2",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert "Unsupported template_id: 'service_record.v2'" in captured.err
+    assert "Traceback" not in captured.err
+
+
+def test_prepare_records_cli_reports_missing_input_without_traceback(
+    tmp_path: Path, capsys
+) -> None:
+    fixture_dir = Path(__file__).parent / "fixtures" / "pdf"
+    output_json = tmp_path / "prepared.json"
+    missing_input = tmp_path / "missing.pdf"
+
+    exit_code = main(
+        [
+            "prepare-records",
+            "--input",
+            str(missing_input),
+            "--output",
+            str(output_json),
+            "--ocr-fixture",
+            str(fixture_dir / "for testing only.ocr.json"),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert captured.err.startswith("error: ")
+    assert "Traceback" not in captured.err
+
+
+def test_prepare_records_cli_reports_missing_ocr_fixture_without_traceback(
+    tmp_path: Path, capsys
+) -> None:
+    fixture_dir = Path(__file__).parent / "fixtures" / "pdf"
+    output_json = tmp_path / "prepared.json"
+    missing_fixture = tmp_path / "missing.ocr.json"
+
+    exit_code = main(
+        [
+            "prepare-records",
+            "--input",
+            str(fixture_dir / "for testing only.pdf"),
+            "--output",
+            str(output_json),
+            "--ocr-fixture",
+            str(missing_fixture),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert captured.err.startswith("error: ")
+    assert "Traceback" not in captured.err
+
+
+def test_prepare_records_cli_reports_malformed_ocr_fixture_without_traceback(
+    tmp_path: Path, capsys
+) -> None:
+    fixture_dir = Path(__file__).parent / "fixtures" / "pdf"
+    output_json = tmp_path / "prepared.json"
+    malformed_fixture = tmp_path / "malformed.ocr.json"
+    malformed_fixture.write_text("{\"unexpected\": []}", encoding="utf-8")
+
+    exit_code = main(
+        [
+            "prepare-records",
+            "--input",
+            str(fixture_dir / "for testing only.pdf"),
+            "--output",
+            str(output_json),
+            "--ocr-fixture",
+            str(malformed_fixture),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert captured.err.startswith("error: ")
+    assert "Traceback" not in captured.err
+
+
+def test_prepare_records_cli_reports_non_object_source_without_traceback(
+    tmp_path: Path, capsys
+) -> None:
+    fixture_dir = Path(__file__).parent / "fixtures" / "pdf"
+    output_json = tmp_path / "prepared.json"
+    malformed_fixture = tmp_path / "malformed-source.ocr.json"
+    malformed_fixture.write_text(
+        json.dumps(
+            {
+                "pages": [
+                    {
+                        "document_name": "for testing only.pdf",
+                        "page_number": 1,
+                        "record": {
+                            "record_id": "pdf-0001",
+                            "service_date": "2026-05-26",
+                            "identity": "patient",
+                            "name": "AI test",
+                            "medical_record_no": "TRAINING-ONLY",
+                            "gender": "female",
+                            "source": "broken",
+                        },
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    exit_code = main(
+        [
+            "prepare-records",
+            "--input",
+            str(fixture_dir / "for testing only.pdf"),
+            "--output",
+            str(output_json),
+            "--ocr-fixture",
+            str(malformed_fixture),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert captured.err.startswith("error: ")
+    assert "Traceback" not in captured.err
+
+
+def test_prepare_records_cli_reports_null_source_without_traceback(
+    tmp_path: Path, capsys
+) -> None:
+    fixture_dir = Path(__file__).parent / "fixtures" / "pdf"
+    output_json = tmp_path / "prepared.json"
+    malformed_fixture = tmp_path / "null-source.ocr.json"
+    malformed_fixture.write_text(
+        json.dumps(
+            {
+                "pages": [
+                    {
+                        "document_name": "for testing only.pdf",
+                        "page_number": 1,
+                        "record": {
+                            "record_id": "pdf-0001",
+                            "service_date": "2026-05-26",
+                            "identity": "patient",
+                            "name": "AI test",
+                            "medical_record_no": "TRAINING-ONLY",
+                            "gender": "female",
+                            "source": None,
+                        },
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    exit_code = main(
+        [
+            "prepare-records",
+            "--input",
+            str(fixture_dir / "for testing only.pdf"),
+            "--output",
+            str(output_json),
+            "--ocr-fixture",
+            str(malformed_fixture),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert captured.err.startswith("error: ")
+    assert "Traceback" not in captured.err
+
+
+def test_prepare_records_cli_reports_missing_ocr_fixture_page_without_traceback(
+    tmp_path: Path, capsys
+) -> None:
+    pdf_path = tmp_path / "two-page.pdf"
+    output_json = tmp_path / "prepared.json"
+    missing_page_fixture = tmp_path / "missing-page.ocr.json"
+    document = fitz.open()
+    document.new_page(width=595.44, height=841.68)
+    document.new_page(width=595.44, height=841.68)
+    document.save(pdf_path)
+    document.close()
+    missing_page_fixture.write_text(
+        json.dumps(
+            {
+                "pages": [
+                    {
+                        "document_name": pdf_path.name,
+                        "page_number": 1,
+                        "record": {
+                            "record_id": "pdf-0001",
+                            "service_date": "2026-05-26",
+                            "identity": "patient",
+                            "name": "AI test",
+                            "medical_record_no": "TRAINING-ONLY",
+                            "gender": "female",
+                        },
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    exit_code = main(
+        [
+            "prepare-records",
+            "--input",
+            str(pdf_path),
+            "--output",
+            str(output_json),
+            "--ocr-fixture",
+            str(missing_page_fixture),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert captured.err.startswith("error: ")
+    assert pdf_path.name in captured.err
+    assert "page 2" in captured.err
     assert "Traceback" not in captured.err

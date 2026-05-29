@@ -79,6 +79,33 @@ def _optional_float(value: Any, field_name: str) -> float | None:
     raise ValueError(f"{field_name} must be a number")
 
 
+def _optional_int(value: Any, field_name: str) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        raise ValueError(f"{field_name} must be an int")
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    raise ValueError(f"{field_name} must be an int")
+
+
+def _require_float_map(value: Any, field_name: str) -> dict[str, float]:
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise ValueError(f"{field_name} must be an object")
+    result: dict[str, float] = {}
+    for key, item in value.items():
+        if not isinstance(key, str):
+            raise ValueError(f"{field_name} keys must be strings")
+        if isinstance(item, bool) or not isinstance(item, (int, float)):
+            raise ValueError(f"{field_name}.{key} must be a number")
+        result[key] = float(item)
+    return result
+
+
 def _require_consultation(value: Any, field_name: str) -> dict[str, list[str]]:
     if value is None:
         return {}
@@ -93,15 +120,28 @@ def _require_consultation(value: Any, field_name: str) -> dict[str, list[str]]:
 
 @dataclass(slots=True)
 class SourceInfo:
+    kind: str | None = None
+    document_path: str | None = None
+    page_number: int | None = None
     image_path: str | None = None
+    preprocessed_image_path: str | None = None
     capture_time: str | None = None
+    template_id: str | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any] | None) -> "SourceInfo":
         data = _require_dict(data, "source")
         return cls(
+            kind=_optional_string(data.get("kind"), "source.kind"),
+            document_path=_optional_string(data.get("document_path"), "source.document_path"),
+            page_number=_optional_int(data.get("page_number"), "source.page_number"),
             image_path=_optional_string(data.get("image_path"), "source.image_path"),
+            preprocessed_image_path=_optional_string(
+                data.get("preprocessed_image_path"),
+                "source.preprocessed_image_path",
+            ),
             capture_time=_optional_string(data.get("capture_time"), "source.capture_time"),
+            template_id=_optional_string(data.get("template_id"), "source.template_id"),
         )
 
 
@@ -169,17 +209,23 @@ class Services:
 
 @dataclass(slots=True)
 class OcrInfo:
+    backend: str = ""
+    model: str = ""
     confidence: float | None = None
     raw_text: str = ""
     warnings: list[str] = field(default_factory=list)
+    field_confidences: dict[str, float] = field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any] | None) -> "OcrInfo":
         data = _require_dict(data, "ocr")
         return cls(
+            backend=_lenient_string(data.get("backend"), "ocr.backend"),
+            model=_lenient_string(data.get("model"), "ocr.model"),
             confidence=_optional_float(data.get("confidence"), "ocr.confidence"),
             raw_text=_lenient_string(data.get("raw_text"), "ocr.raw_text"),
             warnings=_require_list(data.get("warnings"), "ocr.warnings", item_type=str),
+            field_confidences=_require_float_map(data.get("field_confidences"), "ocr.field_confidences"),
         )
 
 

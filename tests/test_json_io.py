@@ -84,6 +84,66 @@ def test_batch_json_round_trip(tmp_path: Path) -> None:
     )
 
 
+def test_batch_json_round_trip_keeps_pdf_source_and_ocr_metadata(tmp_path: Path) -> None:
+    batch = Batch(
+        source_batch=SourceBatch(
+            created_at="2026-05-26T09:00:00+08:00",
+            source_type="prepare_records",
+            template_name="service_record.v1",
+        ),
+        records=[make_record()],
+    )
+    record = batch.records[0]
+    record.source.kind = "pdf_page"
+    record.source.document_path = "tests/fixtures/pdf/for testing only.pdf"
+    record.source.page_number = 1
+    record.source.preprocessed_image_path = "tmp/scan-0001.png"
+    record.source.template_id = "service_record.v1"
+    record.ocr.backend = "fixture"
+    record.ocr.model = "manual-gold"
+    record.ocr.field_confidences = {"name": 0.99, "service_date": 0.95}
+
+    path = tmp_path / "prepared.json"
+    dump_batch(batch, path)
+    loaded = load_batch(path)
+
+    assert loaded.records[0].source.kind == "pdf_page"
+    assert loaded.records[0].source.document_path == "tests/fixtures/pdf/for testing only.pdf"
+    assert loaded.records[0].source.page_number == 1
+    assert loaded.records[0].source.preprocessed_image_path == "tmp/scan-0001.png"
+    assert loaded.records[0].source.template_id == "service_record.v1"
+    assert loaded.records[0].ocr.backend == "fixture"
+    assert loaded.records[0].ocr.model == "manual-gold"
+    assert loaded.records[0].ocr.field_confidences == {"name": 0.99, "service_date": 0.95}
+
+
+def test_load_batch_accepts_integral_float_page_number(tmp_path: Path) -> None:
+    record = make_record().to_dict()
+    record["source"]["page_number"] = 1.0
+    path = tmp_path / "records.json"
+    path.write_text(
+        json.dumps({"schema_version": SCHEMA_VERSION, "source_batch": {}, "records": [record]}),
+        encoding="utf-8",
+    )
+
+    batch = load_batch(path)
+
+    assert batch.records[0].source.page_number == 1
+
+
+def test_load_batch_rejects_non_integral_float_page_number(tmp_path: Path) -> None:
+    record = make_record().to_dict()
+    record["source"]["page_number"] = 1.5
+    path = tmp_path / "records.json"
+    path.write_text(
+        json.dumps({"schema_version": SCHEMA_VERSION, "source_batch": {}, "records": [record]}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="source.page_number must be an int"):
+        load_batch(path)
+
+
 def test_rejects_unknown_schema_version(tmp_path: Path) -> None:
     path = tmp_path / "records.json"
     path.write_text('{"schema_version":"wrong","source_batch":{},"records":[]}', encoding="utf-8")

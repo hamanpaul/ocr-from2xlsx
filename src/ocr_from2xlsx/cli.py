@@ -75,9 +75,18 @@ def build_parser() -> argparse.ArgumentParser:
     prepare_parser.add_argument("--input", required=True, action="append", help="Input PDF path.")
     prepare_parser.add_argument("--output", required=True, help="Output JSON path.")
     prepare_parser.add_argument(
+        "--ocr-backend",
+        choices=["fixture", "plugin"],
+        default="fixture",
+        help="OCR source: 'fixture' (default, deterministic) or 'plugin' (external portable OCR).",
+    )
+    prepare_parser.add_argument(
         "--ocr-fixture",
-        required=True,
-        help="Fixture OCR payload path required for deterministic preparation.",
+        help="Fixture OCR payload path (required when --ocr-backend fixture).",
+    )
+    prepare_parser.add_argument(
+        "--ocr-plugin-dir",
+        help="OCR plugin directory (overrides OCR_PLUGIN_DIR; used when --ocr-backend plugin).",
     )
     prepare_parser.add_argument(
         "--template-id",
@@ -166,20 +175,47 @@ def main(argv: list[str] | None = None) -> int:
         from pathlib import Path
 
         from ocr_from2xlsx.json_io import dump_batch
-        from ocr_from2xlsx.ocr_backend import FixtureOcrBackend
         from ocr_from2xlsx.prepare_records import prepare_records_from_paths
 
         try:
             template = _resolve_template(args.template_id)
+            if args.ocr_backend == "plugin":
+                from ocr_from2xlsx.ocr_plugin import PluginUnavailableError
+                from ocr_from2xlsx.plugin_backend import PluginOcrBackend
+
+                try:
+                    backend = PluginOcrBackend.resolve(explicit_dir=args.ocr_plugin_dir)
+                except PluginUnavailableError as exc:
+                    print(f"error: {exc}", file=sys.stderr)
+                    return 2
+            else:
+                from ocr_from2xlsx.ocr_backend import FixtureOcrBackend
+
+                if not args.ocr_fixture:
+                    print(
+                        "error: --ocr-fixture is required when --ocr-backend fixture",
+                        file=sys.stderr,
+                    )
+                    return 2
+                backend = FixtureOcrBackend.from_path(Path(args.ocr_fixture))
+
             batch = prepare_records_from_paths(
                 input_paths=[Path(value) for value in args.input],
                 output_dir=Path(args.output).parent,
                 template=template,
-                backend=FixtureOcrBackend.from_path(Path(args.ocr_fixture)),
+                backend=backend,
             )
             output_path = Path(args.output)
             dump_batch(batch, output_path)
-        except (OSError, json.JSONDecodeError, ValueError, KeyError, IndexError, TypeError) as exc:
+        except (
+            OSError,
+            json.JSONDecodeError,
+            ValueError,
+            KeyError,
+            IndexError,
+            TypeError,
+            RuntimeError,
+        ) as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 2
         print(output_path)

@@ -454,21 +454,120 @@ def test_prepare_records_cli_requires_ocr_fixture(
     fixture_dir = Path(__file__).parent / "fixtures" / "pdf"
     output_json = tmp_path / "prepared.json"
 
-    with pytest.raises(SystemExit) as excinfo:
-        main(
-            [
-                "prepare-records",
-                "--input",
-                str(fixture_dir / "for testing only.pdf"),
-                "--output",
-                str(output_json),
-            ]
-        )
+    exit_code = main(
+        [
+            "prepare-records",
+            "--input",
+            str(fixture_dir / "for testing only.pdf"),
+            "--output",
+            str(output_json),
+        ]
+    )
 
     captured = capsys.readouterr()
-    assert excinfo.value.code == 2
+    assert exit_code == 2
     assert "--ocr-fixture" in captured.err
-    assert "required" in captured.err
+
+
+def _install_echo_plugin(tmp_path):
+    import json as _json
+    import shutil as _shutil
+    import sys as _sys
+    from pathlib import Path as _Path
+
+    fixture = _Path(__file__).parent / "fixtures" / "plugin"
+    plugin_dir = tmp_path / "plugin"
+    plugin_dir.mkdir()
+    _shutil.copy(fixture / "echo_plugin.py", plugin_dir / "echo_plugin.py")
+    (plugin_dir / "plugin.json").write_text(
+        _json.dumps(
+            {"contract_version": "ocr_plugin.v1", "command": [_sys.executable, "echo_plugin.py"]}
+        ),
+        encoding="utf-8",
+    )
+    return plugin_dir
+
+
+def test_prepare_records_with_plugin_backend(tmp_path):
+    import json as _json
+    from pathlib import Path as _Path
+
+    from ocr_from2xlsx.cli import main
+
+    plugin_dir = _install_echo_plugin(tmp_path)
+    pdf = _Path(__file__).parent / "fixtures" / "pdf" / "for testing only.pdf"
+    output = tmp_path / "prepared.json"
+
+    code = main(
+        [
+            "prepare-records",
+            "--input",
+            str(pdf),
+            "--output",
+            str(output),
+            "--ocr-backend",
+            "plugin",
+            "--ocr-plugin-dir",
+            str(plugin_dir),
+        ]
+    )
+
+    assert code == 0
+    data = _json.loads(output.read_text(encoding="utf-8"))
+    assert data["records"][0]["name"] == "Plugin Echo"
+
+
+def test_prepare_records_plugin_missing_reports_error(tmp_path, capsys):
+    from pathlib import Path as _Path
+
+    from ocr_from2xlsx.cli import main
+
+    pdf = _Path(__file__).parent / "fixtures" / "pdf" / "for testing only.pdf"
+    output = tmp_path / "prepared.json"
+
+    code = main(
+        [
+            "prepare-records",
+            "--input",
+            str(pdf),
+            "--output",
+            str(output),
+            "--ocr-backend",
+            "plugin",
+            "--ocr-plugin-dir",
+            str(tmp_path / "no-plugin-here"),
+        ]
+    )
+
+    assert code == 2
+    assert "plugin" in capsys.readouterr().err.lower()
+
+
+def test_prepare_records_fixture_backend_still_default(tmp_path):
+    import json as _json
+    from pathlib import Path as _Path
+
+    from ocr_from2xlsx.cli import main
+
+    pdf = _Path(__file__).parent / "fixtures" / "pdf" / "for testing only.pdf"
+    fixture = _Path(__file__).parent / "fixtures" / "pdf" / "for testing only.ocr.json"
+    output = tmp_path / "prepared.json"
+
+    code = main(
+        [
+            "prepare-records",
+            "--input",
+            str(pdf),
+            "--output",
+            str(output),
+            "--ocr-fixture",
+            str(fixture),
+        ]
+    )
+
+    assert code == 0
+    data = _json.loads(output.read_text(encoding="utf-8"))
+    assert data["records"][0]["name"] == "AI test"
 
 
 def test_prepare_records_cli_rejects_unknown_template_id(

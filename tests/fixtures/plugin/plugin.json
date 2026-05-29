@@ -1,0 +1,4 @@
+{
+  "contract_version": "ocr_plugin.v1",
+  "command": ["__PYTHON__", "echo_plugin.py"]
+}

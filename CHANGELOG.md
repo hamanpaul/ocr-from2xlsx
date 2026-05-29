@@ -8,6 +8,8 @@
 ## [Unreleased]
 
 ### Added
+- 新增 OCR 外掛契約（`ocr_plugin.v1`）與 `PluginOcrBackend`，可透過 subprocess 呼叫可攜式外部 OCR；外掛不存在時安全回報。
+- `prepare-records` 新增 `--ocr-backend {fixture,plugin}` 與 `--ocr-plugin-dir`（`--ocr-fixture` 改為非必填）。
 - 新增 `prepare-records` 前處理流程，將固定版型 PDF 轉成 normalized JSON 後再交給既有匯入流程。
 - 新增 `for testing only.pdf` 的人工標註 gold fixture 與端到端 regression 測試。
 - 新增 `prepare-records` CLI，將 PDF 輸入前處理為 normalized JSON。

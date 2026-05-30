@@ -15,6 +15,12 @@ _DATE_ANCHOR = ("服務年", "年/月/日", "年月日")
 _NAME_ANCHOR = "姓名"
 # A medical-record-no token: >=4 chars of letters/digits/hyphen, must contain at least one digit.
 _MRN_TOKEN = re.compile(r"(?=[A-Za-z0-9\-]{4,})[A-Za-z0-9\-]*\d[A-Za-z0-9\-]*")
+# Fragments that mark a line as form chrome (identity checkboxes, labels) rather than a value.
+_NAME_NOISE = ("□", "病人", "親友", "照顧者", "民眾", "病歷號", "姓名", "數量")
+
+
+def _has_cjk(text: str) -> bool:
+    return any(0x4E00 <= ord(ch) <= 0x9FFF for ch in text)
 
 
 def normalize_roc_date(text: str) -> str | None:
@@ -59,6 +65,20 @@ def extract_service_date(lines: list[dict[str, Any]]) -> str | None:
     return normalize_roc_date(str(anchor.get("text") or ""))
 
 
+def _name_mrn_from_value(value: str) -> tuple[str | None, str | None]:
+    value = value.strip()
+    if not value or any(token in value for token in _NAME_NOISE):
+        return (None, None)
+    mrn_match = _MRN_TOKEN.search(value)
+    mrn = mrn_match.group(0) if mrn_match else None
+    name = value.replace(mrn, "").strip() if mrn else value
+    # Only accept a value that carries a medical-record-no or a plausibly-CJK name;
+    # this rejects stray single marks (e.g. an OCR'd checkmark "V") on the same row.
+    if not mrn and not _has_cjk(name):
+        return (None, None)
+    return (name or None, mrn)
+
+
 def extract_name_and_mrn(lines: list[dict[str, Any]]) -> tuple[str | None, str | None]:
     anchor = _find_anchor(lines, _NAME_ANCHOR)
     if anchor is None:
@@ -71,18 +91,12 @@ def extract_name_and_mrn(lines: list[dict[str, Any]]) -> tuple[str | None, str |
         cx, cy = _center(line["box"])
         if cx > ax and abs(cy - ay) <= 15:
             candidates.append((cx, str(line.get("text") or "")))
-    if not candidates:
-        return (None, None)
     candidates.sort(key=lambda item: item[0])
-    value = candidates[0][1].strip()
-    if not value:
-        return (None, None)
-    mrn_match = _MRN_TOKEN.search(value)
-    mrn = mrn_match.group(0) if mrn_match else None
-    name = value
-    if mrn:
-        name = value.replace(mrn, "").strip()
-    return (name or None, mrn)
+    for _, value in candidates:
+        name, mrn = _name_mrn_from_value(value)
+        if name or mrn:
+            return (name, mrn)
+    return (None, None)
 
 
 def extract_fields(lines: list[dict[str, Any]]) -> dict[str, Any]:

@@ -23,6 +23,7 @@
 - `name_suggestion.suggest_name` 在沒有任何可提案姓名時不再強制加上 `name.unconfirmed`；有 roster match 或 agent/OCR 候選時仍維持未確認警告。
 - `correction_store.load_corrections` 現在會忽略 JSONL 中未認得的欄位，避免前向相容資料把 review flow 擋死。
 - `ImportSession.accept_scan(..., human_confirmed=True)` 現在統一在成功寫入時清除 `name.unconfirmed`；Tk 純姓名確認不再把該筆標成使用者編輯。
+- `ReviewApp` 現在只會在 `accept_scan()` 寫入成功（`written` / `forced`）後才把人工確認姓名寫進本地 correction store；被阻擋或寫入失敗時不再污染 learning loop。`prepare-records --name-agent-config` 對不支援或實際無法運作的 agent 設定也恢復 strict no-op，不再單靠 OCR fallback 填入姓名或追加 `name.unconfirmed`。
 - 補齊手寫姓名 learning loop：`prepare-records` 會自動載入輸出 JSON 同層 `name_corrections.jsonl` 建 roster；`ImportSession` 預設阻擋 `name.unconfirmed`；Tk 審核流程確認姓名後會寫入同層 correction store 並清除警告再寫入。
 - `prepare-records --name-agent-config` 現在會先使用 `record.ocr.name_crop`，缺席時才從 `source.preprocessed_image_path` 推導同層的 `*-name.png` 裁圖；只有裁圖存在時才進入建議流程，否則維持 strict no-op。
 - `plugins/paddleocr/mark_detect.py`：改為只接受獨立或單字元裝飾的選項標籤，避免把標題與「數量」類欄位誤判成可勾選標籤。

@@ -116,7 +116,7 @@ class ReviewApp(tk.Tk):
             if self.current_index not in self.written_indices:
                 current = self.records[self.current_index]
                 try:
-                    human_confirmed = self._confirm_name_if_needed(current)
+                    human_confirmed = self._needs_name_confirmation(current)
                     if human_confirmed:
                         result = self.session.accept_scan(current, human_confirmed=True)
                     else:
@@ -130,6 +130,8 @@ class ReviewApp(tk.Tk):
                 if result.status == "blocked":
                     return
                 if result.status in {"forced", "written"}:
+                    if human_confirmed:
+                        self._persist_confirmed_name_after_write(current)
                     self.written_indices.add(self.current_index)
         self.editing = False
         self.current_index += 1
@@ -151,7 +153,7 @@ class ReviewApp(tk.Tk):
         record = self.records[self.current_index]
         self._apply_form_to_record(record)
         try:
-            human_confirmed = self._confirm_name_if_needed(record)
+            human_confirmed = self._needs_name_confirmation(record)
             if human_confirmed:
                 result = self.session.accept_scan(record, force=True, human_confirmed=True)
             else:
@@ -161,6 +163,8 @@ class ReviewApp(tk.Tk):
             return
         self._push_status(f"{result.record_id}: {result.status} row={result.row_number} blockers={result.blockers}")
         if result.status in {"forced", "written"}:
+            if human_confirmed:
+                self._persist_confirmed_name_after_write(record)
             self.written_indices.add(self.current_index)
             self.editing = False
 
@@ -182,18 +186,25 @@ class ReviewApp(tk.Tk):
         record.gender = self.fields["gender"].get()
         record.review.edited_by_user = True
 
-    def _confirm_name_if_needed(self, record: Record) -> bool:
+    def _needs_name_confirmation(self, record: Record) -> bool:
         if NAME_UNCONFIRMED not in record.ocr.warnings:
             return False
         final_name = record.name.strip()
         if not final_name:
             return False
+        record.name = final_name
+        return True
+
+    def _persist_confirmed_name(self, record: Record) -> None:
+        final_name = record.name.strip()
+        if not final_name:
+            return
         store_path = self.correction_store_path
         if store_path is None and self.loaded_json_path is not None:
             store_path = default_correction_store_path(self.loaded_json_path)
             self.correction_store_path = store_path
         if store_path is None:
-            return False
+            return
         confirm_name(
             store_path=store_path,
             record_id=record.record_id,
@@ -201,7 +212,12 @@ class ReviewApp(tk.Tk):
             ocr_raw=record.ocr.raw_text or "",
         )
         record.name = final_name
-        return True
+
+    def _persist_confirmed_name_after_write(self, record: Record) -> None:
+        try:
+            self._persist_confirmed_name(record)
+        except (OSError, ValueError) as exc:
+            messagebox.showerror("寫入失敗", str(exc))
 
     def _mark_editing(self, _event: tk.Event | None = None) -> None:
         self.editing = True

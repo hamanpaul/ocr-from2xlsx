@@ -228,31 +228,32 @@ def main(argv: list[str] | None = None) -> int:
                     default_correction_store_path,
                     roster_from_store,
                 )
-                from ocr_from2xlsx.name_agent import build_agent, load_config
+                from ocr_from2xlsx.name_agent import NullNameAgent, build_agent, load_config
                 from ocr_from2xlsx.name_suggestion import suggest_name
 
                 config = load_config(Path(args.name_agent_config))
                 if config.enabled:
                     agent = build_agent(config)
-                    output_dir = output_path.parent
-                    roster = roster_from_store(default_correction_store_path(output_path))
-                    for record in batch.records:
-                        if record.name:
-                            continue
-                        crop_path = _resolve_name_crop_path(record, output_dir)
-                        if not crop_path:
-                            continue
-                        name, warnings = suggest_name(
-                            crop_path=crop_path,
-                            agent=agent,
-                            roster=roster,
-                            ocr_raw=record.ocr.raw_text or "",
-                        )
-                        if name:
-                            record.name = name
-                        for warning in warnings:
-                            if warning not in record.ocr.warnings:
-                                record.ocr.warnings.append(warning)
+                    if not isinstance(agent, NullNameAgent):
+                        output_dir = output_path.parent
+                        roster = roster_from_store(default_correction_store_path(output_path))
+                        for record in batch.records:
+                            if record.name:
+                                continue
+                            crop_path = _resolve_name_crop_path(record, output_dir)
+                            if not crop_path:
+                                continue
+                            name, warnings = suggest_name(
+                                crop_path=crop_path,
+                                agent=agent,
+                                roster=roster,
+                                ocr_raw=record.ocr.raw_text or "",
+                            )
+                            if name:
+                                record.name = name
+                            for warning in warnings:
+                                if warning not in record.ocr.warnings:
+                                    record.ocr.warnings.append(warning)
             dump_batch(batch, output_path)
         except (
             OSError,

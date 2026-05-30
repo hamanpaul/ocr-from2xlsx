@@ -110,6 +110,10 @@ class ClaudeNameAgent:
 def build_agent(config: NameAgentConfig) -> NameAgent:
     if not config.enabled:
         return NullNameAgent()
+    if not config.model or not config.endpoint:
+        return NullNameAgent()
+    if not os.environ.get(config.api_key_env):
+        return NullNameAgent()
     if config.provider == "claude":
         return ClaudeNameAgent(config)
     return NullNameAgent()

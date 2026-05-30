@@ -88,11 +88,11 @@ def _line(text, x=0.0, y=0.0):
 
 
 def test_normalize_roc_date_dotted():
-    assert normalize_roc_date("114.06.25") == "2026-06-25"
+    assert normalize_roc_date("114.06.25") == "2025-06-25"
 
 
 def test_normalize_roc_date_with_label_and_cjk_separators():
-    assert normalize_roc_date("服務年/月/日：114、6、5") == "2026-06-05"
+    assert normalize_roc_date("服務年/月/日：114、6、5") == "2025-06-05"
 
 
 def test_normalize_roc_date_slash():
@@ -114,7 +114,7 @@ def test_extract_fields_finds_service_date_from_anchor_line():
         _line("A.服務評估統計", y=40),
     ]
     fields = extract_fields(lines)
-    assert fields["service_date"] == "2026-06-25"
+    assert fields["service_date"] == "2025-06-25"
 
 
 def test_extract_fields_returns_none_when_no_date():

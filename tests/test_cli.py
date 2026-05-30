@@ -7,7 +7,7 @@ import fitz
 import pytest
 from openpyxl import load_workbook
 
-from ocr_from2xlsx.cli import build_parser, main
+from ocr_from2xlsx.cli import _resolve_name_crop_path, build_parser, main
 from ocr_from2xlsx.constants import BASIC_COLUMN_BY_FIELD, WORKBOOK_SHEET
 from ocr_from2xlsx.domain import Batch, SourceBatch
 from ocr_from2xlsx.json_io import dump_batch
@@ -996,6 +996,32 @@ def test_prepare_records_enabled_name_agent_suggests_name_from_preprocessed_crop
         "roster": ["葉心安"],
         "ocr_raw": "raw",
     }
+
+
+def test_resolve_name_crop_path_prefers_backend_supplied_name_crop_after_round_trip(tmp_path: Path) -> None:
+    batch = Batch(
+        source_batch=SourceBatch(
+            created_at="2026-05-26T09:00:00+08:00",
+            source_type="prepare_records",
+            template_name="service_record.v1",
+        ),
+        records=[make_record("pdf-0001")],
+    )
+    record = batch.records[0]
+    record.ocr.name_crop = "custom-crops/pdf-0001-handwritten-name.png"
+    record.source.preprocessed_image_path = "fallback-page-0001.png"
+    input_json = tmp_path / "prepared.json"
+    expected_crop = tmp_path / "custom-crops" / "pdf-0001-handwritten-name.png"
+    expected_crop.parent.mkdir(parents=True)
+    expected_crop.write_bytes(b"fake png bytes")
+    fallback_crop = tmp_path / "fallback-page-0001-name.png"
+    fallback_crop.write_bytes(b"fallback bytes")
+
+    dump_batch(batch, input_json)
+    loaded = Batch.from_dict(json.loads(input_json.read_text(encoding="utf-8")))
+
+    assert loaded.records[0].ocr.name_crop == "custom-crops/pdf-0001-handwritten-name.png"
+    assert _resolve_name_crop_path(loaded.records[0], tmp_path) == str(expected_crop)
 
 
 def test_prepare_records_enabled_name_agent_without_crop_is_noop(tmp_path):

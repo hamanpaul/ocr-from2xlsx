@@ -6,7 +6,7 @@ from pathlib import Path
 import build.build_paddle_plugin as build_paddle_plugin
 
 
-def test_build_bundle_includes_mark_detect(tmp_path: Path, monkeypatch) -> None:
+def test_build_bundle_includes_runtime_modules(tmp_path: Path, monkeypatch) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
     src_plugin = repo / "plugins" / "paddleocr"
@@ -14,6 +14,7 @@ def test_build_bundle_includes_mark_detect(tmp_path: Path, monkeypatch) -> None:
     (src_plugin / "main.py").write_text("main", encoding="utf-8")
     (src_plugin / "field_extract.py").write_text("field", encoding="utf-8")
     (src_plugin / "mark_detect.py").write_text("mark", encoding="utf-8")
+    (src_plugin / "name_crop.py").write_text("crop", encoding="utf-8")
     (src_plugin / "plugin.json").write_text("{}", encoding="utf-8")
 
     src_venv = repo / ".venv-paddle"
@@ -32,3 +33,4 @@ def test_build_bundle_includes_mark_detect(tmp_path: Path, monkeypatch) -> None:
 
     assert build_paddle_plugin.main() == 0
     assert (out / "mark_detect.py").exists()
+    assert (out / "name_crop.py").exists()

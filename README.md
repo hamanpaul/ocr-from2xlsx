@@ -84,6 +84,28 @@ If no plugin is found (via `--ocr-plugin-dir`, `OCR_PLUGIN_DIR`, or the default
 back to `--ocr-backend fixture` or the review UI. The PaddleOCR plugin itself is built separately
 (see the design spec).
 
+### Building the PaddleOCR plugin
+
+The PaddleOCR plugin is built separately into a portable offline folder:
+
+```powershell
+# one-time: create the paddle env and download models
+py -3.12 -m venv .venv-paddle
+.venv-paddle\Scripts\python -m pip install "paddlepaddle==3.0.0" paddleocr
+
+# assemble the bundle at dist/plugins/paddleocr/
+.venv\Scripts\python build/build_paddle_plugin.py
+
+# use it
+ocr-from2xlsx prepare-records --input scan.pdf --output out.json `
+  --ocr-backend plugin --ocr-plugin-dir dist\plugins\paddleocr
+```
+
+The bundle ships a Python venv, the PP-OCRv5 mobile models, and runs fully offline
+(`PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True`, models loaded from the bundle). It recognizes the form
+full-page and extracts service date / name / medical-record-no via text anchors; checkbox fields are
+added in a later sub-project.
+
 ## Packaging
 
 Build a portable executable:

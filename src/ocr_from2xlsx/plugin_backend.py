@@ -36,10 +36,24 @@ class PluginOcrBackend:
         return cls(plugin_dir)
 
     def _command(self) -> list[str]:
-        return [
+        parts = [
             sys.executable if part == _PYTHON_PLACEHOLDER else part
             for part in self.manifest.command
         ]
+        if parts:
+            parts[0] = self._resolve_executable(parts[0])
+        return parts
+
+    def _resolve_executable(self, executable: str) -> str:
+        # A relative path with directory parts (e.g. a bundled interpreter
+        # "python\\Scripts\\python.exe") must be resolved against the plugin dir:
+        # the OS resolves a relative executable against the parent process's cwd,
+        # not the child's cwd. Absolute paths and bare names (PATH lookup) pass through.
+        if Path(executable).is_absolute():
+            return executable
+        if "/" in executable or "\\" in executable:
+            return str((self.plugin_dir / executable).resolve())
+        return executable
 
     def extract(self, page: PreparedPage) -> dict[str, object]:
         request = build_request(
@@ -56,6 +70,7 @@ class PluginOcrBackend:
                 capture_output=True,
                 text=True,
                 encoding="utf-8",
+                errors="replace",
             )
         except OSError as exc:
             raise PluginExecutionError(f"Failed to launch OCR plugin: {exc}") from exc

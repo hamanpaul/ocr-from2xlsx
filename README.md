@@ -125,8 +125,10 @@ read from the env var named in the config (`api_key_env`, default `ANTHROPIC_API
 name crop is sent.
 
 Suggested names are always tagged `name.unconfirmed` until a human confirms them. Confirmations are
-written to the local correction store and roster, which later matching can reuse to improve hits and
-reduce cloud calls.
+handled through the review/edit workflow in `ocr-from2xlsx app`; there is no dedicated `confirm-name`
+CLI. That confirmation is written to the local correction store and roster, which later matching can
+reuse to improve hits and reduce cloud calls. If you are importing without the app, review the record
+manually before import.
 
 ## Packaging
 

@@ -19,3 +19,5 @@ build/
 .venv/
 .venv-paddle/
 .venv*/
+name_agent.local.toml
+*-name.png

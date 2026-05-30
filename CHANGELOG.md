@@ -8,20 +8,18 @@
 ## [Unreleased]
 
 ### Added
-- `prepare-records` 新增可選 `--name-agent-config`：有設定時對空白姓名嘗試 agent/名冊建議並標 `name.unconfirmed`；缺席或停用即 no-op，不影響既有流程。
-- 離線外掛新增輸出個資最小化的姓名裁圖（只裁姓名行、排除病歷號與診斷日），路徑記於 `record.ocr.name_crop`。
-- 新增 `name_suggestion` 編排：結合 agent 建議 + 名冊模糊比對產生待確認姓名；人工確認寫回 store 並更新名冊。
-- 新增可選、由 TOML config 指定的雲端 VLM `name_agent`（缺席/停用即 no-op，不影響流程）。
-- 新增 `correction_store`（append-only JSONL）記錄人工姓名確認/修正並可導出名冊。
-- 新增 `name_roster` 確認姓名名冊 difflib 模糊比對（手寫姓名校正學習用）。
+- `prepare-records` 新增可選 `--name-agent-config`：以 TOML 啟用手寫姓名 agent；缺席、停用或不支援 provider 時維持 no-op。
+- 離線 OCR 外掛新增輸出個資最小化的姓名裁圖，路徑記於 `record.ocr.name_crop`。
+- 新增 `name_suggestion` / `confirm_name`：候選姓名會先標 `name.unconfirmed`，人工確認則寫回本地 correction store 並重建 roster。
+- 新增 `correction_store`（append-only JSONL）與 `name_roster`（difflib fuzzy match），供後續姓名匹配重用。
 - 新增 `plugins/paddleocr/mark_detect.py` 純函式打勾評分核心（灰階區域墨跡比例）。
 - PaddleOCR 外掛新增身分/性別打勾辨識（文字錨點 + 框內墨跡 + OCR 異常文字訊號）與手寫姓名/病歷號擷取。
 - `import-json --allow-incomplete`：辨識到的記錄即使缺病人限定欄位也可寫入（forced）以供核對。
 - 新增參考 PDF ground-truth fixture、可選的實機 PaddleOCR 驗證測試，與 `build/build_paddle_plugin.py` 的 bundle 內容回歸測試。
 
 ### Fixed
-- `prepare-records --name-agent-config` 現在會在 `record.ocr.name_crop` 缺席時，從 `source.preprocessed_image_path` 推導同層的 `*-name.png` 裁圖；僅在裁圖檔案存在時才執行建議流程，保留無 crop 的 strict no-op。
-- `prepare-records` 的 `--name-agent-config` 只在啟用且有可用姓名裁圖時才進入建議流程；停用或缺少 crop 時保持 strict no-op，不再額外寫入 `name.unconfirmed`。
+- `prepare-records --name-agent-config` 現在會先使用 `record.ocr.name_crop`，缺席時才從 `source.preprocessed_image_path` 推導同層的 `*-name.png` 裁圖；只有裁圖存在時才進入建議流程，否則維持 strict no-op。
+- `--name-agent-config` 的 agent 只接收姓名裁圖；API key 由 config 指定的環境變數讀取（預設 `ANTHROPIC_API_KEY`）。
 - `plugins/paddleocr/mark_detect.py`：改為只接受獨立或單字元裝飾的選項標籤，避免把標題與「數量」類欄位誤判成可勾選標籤。
 - `plugins/paddleocr/mark_detect.py`：新增 OCR 文字異常的勾選推論（如 `中女性`、`V女性`、`病人6250712919`），讓實際被勾選的身份/性別可在未探到像素勾記時仍被辨識；純 `□標籤` 仍只作為 probe label，不視為文字已勾選。
 - `plugins/paddleocr/field_extract.py`：忽略單一中文字元的姓名雜訊，並保留姓名欄錨點上方鄰近行的病歷號回收。

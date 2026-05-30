@@ -19,6 +19,15 @@ _MRN_TOKEN = re.compile(r"(?=[A-Za-z0-9\-]{4,})[A-Za-z0-9\-]*\d[A-Za-z0-9\-]*")
 _DIGIT_RUN = re.compile(r"\d{6,}")
 # Fragments that mark a line as form chrome (identity checkboxes, labels) rather than a value.
 _NAME_NOISE = ("□", "病人", "親友", "照顧者", "民眾", "病歷號", "姓名", "數量")
+IDENTITY_BY_LABEL = {
+    "病人": "patient",
+    "親友及照顧者": "family_caregiver",
+    "一般民眾及其他": "public_other",
+}
+GENDER_BY_LABEL = {
+    "女性": "female",
+    "男性": "male",
+}
 
 
 def _has_cjk(text: str) -> bool:
@@ -105,6 +114,21 @@ def _mrn_from_candidates(texts: list[str]) -> str | None:
     return best or None
 
 
+def _resolve_choice(marked_labels, mapping):
+    for label, code in mapping.items():
+        if label in marked_labels:
+            return code
+    return ""
+
+
+def extract_identity(marked_labels) -> str:
+    return _resolve_choice(marked_labels or set(), IDENTITY_BY_LABEL)
+
+
+def extract_gender(marked_labels) -> str:
+    return _resolve_choice(marked_labels or set(), GENDER_BY_LABEL)
+
+
 def extract_name_and_mrn(lines: list[dict[str, Any]]) -> tuple[str | None, str | None]:
     anchor = _find_anchor(lines, _NAME_ANCHOR)
     if anchor is None:
@@ -126,6 +150,6 @@ def extract_fields(lines: list[dict[str, Any]], marked_labels=None) -> dict[str,
         "service_date": extract_service_date(lines),
         "name": name,
         "medical_record_no": mrn,
-        "identity": "",
-        "gender": "",
+        "identity": extract_identity(marked_labels),
+        "gender": extract_gender(marked_labels),
     }

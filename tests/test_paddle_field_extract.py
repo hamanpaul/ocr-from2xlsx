@@ -143,3 +143,23 @@ def test_extract_mrn_when_ocr_merges_label_and_digits():
     fields = extract_fields(lines, marked_labels=set())
     assert fields["name"] == "葉心安"
     assert fields["medical_record_no"] == "6250712919"
+
+
+def test_extract_identity_and_gender_from_marked_labels():
+    lines = [
+        _line("病人", x=10, y=50),
+        _line("親友及照顧者", x=120, y=50),
+        _line("一般民眾及其他", x=260, y=50),
+        _line("女性", x=10, y=80),
+        _line("男性", x=120, y=80),
+    ]
+    fields = extract_fields(lines, marked_labels={"病人", "女性"})
+    assert fields["identity"] == "patient"
+    assert fields["gender"] == "female"
+
+
+def test_unmarked_identity_gender_stay_empty():
+    lines = [_line("病人", x=10, y=50), _line("女性", x=10, y=80)]
+    fields = extract_fields(lines, marked_labels=set())
+    assert fields["identity"] == ""
+    assert fields["gender"] == ""

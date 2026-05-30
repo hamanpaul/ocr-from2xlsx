@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from pathlib import Path
 from typing import TextIO
 
 
@@ -30,6 +31,21 @@ def _resolve_template(template_id: str):
     if template_id == "service_record.v1":
         return service_record_template()
     raise ValueError(f"Unsupported template_id: {template_id!r}")
+
+
+def _resolve_name_crop_path(record, output_dir: Path) -> str | None:
+    crop_value = getattr(record.ocr, "name_crop", None)
+    if crop_value:
+        crop_path = Path(crop_value)
+    else:
+        prepared_image = record.source.preprocessed_image_path
+        if not prepared_image:
+            return None
+        prepared_path = Path(prepared_image)
+        crop_path = prepared_path.with_name(f"{prepared_path.stem}-name.png")
+    if not crop_path.is_absolute():
+        crop_path = output_dir / crop_path
+    return str(crop_path) if crop_path.is_file() else None
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -115,8 +131,6 @@ def main(argv: list[str] | None = None) -> int:
         print(__version__)
         return 0
     if args.command == "sample-json":
-        from pathlib import Path
-
         from ocr_from2xlsx.json_io import dump_batch
         from ocr_from2xlsx.sample_data import generate_sample_batch
 
@@ -126,8 +140,6 @@ def main(argv: list[str] | None = None) -> int:
         print(output_path)
         return 0
     if args.command == "validate-json":
-        from pathlib import Path
-
         from ocr_from2xlsx.json_io import load_batch
         from ocr_from2xlsx.validation import validate_batch
 
@@ -142,8 +154,6 @@ def main(argv: list[str] | None = None) -> int:
         print(f"records={len(batch.records)} blockers={blocker_count} warnings={warning_count}")
         return 1 if blocker_count else 0
     if args.command == "import-json":
-        from pathlib import Path
-
         from ocr_from2xlsx.json_io import load_batch
         from ocr_from2xlsx.session import ImportSession
 
@@ -181,8 +191,6 @@ def main(argv: list[str] | None = None) -> int:
         print(Path(args.working))
         return 1 if blocked_count else 0
     if args.command == "prepare-records":
-        from pathlib import Path
-
         from ocr_from2xlsx.json_io import dump_batch
         from ocr_from2xlsx.prepare_records import prepare_records_from_paths
 
@@ -225,10 +233,9 @@ def main(argv: list[str] | None = None) -> int:
                     for record in batch.records:
                         if record.name:
                             continue
-                        crop_name = getattr(record.ocr, "name_crop", None)
-                        if not crop_name:
+                        crop_path = _resolve_name_crop_path(record, output_dir)
+                        if not crop_path:
                             continue
-                        crop_path = str(output_dir / crop_name)
                         name, warnings = suggest_name(
                             crop_path=crop_path,
                             agent=agent,

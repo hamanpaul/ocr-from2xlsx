@@ -7,6 +7,9 @@
 
 ## [Unreleased]
 
+### Added
+- 新增 `plugins/paddleocr/mark_detect.py` 純函式打勾評分核心（灰階區域墨跡比例）。
+
 ### Changed
 - `plugins/paddleocr/field_extract.py`：重構 `extract_name_and_mrn`，改用候選文字列表式擷取（`_name_from_candidates` / `_mrn_from_candidates`），支援手寫姓名與純數字病歷號（`_DIGIT_RUN \d{6,}`）分置兩格的版面；`_mrn_from_candidates` 同時嘗試 `_MRN_TOKEN`（含連字號）與 `_DIGIT_RUN`，保留既有含字母/連字號病歷號相容性。`extract_fields` 新增 `marked_labels=None` 參數（供後續任務使用），並補上 `identity`/`gender` 空字串欄位。
 - `tests/test_paddle_field_extract.py`：新增 2 項測試——手寫姓名/病歷號分置兩格（anchor-row-handwriting）與 OCR 將標籤與數字合併（merges-label-and-digits），共 16 項全通過。

@@ -8,6 +8,7 @@ import pytest
 from openpyxl import load_workbook
 
 from ocr_from2xlsx.cli import build_parser, main
+from ocr_from2xlsx.constants import BASIC_COLUMN_BY_FIELD, WORKBOOK_SHEET
 from ocr_from2xlsx.domain import Batch, SourceBatch
 from ocr_from2xlsx.json_io import dump_batch
 from ocr_from2xlsx.session import ImportSession
@@ -281,6 +282,59 @@ def test_import_json_cli_omits_import_warning_when_blocked_report_write_fails(
     assert "Traceback" not in captured.err
 
 
+def test_import_json_allow_incomplete_writes_forced_row(tmp_path: Path) -> None:
+    import json as _json
+
+    template = tmp_path / "t.xlsx"
+    working = tmp_path / "w.xlsx"
+    create_workbook_template(template)
+
+    batch = {
+        "schema_version": "service_record.v1",
+        "source_batch": {
+            "created_at": "2026-05-26T00:00:00+08:00",
+            "source_type": "manual",
+            "template_name": "t",
+        },
+        "records": [
+            {
+                "record_id": "pdf-0001",
+                "service_date": "2025-06-25",
+                "identity": "patient",
+                "name": "葉心安",
+                "medical_record_no": "6250712919",
+                "gender": "female",
+            }
+        ],
+    }
+    inp = tmp_path / "in.json"
+    inp.write_text(_json.dumps(batch), encoding="utf-8")
+
+    code = main(
+        [
+            "import-json",
+            "--input",
+            str(inp),
+            "--template",
+            str(template),
+            "--working",
+            str(working),
+            "--report-json",
+            str(tmp_path / "r.json"),
+            "--report-csv",
+            str(tmp_path / "r.csv"),
+            "--allow-incomplete",
+        ]
+    )
+
+    assert code == 0
+    wb = load_workbook(working)
+    ws = wb[WORKBOOK_SHEET]
+    name_col = next(c.column for c in ws[1] if c.value == BASIC_COLUMN_BY_FIELD["name"])
+    assert ws.cell(row=2, column=name_col).value == "葉心安"
+    wb.close()
+
+
 def test_import_json_cli_warns_when_accept_fails_before_returning_result(
     tmp_path: Path, capsys, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -311,7 +365,7 @@ def test_import_json_cli_warns_when_accept_fails_before_returning_result(
         def __exit__(self, exc_type: object, exc: object, traceback: object) -> None:
             self.closed = True
 
-        def accept_scan(self, record: object) -> None:
+        def accept_scan(self, record: object, force: bool = False) -> None:
             raise OSError("save failed")
 
         def write_report(self, json_path: object, csv_path: object) -> None:

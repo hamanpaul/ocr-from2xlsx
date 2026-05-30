@@ -39,7 +39,9 @@ def load_corrections(store_path: Path | str) -> list[Correction]:
         line = line.strip()
         if not line:
             continue
-        corrections.append(Correction(**json.loads(line)))
+        payload = json.loads(line)
+        allowed_keys = Correction.__dataclass_fields__.keys()
+        corrections.append(Correction(**{key: value for key, value in payload.items() if key in allowed_keys}))
     return corrections
 
 

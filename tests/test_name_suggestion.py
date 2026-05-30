@@ -30,12 +30,20 @@ def test_suggest_uses_agent_when_no_roster_match():
     assert "name.unconfirmed" in warnings
 
 
-def test_suggest_empty_when_no_agent_value_and_no_roster():
+def test_suggest_uses_ocr_raw_when_agent_missing():
     name, warnings = suggest_name(
-        crop_path="x.png", agent=_FakeAgent(None), roster=[], ocr_raw=""
+        crop_path="x.png", agent=_FakeAgent(None), roster=[], ocr_raw="王小明"
+    )
+    assert name == "王小明"
+    assert "name.unconfirmed" in warnings
+
+
+def test_suggest_empty_when_no_candidate_returns_no_warnings():
+    name, warnings = suggest_name(
+        crop_path="", agent=_FakeAgent(None), roster=[], ocr_raw=""
     )
     assert name == ""
-    assert "name.unconfirmed" in warnings
+    assert warnings == []
 
 
 def test_confirm_name_writes_store_and_grows_roster(tmp_path: Path):

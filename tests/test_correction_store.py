@@ -47,3 +47,21 @@ def test_roster_from_store_returns_distinct_names(tmp_path: Path):
 def test_load_missing_store_returns_empty(tmp_path: Path):
     assert load_corrections(tmp_path / "nope.jsonl") == []
     assert roster_from_store(tmp_path / "nope.jsonl") == []
+
+
+def test_load_ignores_unknown_json_keys(tmp_path: Path):
+    store = tmp_path / "corrections.jsonl"
+    store.write_text(
+        (
+            '{"field":"name","final_value":"葉心安","record_id":"pdf-0001",'
+            '"crop_path":"pdf-0001-name.png","ocr_raw":"","agent_suggestion":"葉心女",'
+            '"roster_suggestion":null,"source":"for testing only.pdf#1",'
+            '"timestamp":"2026-05-30T00:00:00+08:00","extra":"ignored"}\n'
+        ),
+        encoding="utf-8",
+    )
+
+    loaded = load_corrections(store)
+
+    assert len(loaded) == 1
+    assert loaded[0].final_value == "葉心安"

@@ -19,9 +19,10 @@ def suggest_name(
     """Return (suggested_name, warnings). Never treats the name as confirmed."""
     agent_value = agent.suggest(crop_path) if crop_path else None
     candidate = (agent_value or ocr_raw or "").strip()
-    match = roster_match(candidate, roster) if candidate else None
-    name = match or (agent_value or "").strip()
-    return (name, [NAME_UNCONFIRMED])
+    if not candidate:
+        return ("", [])
+    match = roster_match(candidate, roster)
+    return (match or candidate, [NAME_UNCONFIRMED])
 
 
 def confirm_name(

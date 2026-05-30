@@ -130,6 +130,32 @@ def test_force_with_patient_blocker_writes_record(tmp_path: Path) -> None:
     wb.close()
 
 
+def test_unconfirmed_name_blocks_even_when_forced_without_human_confirmation(
+    tmp_path: Path,
+) -> None:
+    template = tmp_path / "template.xlsx"
+    working = tmp_path / "working.xlsx"
+    create_workbook_template(template)
+
+    session = ImportSession.start(template, working)
+    record = make_record()
+    record.ocr.warnings = ["name.unconfirmed"]
+    result = session.accept_scan(record, force=True)
+    session.close()
+
+    assert result.status == "blocked"
+    assert result.row_number is None
+    assert "name.unconfirmed" in result.blockers
+    assert "force.non_writable" in result.blockers
+    wb = load_workbook(working)
+    ws = wb["個案總表"]
+    name_col = _column_for_header(ws, BASIC_COLUMN_BY_FIELD["name"])
+    id_col = _column_for_header(ws, BASIC_COLUMN_BY_FIELD["medical_record_no"])
+    assert ws.cell(row=2, column=name_col).value is None
+    assert ws.cell(row=2, column=id_col).value is None
+    wb.close()
+
+
 def test_writer_failure_does_not_reserve_duplicate_key() -> None:
     class FailingWriter:
         def existing_duplicate_keys(self) -> set[tuple[str, str, str, str]]:

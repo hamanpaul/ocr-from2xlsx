@@ -19,6 +19,10 @@ class Correction:
     timestamp: str = ""
 
 
+def default_correction_store_path(batch_json_path: Path | str) -> Path:
+    return Path(batch_json_path).parent / "name_corrections.jsonl"
+
+
 def append_correction(store_path: Path | str, correction: Correction) -> None:
     path = Path(store_path)
     path.parent.mkdir(parents=True, exist_ok=True)

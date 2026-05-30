@@ -5,7 +5,9 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 from ocr_from2xlsx.capture import JsonRecordSource
+from ocr_from2xlsx.correction_store import default_correction_store_path
 from ocr_from2xlsx.domain import Record
+from ocr_from2xlsx.name_suggestion import NAME_UNCONFIRMED, confirm_name
 from ocr_from2xlsx.session import ImportSession
 
 
@@ -17,6 +19,8 @@ class ReviewApp(tk.Tk):
         self.records: list[Record] = []
         self.current_index = -1
         self.session: ImportSession | None = None
+        self.loaded_json_path: Path | None = None
+        self.correction_store_path: Path | None = None
         self.editing = False
         self.written_indices: set[int] = set()
         self.fields: dict[str, tk.StringVar] = {}
@@ -93,6 +97,8 @@ class ReviewApp(tk.Tk):
         except (OSError, ValueError) as exc:
             messagebox.showerror("無法載入 JSON", str(exc))
             return
+        self.loaded_json_path = Path(path)
+        self.correction_store_path = default_correction_store_path(self.loaded_json_path)
         self.current_index = -1
         self.editing = False
         self.written_indices = set()
@@ -110,7 +116,11 @@ class ReviewApp(tk.Tk):
             if self.current_index not in self.written_indices:
                 current = self.records[self.current_index]
                 try:
-                    result = self.session.accept_scan(current)
+                    human_confirmed = self._confirm_name_if_needed(current)
+                    if human_confirmed:
+                        result = self.session.accept_scan(current, human_confirmed=True)
+                    else:
+                        result = self.session.accept_scan(current)
                 except (OSError, ValueError) as exc:
                     messagebox.showerror("寫入失敗", str(exc))
                     return
@@ -141,7 +151,11 @@ class ReviewApp(tk.Tk):
         record = self.records[self.current_index]
         self._apply_form_to_record(record)
         try:
-            result = self.session.accept_scan(record, force=True)
+            human_confirmed = self._confirm_name_if_needed(record)
+            if human_confirmed:
+                result = self.session.accept_scan(record, force=True, human_confirmed=True)
+            else:
+                result = self.session.accept_scan(record, force=True)
         except (OSError, ValueError) as exc:
             messagebox.showerror("寫入失敗", str(exc))
             return
@@ -167,6 +181,29 @@ class ReviewApp(tk.Tk):
         record.medical_record_no = self.fields["medical_record_no"].get()
         record.gender = self.fields["gender"].get()
         record.review.edited_by_user = True
+
+    def _confirm_name_if_needed(self, record: Record) -> bool:
+        if NAME_UNCONFIRMED not in record.ocr.warnings:
+            return False
+        final_name = record.name.strip()
+        if not final_name:
+            return False
+        store_path = self.correction_store_path
+        if store_path is None and self.loaded_json_path is not None:
+            store_path = default_correction_store_path(self.loaded_json_path)
+            self.correction_store_path = store_path
+        if store_path is None:
+            return False
+        confirm_name(
+            store_path=store_path,
+            record_id=record.record_id,
+            final_value=final_name,
+            ocr_raw=record.ocr.raw_text or "",
+        )
+        record.name = final_name
+        record.ocr.warnings = [warning for warning in record.ocr.warnings if warning != NAME_UNCONFIRMED]
+        record.review.edited_by_user = True
+        return True
 
     def _mark_editing(self, _event: tk.Event | None = None) -> None:
         self.editing = True

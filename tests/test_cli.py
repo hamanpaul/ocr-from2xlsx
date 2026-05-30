@@ -916,6 +916,7 @@ def test_prepare_records_disabled_name_agent_config_is_noop(tmp_path):
 def test_prepare_records_enabled_name_agent_suggests_name_from_preprocessed_crop(tmp_path):
     import json as _json
     from pathlib import Path as _Path
+    from ocr_from2xlsx.correction_store import Correction, append_correction
 
     from ocr_from2xlsx.cli import main
 
@@ -955,6 +956,10 @@ def test_prepare_records_enabled_name_agent_suggests_name_from_preprocessed_crop
     cfg.write_text('enabled = true\nprovider = "claude"\n', encoding="utf-8")
     crop_path = tmp_path / "for testing only-page-0001-name.png"
     crop_path.write_bytes(b"fake png bytes")
+    append_correction(
+        tmp_path / "name_corrections.jsonl",
+        Correction(field="name", final_value="葉心安", record_id="pdf-0001"),
+    )
     pdf = _Path(__file__).parent / "fixtures" / "pdf" / "for testing only.pdf"
     fixture = _Path(__file__).parent / "fixtures" / "pdf" / "for testing only.ocr.json"
     out = tmp_path / "prepared.json"
@@ -988,7 +993,7 @@ def test_prepare_records_enabled_name_agent_suggests_name_from_preprocessed_crop
         "config_enabled": True,
         "crop_path": str(crop_path),
         "agent": fake_agent,
-        "roster": [],
+        "roster": ["葉心安"],
         "ocr_raw": "raw",
     }
 

@@ -222,14 +222,20 @@ def main(argv: list[str] | None = None) -> int:
                 template=template,
                 backend=backend,
             )
+            output_path = Path(args.output)
             if args.name_agent_config:
+                from ocr_from2xlsx.correction_store import (
+                    default_correction_store_path,
+                    roster_from_store,
+                )
                 from ocr_from2xlsx.name_agent import build_agent, load_config
                 from ocr_from2xlsx.name_suggestion import suggest_name
 
                 config = load_config(Path(args.name_agent_config))
                 if config.enabled:
                     agent = build_agent(config)
-                    output_dir = Path(args.output).parent
+                    output_dir = output_path.parent
+                    roster = roster_from_store(default_correction_store_path(output_path))
                     for record in batch.records:
                         if record.name:
                             continue
@@ -239,7 +245,7 @@ def main(argv: list[str] | None = None) -> int:
                         name, warnings = suggest_name(
                             crop_path=crop_path,
                             agent=agent,
-                            roster=[],
+                            roster=roster,
                             ocr_raw=record.ocr.raw_text or "",
                         )
                         if name:
@@ -247,7 +253,6 @@ def main(argv: list[str] | None = None) -> int:
                         for warning in warnings:
                             if warning not in record.ocr.warnings:
                                 record.ocr.warnings.append(warning)
-            output_path = Path(args.output)
             dump_batch(batch, output_path)
         except (
             OSError,

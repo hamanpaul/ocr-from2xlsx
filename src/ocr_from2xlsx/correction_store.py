@@ -30,6 +30,38 @@ def append_correction(store_path: Path | str, correction: Correction) -> None:
         handle.write(json.dumps(asdict(correction), ensure_ascii=False) + "\n")
 
 
+def _is_optional_string(value: object) -> bool:
+    return value is None or isinstance(value, str)
+
+
+def _parse_correction(payload: object) -> Correction | None:
+    if not isinstance(payload, dict):
+        return None
+    allowed_keys = Correction.__dataclass_fields__.keys()
+    filtered = {key: value for key, value in payload.items() if key in allowed_keys}
+    try:
+        correction = Correction(**filtered)
+    except TypeError:
+        return None
+    if not isinstance(correction.field, str) or not isinstance(correction.final_value, str):
+        return None
+    if not isinstance(correction.record_id, str):
+        return None
+    if not isinstance(correction.ocr_raw, str):
+        return None
+    if not _is_optional_string(correction.crop_path):
+        return None
+    if not _is_optional_string(correction.agent_suggestion):
+        return None
+    if not _is_optional_string(correction.roster_suggestion):
+        return None
+    if not isinstance(correction.source, str):
+        return None
+    if not isinstance(correction.timestamp, str):
+        return None
+    return correction
+
+
 def load_corrections(store_path: Path | str) -> list[Correction]:
     path = Path(store_path)
     if not path.is_file():
@@ -39,9 +71,13 @@ def load_corrections(store_path: Path | str) -> list[Correction]:
         line = line.strip()
         if not line:
             continue
-        payload = json.loads(line)
-        allowed_keys = Correction.__dataclass_fields__.keys()
-        corrections.append(Correction(**{key: value for key, value in payload.items() if key in allowed_keys}))
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        correction = _parse_correction(payload)
+        if correction is not None:
+            corrections.append(correction)
     return corrections
 
 

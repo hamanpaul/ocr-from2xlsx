@@ -163,13 +163,17 @@ def test_end_to_end_prepare_records_then_import_json(tmp_path: Path) -> None:
                 str(report_csv),
             ]
         )
-        == 0
+        == 1
     )
+
+    report = json.loads(report_json.read_text(encoding="utf-8"))
+    assert report[0]["status"] == "blocked"
+    assert "name.unconfirmed" in report[0]["blockers"]
 
     wb = _load_workbook(working_path)
     try:
         ws = wb[WORKBOOK_SHEET]
         name_col = _column_for_header(ws, BASIC_COLUMN_BY_FIELD["name"])
-        assert ws.cell(row=2, column=name_col).value == "AI test"
+        assert ws.cell(row=2, column=name_col).value is None
     finally:
         wb.close()

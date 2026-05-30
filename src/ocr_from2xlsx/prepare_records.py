@@ -6,9 +6,15 @@ from pathlib import Path
 from ocr_from2xlsx.capture import PdfDocumentSource
 from ocr_from2xlsx.domain import Batch, SourceBatch
 from ocr_from2xlsx.form_template import FormTemplate
+from ocr_from2xlsx.name_suggestion import NAME_UNCONFIRMED
 from ocr_from2xlsx.normalizer import normalize_raw_record
 from ocr_from2xlsx.ocr_backend import OcrBackend
 from ocr_from2xlsx.preprocess import prepare_pdf_page
+
+
+def _append_unique_warning(warnings: list[str], warning: str) -> None:
+    if warning not in warnings:
+        warnings.append(warning)
 
 
 def prepare_records_from_paths(
@@ -47,7 +53,10 @@ def prepare_records_from_paths(
                 }
             )
             raw_record["source"] = source
-            records.append(normalize_raw_record(raw_record))
+            record = normalize_raw_record(raw_record)
+            if record.name:
+                _append_unique_warning(record.ocr.warnings, NAME_UNCONFIRMED)
+            records.append(record)
     return Batch(
         source_batch=SourceBatch(
             created_at=created_at,

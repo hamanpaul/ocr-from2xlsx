@@ -95,3 +95,40 @@ def test_extract_uses_committed_fixture_manifest_with_python_placeholder(tmp_pat
     record = backend.extract(_prepared_page(tmp_path))
 
     assert record["name"] == "Plugin Echo"
+
+
+def test_command_resolves_relative_executable_against_plugin_dir(tmp_path: Path) -> None:
+    # A bundled interpreter referenced by a relative path in the manifest must be
+    # resolved against the plugin dir (the OS resolves relative executables against
+    # the parent process cwd, not the child cwd).
+    plugin_dir = tmp_path / "bundle"
+    (plugin_dir / "python" / "Scripts").mkdir(parents=True)
+    exe = plugin_dir / "python" / "Scripts" / "python.exe"
+    exe.write_bytes(b"")
+    (plugin_dir / "plugin.json").write_text(
+        json.dumps(
+            {
+                "contract_version": "ocr_plugin.v1",
+                "command": ["python\\Scripts\\python.exe", "main.py"],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    cmd = PluginOcrBackend(plugin_dir)._command()
+
+    assert Path(cmd[0]) == exe.resolve()
+    assert cmd[1] == "main.py"
+
+
+def test_command_leaves_bare_name_for_path_lookup(tmp_path: Path) -> None:
+    plugin_dir = tmp_path / "bundle2"
+    plugin_dir.mkdir()
+    (plugin_dir / "plugin.json").write_text(
+        json.dumps({"contract_version": "ocr_plugin.v1", "command": ["python", "main.py"]}),
+        encoding="utf-8",
+    )
+
+    cmd = PluginOcrBackend(plugin_dir)._command()
+
+    assert cmd[0] == "python"

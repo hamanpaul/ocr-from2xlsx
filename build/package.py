@@ -55,7 +55,7 @@ def _normalize_help_output(output: str) -> str:
 def main() -> int:
     try:
         _clean_dir(DIST_DIR)
-        _clean_dir(BUILD_DIR, keep={"package.py", "ocr-from2xlsx.spec"})
+        _clean_dir(BUILD_DIR, keep={"package.py", "ocr-from2xlsx.spec", "build_paddle_plugin.py"})
         _clean_egg_info(ROOT)
         subprocess.run(
             [sys.executable, "-m", "PyInstaller", str(SPEC_PATH)],

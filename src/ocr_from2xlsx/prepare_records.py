@@ -21,10 +21,16 @@ def prepare_records_from_paths(
     output_dir = Path(output_dir)
     created_at = created_at or datetime.now().astimezone().isoformat(timespec="seconds")
     records = []
+    sequence = 0
     for input_path in input_paths:
         for page in PdfDocumentSource(input_path).pages():
+            sequence += 1
             prepared = prepare_pdf_page(page, output_dir=output_dir, template=template)
             raw_record = backend.extract(prepared)
+            # OCR backends (e.g. the PaddleOCR plugin) may not assign a record_id;
+            # generate a stable per-page id while preserving any backend-supplied one.
+            if not raw_record.get("record_id"):
+                raw_record["record_id"] = f"pdf-{sequence:04d}"
             if "source" in raw_record:
                 source = raw_record["source"]
                 if not isinstance(source, dict):

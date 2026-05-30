@@ -15,6 +15,8 @@ _DATE_ANCHOR = ("服務年", "年/月/日", "年月日")
 _NAME_ANCHOR = "姓名"
 # A medical-record-no token: >=4 chars of letters/digits/hyphen, must contain at least one digit.
 _MRN_TOKEN = re.compile(r"(?=[A-Za-z0-9\-]{4,})[A-Za-z0-9\-]*\d[A-Za-z0-9\-]*")
+# A run of 6+ consecutive digits (handwritten pure-numeric MRN).
+_DIGIT_RUN = re.compile(r"\d{6,}")
 # Fragments that mark a line as form chrome (identity checkboxes, labels) rather than a value.
 _NAME_NOISE = ("□", "病人", "親友", "照顧者", "民眾", "病歷號", "姓名", "數量")
 
@@ -79,30 +81,51 @@ def _name_mrn_from_value(value: str) -> tuple[str | None, str | None]:
     return (name or None, mrn)
 
 
+def _name_from_candidates(texts: list[str]) -> str | None:
+    best = ""
+    for text in texts:
+        if any(token in text for token in _NAME_NOISE):
+            continue
+        cjk = "".join(ch for ch in text if _has_cjk(ch))
+        if len(cjk) > len(best):
+            best = cjk
+    return best or None
+
+
+def _mrn_from_candidates(texts: list[str]) -> str | None:
+    best = ""
+    for text in texts:
+        candidates = list(_DIGIT_RUN.findall(text))
+        token = _MRN_TOKEN.search(text)
+        if token:
+            candidates.append(token.group(0))
+        for run in candidates:
+            if len(run) > len(best):
+                best = run
+    return best or None
+
+
 def extract_name_and_mrn(lines: list[dict[str, Any]]) -> tuple[str | None, str | None]:
     anchor = _find_anchor(lines, _NAME_ANCHOR)
     if anchor is None:
         return (None, None)
     ax, ay = _center(anchor["box"])
-    candidates = []
+    texts = []
     for line in lines:
         if line is anchor:
             continue
         cx, cy = _center(line["box"])
         if cx > ax and abs(cy - ay) <= 15:
-            candidates.append((cx, str(line.get("text") or "")))
-    candidates.sort(key=lambda item: item[0])
-    for _, value in candidates:
-        name, mrn = _name_mrn_from_value(value)
-        if name or mrn:
-            return (name, mrn)
-    return (None, None)
+            texts.append(str(line.get("text") or ""))
+    return (_name_from_candidates(texts), _mrn_from_candidates(texts))
 
 
-def extract_fields(lines: list[dict[str, Any]]) -> dict[str, Any]:
+def extract_fields(lines: list[dict[str, Any]], marked_labels=None) -> dict[str, Any]:
     name, mrn = extract_name_and_mrn(lines)
     return {
         "service_date": extract_service_date(lines),
         "name": name,
         "medical_record_no": mrn,
+        "identity": "",
+        "gender": "",
     }

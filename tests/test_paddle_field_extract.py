@@ -121,3 +121,25 @@ def test_extract_fields_skips_noise_and_picks_real_name():
     fields = extract_fields(lines)
     assert fields["name"] == "王大明"
     assert fields["medical_record_no"] == "B998877"
+
+
+def test_extract_name_and_mrn_from_anchor_row_handwriting():
+    lines = [
+        _line("姓名/病歷號", x=0, y=50),
+        _line("葉心安", x=120, y=50),
+        _line("6250712919", x=260, y=50),
+    ]
+    fields = extract_fields(lines, marked_labels=set())
+    assert fields["name"] == "葉心安"
+    assert fields["medical_record_no"] == "6250712919"
+
+
+def test_extract_mrn_when_ocr_merges_label_and_digits():
+    lines = [
+        _line("姓名/病歷號", x=0, y=50),
+        _line("葉心安", x=120, y=50),
+        _line("病人6250712919", x=260, y=50),
+    ]
+    fields = extract_fields(lines, marked_labels=set())
+    assert fields["name"] == "葉心安"
+    assert fields["medical_record_no"] == "6250712919"

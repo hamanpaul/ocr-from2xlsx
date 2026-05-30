@@ -8,6 +8,7 @@
 ## [Unreleased]
 
 ### Added
+- 離線外掛新增輸出個資最小化的姓名裁圖（只裁姓名行、排除病歷號與診斷日），路徑記於 `record.ocr.name_crop`。
 - 新增 `name_suggestion` 編排：結合 agent 建議 + 名冊模糊比對產生待確認姓名；人工確認寫回 store 並更新名冊。
 - 新增可選、由 TOML config 指定的雲端 VLM `name_agent`（缺席/停用即 no-op，不影響流程）。
 - 新增 `correction_store`（append-only JSONL）記錄人工姓名確認/修正並可導出名冊。

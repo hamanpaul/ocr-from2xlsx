@@ -20,6 +20,7 @@
 - 新增參考 PDF ground-truth fixture、可選的實機 PaddleOCR 驗證測試，與 `build/build_paddle_plugin.py` 的 bundle 內容回歸測試。
 
 ### Fixed
+- `prepare-records` 的 `--name-agent-config` 只在啟用且有可用姓名裁圖時才進入建議流程；停用或缺少 crop 時保持 strict no-op，不再額外寫入 `name.unconfirmed`。
 - `plugins/paddleocr/mark_detect.py`：改為只接受獨立或單字元裝飾的選項標籤，避免把標題與「數量」類欄位誤判成可勾選標籤。
 - `plugins/paddleocr/mark_detect.py`：新增 OCR 文字異常的勾選推論（如 `中女性`、`V女性`、`病人6250712919`），讓實際被勾選的身份/性別可在未探到像素勾記時仍被辨識；純 `□標籤` 仍只作為 probe label，不視為文字已勾選。
 - `plugins/paddleocr/field_extract.py`：忽略單一中文字元的姓名雜訊，並保留姓名欄錨點上方鄰近行的病歷號回收。

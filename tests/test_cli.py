@@ -825,17 +825,44 @@ def test_prepare_records_name_agent_absent_is_noop(tmp_path):
     from pathlib import Path as _Path
     from ocr_from2xlsx.cli import main
 
+    def _prepare_records_from_paths(*args, **kwargs):
+        record = make_record()
+        record.name = ""
+        record.ocr.warnings = []
+        return Batch(
+            source_batch=SourceBatch(
+                created_at="2026-05-24T15:30:00+08:00",
+                source_type="prepare_records",
+                template_name="service_record.v1",
+            ),
+            records=[record],
+        )
+
     pdf = _Path(__file__).parent / "fixtures" / "pdf" / "for testing only.pdf"
     fixture = _Path(__file__).parent / "fixtures" / "pdf" / "for testing only.ocr.json"
     out = tmp_path / "prepared.json"
 
-    code = main([
-        "prepare-records", "--input", str(pdf), "--output", str(out),
-        "--ocr-fixture", str(fixture),
-    ])
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(
+            "ocr_from2xlsx.prepare_records.prepare_records_from_paths",
+            _prepare_records_from_paths,
+        )
+        code = main(
+            [
+                "prepare-records",
+                "--input",
+                str(pdf),
+                "--output",
+                str(out),
+                "--ocr-fixture",
+                str(fixture),
+            ]
+        )
+
     assert code == 0
     data = _json.loads(out.read_text(encoding="utf-8"))
-    assert data["records"][0]["name"] == "AI test"
+    assert data["records"][0]["name"] == ""
+    assert data["records"][0]["ocr"]["warnings"] == []
 
 
 def test_prepare_records_disabled_name_agent_config_is_noop(tmp_path):
@@ -843,19 +870,109 @@ def test_prepare_records_disabled_name_agent_config_is_noop(tmp_path):
     from pathlib import Path as _Path
     from ocr_from2xlsx.cli import main
 
+    def _prepare_records_from_paths(*args, **kwargs):
+        record = make_record()
+        record.name = ""
+        record.ocr.warnings = []
+        return Batch(
+            source_batch=SourceBatch(
+                created_at="2026-05-24T15:30:00+08:00",
+                source_type="prepare_records",
+                template_name="service_record.v1",
+            ),
+            records=[record],
+        )
+
     cfg = tmp_path / "name_agent.toml"
     cfg.write_text("enabled = false\n", encoding="utf-8")
     pdf = _Path(__file__).parent / "fixtures" / "pdf" / "for testing only.pdf"
     fixture = _Path(__file__).parent / "fixtures" / "pdf" / "for testing only.ocr.json"
     out = tmp_path / "prepared.json"
 
-    code = main([
-        "prepare-records", "--input", str(pdf), "--output", str(out),
-        "--ocr-fixture", str(fixture), "--name-agent-config", str(cfg),
-    ])
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(
+            "ocr_from2xlsx.prepare_records.prepare_records_from_paths",
+            _prepare_records_from_paths,
+        )
+        code = main(
+            [
+                "prepare-records",
+                "--input",
+                str(pdf),
+                "--output",
+                str(out),
+                "--ocr-fixture",
+                str(fixture),
+                "--name-agent-config",
+                str(cfg),
+            ]
+        )
     assert code == 0
     data = _json.loads(out.read_text(encoding="utf-8"))
-    assert data["records"][0]["name"] == "AI test"
+    assert data["records"][0]["name"] == ""
+    assert data["records"][0]["ocr"]["warnings"] == []
+
+
+def test_prepare_records_enabled_name_agent_config_without_crop_is_noop(
+    tmp_path, monkeypatch
+):
+    import json as _json
+    from pathlib import Path as _Path
+    from ocr_from2xlsx.cli import main
+
+    cfg = tmp_path / "name_agent.toml"
+    cfg.write_text(
+        "\n".join(
+            [
+                "enabled = true",
+                "provider = \"claude\"",
+                "model = \"test-model\"",
+                "endpoint = \"https://example.invalid/messages\"",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    pdf = _Path(__file__).parent / "fixtures" / "pdf" / "for testing only.pdf"
+    fixture = _Path(__file__).parent / "fixtures" / "pdf" / "for testing only.ocr.json"
+    out = tmp_path / "prepared.json"
+
+    def _prepare_records_from_paths(*args, **kwargs):
+        record = make_record()
+        record.name = ""
+        record.ocr.warnings = []
+        return Batch(
+            source_batch=SourceBatch(
+                created_at="2026-05-24T15:30:00+08:00",
+                source_type="prepare_records",
+                template_name="service_record.v1",
+            ),
+            records=[record],
+        )
+
+    monkeypatch.setattr(
+        "ocr_from2xlsx.prepare_records.prepare_records_from_paths",
+        _prepare_records_from_paths,
+    )
+
+    code = main(
+        [
+            "prepare-records",
+            "--input",
+            str(pdf),
+            "--output",
+            str(out),
+            "--ocr-fixture",
+            str(fixture),
+            "--name-agent-config",
+            str(cfg),
+        ]
+    )
+
+    assert code == 0
+    data = _json.loads(out.read_text(encoding="utf-8"))
+    assert data["records"][0]["name"] == ""
+    assert data["records"][0]["ocr"]["warnings"] == []
 
 
 def test_prepare_records_cli_reports_missing_ocr_fixture_page_without_traceback(

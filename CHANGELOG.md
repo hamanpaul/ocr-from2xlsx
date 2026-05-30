@@ -7,6 +7,10 @@
 
 ## [Unreleased]
 
+### Fixed
+- `prepare_records`：當 OCR backend（如 PaddleOCR 外掛）未提供 `record_id` 時，依頁序自動指派穩定 id（`pdf-0001`…），讓真實 OCR 結果能流入 `import-json`；既有 backend 提供的 `record_id` 仍保留。
+- `build/package.py`：清理 `build/` 時保留 `build_paddle_plugin.py`，避免主程式打包誤刪可攜外掛建置腳本。
+
 ### Changed
 - `plugins/paddleocr/field_extract.py`：強化姓名/病歷號擷取準確度——過濾打勾框與表單標籤雜訊（病人/親友/民眾/病歷號…），並要求候選值需含病歷號或中文姓名才接受，避免把鄰列的勾選框或雜訊（如 OCR 誤判的 "V"）當成姓名。
 - `plugins/paddleocr/field_extract.py`：強化 MRN regex，要求至少含一個數字，避免純字母 token（如羅馬拼音姓名）被誤判為病歷號；新增 `normalize_roc_date` 與 `extract_service_date` 的 docstring，說明 v1 簡化假設。

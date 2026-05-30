@@ -22,12 +22,20 @@ field_extract = _importlib_util.module_from_spec(_FE_SPEC)
 assert _FE_SPEC and _FE_SPEC.loader
 _FE_SPEC.loader.exec_module(field_extract)
 
+_MD_SPEC = _importlib_util.spec_from_file_location(
+    "paddleocr_plugin_mark_detect", _HERE / "mark_detect.py"
+)
+mark_detect = _importlib_util.module_from_spec(_MD_SPEC)
+assert _MD_SPEC and _MD_SPEC.loader
+_MD_SPEC.loader.exec_module(mark_detect)
+
 CONTRACT_VERSION = "ocr_plugin.v1"
 
 OcrFn = Callable[[str], list[dict[str, Any]]]
+MarkFn = Callable[[str, list[dict[str, Any]]], set[str]]
 
 
-def run(request: dict[str, Any], ocr_fn: OcrFn) -> dict[str, Any]:
+def run(request: dict[str, Any], ocr_fn: OcrFn, mark_fn: MarkFn) -> dict[str, Any]:
     if request.get("contract_version") != CONTRACT_VERSION:
         raise ValueError(
             f"Unsupported contract_version: {request.get('contract_version')!r}; "
@@ -36,12 +44,15 @@ def run(request: dict[str, Any], ocr_fn: OcrFn) -> dict[str, Any]:
     page = request.get("page") or {}
     image_path = str(page.get("image_path") or "")
     lines = ocr_fn(image_path)
-    fields = field_extract.extract_fields(lines)
+    marked_labels = mark_fn(image_path, lines)
+    fields = field_extract.extract_fields(lines, marked_labels)
     raw_text = "\n".join(str(line.get("text") or "") for line in lines)
     record: dict[str, Any] = {
         "service_date": fields["service_date"],
+        "identity": fields["identity"],
         "name": fields["name"],
         "medical_record_no": fields["medical_record_no"],
+        "gender": fields["gender"],
         "ocr": {
             "backend": "paddleocr",
             "model": "PP-OCRv5_mobile_det+PP-OCRv5_mobile_rec",
@@ -89,7 +100,7 @@ def main() -> int:
             reconfigure(encoding="utf-8")
     _configure_offline_models()
     request = json.loads(sys.stdin.read())
-    response = run(request, ocr_fn=_paddle_ocr_fn)
+    response = run(request, ocr_fn=_paddle_ocr_fn, mark_fn=mark_detect.detect_marked_labels)
     sys.stdout.write(json.dumps(response, ensure_ascii=False))
     return 0
 

@@ -233,7 +233,7 @@ def main(argv: list[str] | None = None) -> int:
                             crop_path=crop_path,
                             agent=agent,
                             roster=[],
-                            ocr_raw=getattr(record.ocr, "raw_text", "") or "",
+                            ocr_raw=record.ocr.raw_text or "",
                         )
                         if name:
                             record.name = name

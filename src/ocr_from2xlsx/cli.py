@@ -67,6 +67,11 @@ def build_parser() -> argparse.ArgumentParser:
     import_parser.add_argument("--working", required=True, help="Working XLSX output path.")
     import_parser.add_argument("--report-json", required=True, help="Import report JSON path.")
     import_parser.add_argument("--report-csv", required=True, help="Import report CSV path.")
+    import_parser.add_argument(
+        "--allow-incomplete",
+        action="store_true",
+        help="Force writable-only blockers to import incomplete records.",
+    )
     prepare_parser = subparsers.add_parser(
         "prepare-records",
         help="Prepare normalized JSON records from PDF inputs.",
@@ -146,7 +151,7 @@ def main(argv: list[str] | None = None) -> int:
             with ImportSession.start(Path(args.template), Path(args.working)) as session:
                 for record in batch.records:
                     may_have_imports = True
-                    result = session.accept_scan(record)
+                    result = session.accept_scan(record, force=args.allow_incomplete)
                     if result.status == "blocked":
                         blocked_count += 1
                     if result.status in {"forced", "written"}:

@@ -121,3 +121,66 @@ def test_extract_fields_skips_noise_and_picks_real_name():
     fields = extract_fields(lines)
     assert fields["name"] == "王大明"
     assert fields["medical_record_no"] == "B998877"
+
+
+def test_extract_name_and_mrn_from_anchor_row_handwriting():
+    lines = [
+        _line("姓名/病歷號", x=0, y=50),
+        _line("葉心安", x=120, y=50),
+        _line("6250712919", x=260, y=50),
+    ]
+    fields = extract_fields(lines, marked_labels=set())
+    assert fields["name"] == "葉心安"
+    assert fields["medical_record_no"] == "6250712919"
+
+
+def test_extract_mrn_when_ocr_merges_label_and_digits():
+    lines = [
+        _line("姓名/病歷號", x=0, y=50),
+        _line("葉心安", x=120, y=50),
+        _line("病人6250712919", x=260, y=50),
+    ]
+    fields = extract_fields(lines, marked_labels=set())
+    assert fields["name"] == "葉心安"
+    assert fields["medical_record_no"] == "6250712919"
+
+
+def test_extract_fields_ignores_single_character_name_noise_and_recovers_mrn_well_above_anchor():
+    lines = [
+        _line("姓名/病歷號", x=0, y=50),
+        _line("女", x=120, y=50),
+        _line("病人6250712919", x=120, y=20),
+    ]
+    fields = extract_fields(lines, marked_labels=set())
+    assert fields["name"] is None
+    assert fields["medical_record_no"] == "6250712919"
+
+
+def test_extract_fields_recovers_mrn_from_much_higher_line_like_real_ocr():
+    lines = [
+        _line("姓名/病歷號", x=0, y=80),
+        _line("病人6258712919", x=120, y=20),
+    ]
+    fields = extract_fields(lines, marked_labels=set())
+    assert fields["name"] is None
+    assert fields["medical_record_no"] == "6258712919"
+
+
+def test_extract_identity_and_gender_from_marked_labels():
+    lines = [
+        _line("病人", x=10, y=50),
+        _line("親友及照顧者", x=120, y=50),
+        _line("一般民眾及其他", x=260, y=50),
+        _line("女性", x=10, y=80),
+        _line("男性", x=120, y=80),
+    ]
+    fields = extract_fields(lines, marked_labels={"病人", "女性"})
+    assert fields["identity"] == "patient"
+    assert fields["gender"] == "female"
+
+
+def test_unmarked_identity_gender_stay_empty():
+    lines = [_line("病人", x=10, y=50), _line("女性", x=10, y=80)]
+    fields = extract_fields(lines, marked_labels=set())
+    assert fields["identity"] == ""
+    assert fields["gender"] == ""

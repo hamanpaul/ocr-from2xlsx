@@ -11,6 +11,7 @@ from ocr_from2xlsx.form_template import FormTemplate
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _PAGE_SIZE_TOLERANCE_POINTS = 1.0
+_PDF_RENDER_DPI = 400
 
 
 def _repo_relative_path(path: Path) -> str:
@@ -60,7 +61,7 @@ def prepare_pdf_page(page: PdfPage, output_dir: Path | str, template: FormTempla
     output_dir.mkdir(parents=True, exist_ok=True)
     image_path = _output_image_path(page, output_dir)
     with fitz.open(page.document_path) as document:
-        pixmap = document.load_page(page.page_number - 1).get_pixmap(dpi=200)
+        pixmap = document.load_page(page.page_number - 1).get_pixmap(dpi=_PDF_RENDER_DPI)
         pixmap.save(image_path)
     return PreparedPage(
         image_path=image_path,

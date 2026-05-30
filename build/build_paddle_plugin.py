@@ -4,7 +4,7 @@ Bundle layout:
   dist/plugins/paddleocr/
     python/      copy of the paddle venv (.venv-paddle) — interpreter + paddleocr + deps
     models/official_models/<model>/   bundled mobile + textline models
-    main.py, field_extract.py, plugin.json
+    main.py, field_extract.py, mark_detect.py, plugin.json
 
 Run with any python: `python build/build_paddle_plugin.py`
 """
@@ -38,7 +38,7 @@ def main() -> int:
     print(f"copying venv {SRC_VENV} -> {OUT / 'python'} (large, please wait)")
     shutil.copytree(SRC_VENV, OUT / "python", dirs_exist_ok=True)
     _copy_models(OUT / "models" / "official_models")
-    for name in ["main.py", "field_extract.py", "plugin.json"]:
+    for name in ["main.py", "field_extract.py", "mark_detect.py", "plugin.json"]:
         shutil.copy2(SRC_PLUGIN / name, OUT / name)
     print(f"bundle ready: {OUT}")
     return 0

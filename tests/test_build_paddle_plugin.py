@@ -1,0 +1,34 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import build.build_paddle_plugin as build_paddle_plugin
+
+
+def test_build_bundle_includes_mark_detect(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    src_plugin = repo / "plugins" / "paddleocr"
+    src_plugin.mkdir(parents=True)
+    (src_plugin / "main.py").write_text("main", encoding="utf-8")
+    (src_plugin / "field_extract.py").write_text("field", encoding="utf-8")
+    (src_plugin / "mark_detect.py").write_text("mark", encoding="utf-8")
+    (src_plugin / "plugin.json").write_text("{}", encoding="utf-8")
+
+    src_venv = repo / ".venv-paddle"
+    src_venv.mkdir()
+    models_src = tmp_path / "models"
+    for name in build_paddle_plugin.NEEDED_MODELS:
+        (models_src / name).mkdir(parents=True)
+
+    out = tmp_path / "dist" / "plugins" / "paddleocr"
+
+    monkeypatch.setattr(build_paddle_plugin, "REPO", repo)
+    monkeypatch.setattr(build_paddle_plugin, "SRC_VENV", src_venv)
+    monkeypatch.setattr(build_paddle_plugin, "SRC_PLUGIN", src_plugin)
+    monkeypatch.setattr(build_paddle_plugin, "MODELS_SRC", models_src)
+    monkeypatch.setattr(build_paddle_plugin, "OUT", out)
+
+    assert build_paddle_plugin.main() == 0
+    assert (out / "mark_detect.py").exists()

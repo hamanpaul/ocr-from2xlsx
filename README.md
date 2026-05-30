@@ -103,8 +103,15 @@ ocr-from2xlsx prepare-records --input scan.pdf --output out.json `
 
 The bundle ships a Python venv, the PP-OCRv5 mobile models, and runs fully offline
 (`PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True`, models loaded from the bundle). It recognizes the form
-full-page and extracts service date / name / medical-record-no via text anchors; checkbox fields are
-added in a later sub-project.
+full-page, probes checkbox ink immediately left of OCR label anchors, and also uses OCR-text anomalies
+such as `中女性` / `病人625...` as secondary marked signals. The current plugin extracts service date,
+identity, gender, handwritten name, and medical-record-no; PDF preprocessing now renders at 400 DPI to
+improve real-form MRN recovery.
+
+For review-oriented verification, `import-json --allow-incomplete` will still write a recognized record
+as `forced` when only writable patient-only fields are missing. On the reference form, the mobile
+recognizer still may not recover the handwritten name reliably, so this path remains the practical way
+to inspect real OCR output before manual completion.
 
 ## Packaging
 

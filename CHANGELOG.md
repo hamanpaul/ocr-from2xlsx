@@ -8,6 +8,7 @@
 ## [Unreleased]
 
 ### Added
+- 新增可選、由 TOML config 指定的雲端 VLM `name_agent`（缺席/停用即 no-op，不影響流程）。
 - 新增 `correction_store`（append-only JSONL）記錄人工姓名確認/修正並可導出名冊。
 - 新增 `name_roster` 確認姓名名冊 difflib 模糊比對（手寫姓名校正學習用）。
 - 新增 `plugins/paddleocr/mark_detect.py` 純函式打勾評分核心（灰階區域墨跡比例）。

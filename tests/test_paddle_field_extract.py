@@ -69,3 +69,23 @@ def test_extract_fields_name_mrn_none_when_anchor_value_missing():
     fields = extract_fields(lines)
     assert fields["name"] is None
     assert fields["medical_record_no"] is None
+
+
+def test_extract_fields_name_only_no_mrn():
+    lines = [
+        _line("姓名/病歷號", x=0, y=50),
+        _line("陳美玲", x=120, y=50),
+    ]
+    fields = extract_fields(lines)
+    assert fields["name"] == "陳美玲"
+    assert fields["medical_record_no"] is None
+
+
+def test_extract_fields_hyphenated_mrn():
+    lines = [
+        _line("姓名/病歷號", x=0, y=50),
+        _line("林志偉 A12-3456", x=120, y=50),
+    ]
+    fields = extract_fields(lines)
+    assert fields["name"] == "林志偉"
+    assert fields["medical_record_no"] == "A12-3456"

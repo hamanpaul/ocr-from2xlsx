@@ -7,6 +7,10 @@
 
 ## [Unreleased]
 
+### Changed
+- `plugins/paddleocr/field_extract.py`：強化 MRN regex，要求至少含一個數字，避免純字母 token（如羅馬拼音姓名）被誤判為病歷號；新增 `normalize_roc_date` 與 `extract_service_date` 的 docstring，說明 v1 簡化假設。
+- `tests/test_paddle_field_extract.py`：新增純姓名（無病歷號）與含連字號病歷號兩個覆蓋率測試，共 11 項全通過。
+
 ### Added
 - 新增 OCR 外掛契約（`ocr_plugin.v1`）與 `PluginOcrBackend`，可透過 subprocess 呼叫可攜式外部 OCR；外掛不存在時安全回報。
 - `prepare-records` 新增 `--ocr-backend {fixture,plugin}` 與 `--ocr-plugin-dir`（`--ocr-fixture` 改為非必填）。

@@ -11,11 +11,15 @@ from typing import Any
 _ROC_DATE = re.compile(r"(\d{2,3})\D{1,3}(\d{1,2})\D{1,3}(\d{1,2})")
 _DATE_ANCHOR = ("服務年", "年/月/日", "年月日")
 _NAME_ANCHOR = "姓名"
-# A handwritten medical-record-no token: letters/digits, >=4 chars, contains a digit.
-_MRN_TOKEN = re.compile(r"[A-Za-z0-9][A-Za-z0-9\-]{3,}")
+# A medical-record-no token: >=4 chars of letters/digits/hyphen, must contain at least one digit.
+_MRN_TOKEN = re.compile(r"(?=[A-Za-z0-9\-]{4,})[A-Za-z0-9\-]*\d[A-Za-z0-9\-]*")
 
 
 def normalize_roc_date(text: str) -> str | None:
+    """Convert a ROC-calendar date string to ISO format (YYYY-MM-DD).
+
+    Day is validated as 1..31 without per-month or leap-year checks (v1 simplification).
+    """
     match = _ROC_DATE.search(text or "")
     if not match:
         return None
@@ -42,6 +46,11 @@ def _find_anchor(lines: list[dict[str, Any]], needles: tuple[str, ...] | str):
 
 
 def extract_service_date(lines: list[dict[str, Any]]) -> str | None:
+    """Return the service date as ISO YYYY-MM-DD, or None if not found.
+
+    Assumes the date value and its label land on the same OCR line (true for
+    high-confidence scans); returns None for human review otherwise.
+    """
     anchor = _find_anchor(lines, _DATE_ANCHOR)
     if anchor is None:
         return None

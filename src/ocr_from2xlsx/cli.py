@@ -37,12 +37,20 @@ def _resolve_name_crop_path(record, output_dir: Path) -> str | None:
     crop_value = getattr(record.ocr, "name_crop", None)
     if crop_value:
         crop_path = Path(crop_value)
-    else:
-        prepared_image = record.source.preprocessed_image_path
-        if not prepared_image:
-            return None
-        prepared_path = Path(prepared_image)
-        crop_path = prepared_path.with_name(f"{prepared_path.stem}-name.png")
+        if not crop_path.is_absolute():
+            crop_path = output_dir / crop_path
+        try:
+            crop_path.resolve(strict=False).relative_to(output_dir.resolve(strict=False))
+        except ValueError:
+            crop_path = None
+        else:
+            if crop_path.is_file():
+                return str(crop_path)
+    prepared_image = record.source.preprocessed_image_path
+    if not prepared_image:
+        return None
+    prepared_path = Path(prepared_image)
+    crop_path = prepared_path.with_name(f"{prepared_path.stem}-name.png")
     if not crop_path.is_absolute():
         crop_path = output_dir / crop_path
     return str(crop_path) if crop_path.is_file() else None

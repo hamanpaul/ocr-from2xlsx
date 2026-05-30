@@ -1134,6 +1134,33 @@ def test_resolve_name_crop_path_prefers_backend_supplied_name_crop_after_round_t
     assert _resolve_name_crop_path(loaded.records[0], tmp_path) == str(expected_crop)
 
 
+def test_resolve_name_crop_path_rejects_backend_path_outside_output_dir_and_uses_fallback(
+    tmp_path: Path,
+) -> None:
+    record = make_record("pdf-0001")
+    record.ocr.name_crop = "..\\escaped-name.png"
+    record.source.preprocessed_image_path = "fallback-page-0001.png"
+    fallback_crop = tmp_path / "fallback-page-0001-name.png"
+    fallback_crop.write_bytes(b"fallback bytes")
+    (tmp_path.parent / "escaped-name.png").write_bytes(b"backend bytes")
+
+    assert _resolve_name_crop_path(record, tmp_path) == str(fallback_crop)
+
+
+def test_resolve_name_crop_path_rejects_absolute_backend_path_outside_output_dir_and_uses_fallback(
+    tmp_path: Path,
+) -> None:
+    record = make_record("pdf-0001")
+    escaped_crop = tmp_path.parent / "absolute-escaped-name.png"
+    escaped_crop.write_bytes(b"backend bytes")
+    record.ocr.name_crop = str(escaped_crop.resolve())
+    record.source.preprocessed_image_path = "fallback-page-0001.png"
+    fallback_crop = tmp_path / "fallback-page-0001-name.png"
+    fallback_crop.write_bytes(b"fallback bytes")
+
+    assert _resolve_name_crop_path(record, tmp_path) == str(fallback_crop)
+
+
 def test_prepare_records_enabled_name_agent_without_crop_is_noop(tmp_path):
     import json as _json
     from pathlib import Path as _Path

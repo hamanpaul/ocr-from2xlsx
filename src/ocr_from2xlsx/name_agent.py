@@ -13,7 +13,7 @@ import tomllib
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 DEFAULT_NAME_AGENT_PROMPT = "讀出圖片中的手寫中文姓名，只回傳姓名本身，不要其他文字。"
 
@@ -38,18 +38,36 @@ class NameAgentConfig:
     api_key_env: str = "ANTHROPIC_API_KEY"
 
 
+def _require_bool(value: Any, field_name: str) -> bool:
+    if isinstance(value, bool):
+        return value
+    raise ValueError(f"{field_name} must be a bool")
+
+
+def _require_string(value: Any, field_name: str) -> str:
+    if isinstance(value, str):
+        return value
+    raise ValueError(f"{field_name} must be a string")
+
+
 def load_config(path: Path | str) -> NameAgentConfig:
     path = Path(path)
     if not path.is_file():
         return NameAgentConfig(enabled=False)
     data = tomllib.loads(path.read_text(encoding="utf-8"))
+    enabled = data.get("enabled", False)
+    provider = data.get("provider", "")
+    model = data.get("model", "")
+    endpoint = data.get("endpoint", "")
+    prompt = data.get("prompt", DEFAULT_NAME_AGENT_PROMPT)
+    api_key_env = data.get("api_key_env", "ANTHROPIC_API_KEY")
     return NameAgentConfig(
-        enabled=bool(data.get("enabled", False)),
-        provider=str(data.get("provider", "")),
-        model=str(data.get("model", "")),
-        endpoint=str(data.get("endpoint", "")),
-        prompt=str(data.get("prompt", DEFAULT_NAME_AGENT_PROMPT)),
-        api_key_env=str(data.get("api_key_env", "ANTHROPIC_API_KEY")),
+        enabled=_require_bool(enabled, "enabled"),
+        provider=_require_string(provider, "provider"),
+        model=_require_string(model, "model"),
+        endpoint=_require_string(endpoint, "endpoint"),
+        prompt=_require_string(prompt, "prompt"),
+        api_key_env=_require_string(api_key_env, "api_key_env"),
     )
 
 

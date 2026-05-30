@@ -19,6 +19,8 @@ class StubSession:
         self, record, force: bool = False, human_confirmed: bool = False
     ) -> AcceptResult:
         self.calls.append((record.record_id, force, human_confirmed))
+        if human_confirmed:
+            record.ocr.warnings = [warning for warning in record.ocr.warnings if warning != "name.unconfirmed"]
         return self.result
 
     def close(self) -> None:
@@ -177,6 +179,7 @@ def test_next_record_confirms_unconfirmed_name_and_clears_warning(
     app: ReviewApp, tmp_path: Path
 ) -> None:
     record = make_record("scan-0001")
+    expected_name = record.name
     record.ocr.warnings = ["name.unconfirmed"]
     app.records = [record]
     app.current_index = 0
@@ -195,8 +198,9 @@ def test_next_record_confirms_unconfirmed_name_and_clears_warning(
     app._next_record()
 
     assert record.ocr.warnings == []
+    assert record.review.edited_by_user is False
     assert app.session.calls == [(record.record_id, False, True)]
-    assert load_corrections(app.correction_store_path)[0].final_value == "王小明"
+    assert load_corrections(app.correction_store_path)[0].final_value == expected_name
 
 
 def test_choose_template_clears_written_indices(

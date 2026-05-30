@@ -201,8 +201,6 @@ class ReviewApp(tk.Tk):
             ocr_raw=record.ocr.raw_text or "",
         )
         record.name = final_name
-        record.ocr.warnings = [warning for warning in record.ocr.warnings if warning != NAME_UNCONFIRMED]
-        record.review.edited_by_user = True
         return True
 
     def _mark_editing(self, _event: tk.Event | None = None) -> None:

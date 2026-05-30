@@ -72,10 +72,7 @@ class ImportSession:
         result = validate_record(record, self.existing_duplicate_keys)
         blockers = list(result.blockers)
         warnings = list(result.warnings)
-        if human_confirmed:
-            record.ocr.warnings = [warning for warning in record.ocr.warnings if warning != NAME_UNCONFIRMED]
-            warnings = [warning for warning in warnings if warning != NAME_UNCONFIRMED]
-        elif NAME_UNCONFIRMED in record.ocr.warnings and NAME_UNCONFIRMED not in blockers:
+        if not human_confirmed and NAME_UNCONFIRMED in record.ocr.warnings and NAME_UNCONFIRMED not in blockers:
             blockers.append(NAME_UNCONFIRMED)
         duplicate_key = None
         if _duplicate_key_is_usable(record):
@@ -121,6 +118,9 @@ class ImportSession:
 
         row_number = self.writer.write_record(record)
         self.writer.save()
+        if human_confirmed:
+            record.ocr.warnings = [warning for warning in record.ocr.warnings if warning != NAME_UNCONFIRMED]
+            warnings = [warning for warning in warnings if warning != NAME_UNCONFIRMED]
         if duplicate_key is not None:
             self.batch_duplicate_keys.add(duplicate_key)
         status = "forced" if blockers else "written"

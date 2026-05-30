@@ -1,7 +1,7 @@
 # 手寫姓名辨識設計：OCR 輔助 + 可選雲端 VLM 建議 + 人工確認 + 校正學習閉迴圈
 
 **Date:** 2026-05-30
-**Status:** Draft (brainstorming approved; pending spec review)
+**Status:** Implemented and archived into OpenSpec on 2026-05-30
 
 ---
 

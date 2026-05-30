@@ -94,3 +94,30 @@ def test_extract_fields_hyphenated_mrn():
     fields = extract_fields(lines)
     assert fields["name"] == "林志偉"
     assert fields["medical_record_no"] == "A12-3456"
+
+
+def test_extract_fields_rejects_checkbox_and_stray_noise_as_name():
+    # On a blank form the name cell is empty, but identity checkboxes and stray
+    # marks sit on the same row. None of those are a valid name/MRN.
+    lines = [
+        _line("姓名/病歷號", x=0, y=50),
+        _line("V", x=120, y=50),
+        _line("□親友及照顧者", x=200, y=50),
+        _line("□一般民眾及其他", x=320, y=50),
+    ]
+    fields = extract_fields(lines)
+    assert fields["name"] is None
+    assert fields["medical_record_no"] is None
+
+
+def test_extract_fields_skips_noise_and_picks_real_name():
+    # A checkbox label to the immediate right must be skipped in favour of the
+    # real handwritten name+MRN further along the row.
+    lines = [
+        _line("姓名/病歷號", x=0, y=50),
+        _line("□病人", x=110, y=50),
+        _line("王大明 B998877", x=210, y=50),
+    ]
+    fields = extract_fields(lines)
+    assert fields["name"] == "王大明"
+    assert fields["medical_record_no"] == "B998877"

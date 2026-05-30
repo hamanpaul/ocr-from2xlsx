@@ -8,6 +8,7 @@
 ## [Unreleased]
 
 ### Changed
+- `plugins/paddleocr/field_extract.py`：強化姓名/病歷號擷取準確度——過濾打勾框與表單標籤雜訊（病人/親友/民眾/病歷號…），並要求候選值需含病歷號或中文姓名才接受，避免把鄰列的勾選框或雜訊（如 OCR 誤判的 "V"）當成姓名。
 - `plugins/paddleocr/field_extract.py`：強化 MRN regex，要求至少含一個數字，避免純字母 token（如羅馬拼音姓名）被誤判為病歷號；新增 `normalize_roc_date` 與 `extract_service_date` 的 docstring，說明 v1 簡化假設。
 - `tests/test_paddle_field_extract.py`：新增純姓名（無病歷號）與含連字號病歷號兩個覆蓋率測試，共 11 項全通過。
 

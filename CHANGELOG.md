@@ -8,6 +8,7 @@
 ## [Unreleased]
 
 ### Added
+- 新增 `name_roster` 確認姓名名冊 difflib 模糊比對（手寫姓名校正學習用）。
 - 新增 `plugins/paddleocr/mark_detect.py` 純函式打勾評分核心（灰階區域墨跡比例）。
 - PaddleOCR 外掛新增身分/性別打勾辨識（文字錨點 + 框內墨跡 + OCR 異常文字訊號）與手寫姓名/病歷號擷取。
 - `import-json --allow-incomplete`：辨識到的記錄即使缺病人限定欄位也可寫入（forced）以供核對。

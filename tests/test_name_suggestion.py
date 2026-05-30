@@ -38,6 +38,17 @@ def test_suggest_uses_ocr_raw_when_agent_missing():
     assert "name.unconfirmed" in warnings
 
 
+def test_suggest_rejects_multiline_ocr_raw_dump_when_agent_missing():
+    name, warnings = suggest_name(
+        crop_path="x.png",
+        agent=_FakeAgent(None),
+        roster=[],
+        ocr_raw="癌症資源中心服務紀錄表\n姓名 王小明\n病歷號 1234567",
+    )
+    assert name == ""
+    assert warnings == []
+
+
 def test_suggest_empty_when_no_candidate_returns_no_warnings():
     name, warnings = suggest_name(
         crop_path="", agent=_FakeAgent(None), roster=[], ocr_raw=""

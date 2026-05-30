@@ -15,6 +15,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
+DEFAULT_NAME_AGENT_PROMPT = "讀出圖片中的手寫中文姓名，只回傳姓名本身，不要其他文字。"
+
 
 class NameAgent(Protocol):
     def suggest(self, crop_path: str) -> str | None:
@@ -32,7 +34,7 @@ class NameAgentConfig:
     provider: str = ""
     model: str = ""
     endpoint: str = ""
-    prompt: str = "讀出圖片中的手寫中文姓名，只回傳姓名本身，不要其他文字。"
+    prompt: str = DEFAULT_NAME_AGENT_PROMPT
     api_key_env: str = "ANTHROPIC_API_KEY"
 
 
@@ -46,7 +48,7 @@ def load_config(path: Path | str) -> NameAgentConfig:
         provider=str(data.get("provider", "")),
         model=str(data.get("model", "")),
         endpoint=str(data.get("endpoint", "")),
-        prompt=str(data.get("prompt", NameAgentConfig.prompt)),
+        prompt=str(data.get("prompt", DEFAULT_NAME_AGENT_PROMPT)),
         api_key_env=str(data.get("api_key_env", "ANTHROPIC_API_KEY")),
     )
 

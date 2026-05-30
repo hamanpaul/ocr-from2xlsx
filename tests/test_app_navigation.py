@@ -181,6 +181,7 @@ def test_next_record_confirms_unconfirmed_name_and_clears_warning(
     record = make_record("scan-0001")
     expected_name = record.name
     record.ocr.warnings = ["name.unconfirmed"]
+    record.ocr.raw_text = "癌症資源中心服務紀錄表\n姓名 王小明\n病歷號 6250712919"
     app.records = [record]
     app.current_index = 0
     app.correction_store_path = tmp_path / "name_corrections.jsonl"
@@ -200,7 +201,9 @@ def test_next_record_confirms_unconfirmed_name_and_clears_warning(
     assert record.ocr.warnings == []
     assert record.review.edited_by_user is False
     assert app.session.calls == [(record.record_id, False, True)]
-    assert load_corrections(app.correction_store_path)[0].final_value == expected_name
+    saved = load_corrections(app.correction_store_path)[0]
+    assert saved.final_value == expected_name
+    assert saved.ocr_raw == ""
 
 
 def test_choose_template_clears_written_indices(

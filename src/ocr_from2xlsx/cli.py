@@ -98,6 +98,10 @@ def build_parser() -> argparse.ArgumentParser:
         default="service_record.v1",
         help="Form template identifier (currently only service_record.v1 is supported).",
     )
+    prepare_parser.add_argument(
+        "--name-agent-config",
+        help="Optional TOML config for the handwritten-name agent; absent or disabled = no-op.",
+    )
     subparsers.add_parser("app", help="Launch the native desktop review UI.")
     return parser
 
@@ -210,6 +214,28 @@ def main(argv: list[str] | None = None) -> int:
                 template=template,
                 backend=backend,
             )
+            if args.name_agent_config:
+                from ocr_from2xlsx.name_agent import build_agent, load_config
+                from ocr_from2xlsx.name_suggestion import suggest_name
+
+                agent = build_agent(load_config(Path(args.name_agent_config)))
+                output_dir = Path(args.output).parent
+                for record in batch.records:
+                    if record.name:
+                        continue
+                    crop_name = getattr(record.ocr, "name_crop", None)
+                    crop_path = str(output_dir / crop_name) if crop_name else ""
+                    name, warnings = suggest_name(
+                        crop_path=crop_path,
+                        agent=agent,
+                        roster=[],
+                        ocr_raw=getattr(record.ocr, "raw_text", "") or "",
+                    )
+                    if name:
+                        record.name = name
+                    for warning in warnings:
+                        if warning not in record.ocr.warnings:
+                            record.ocr.warnings.append(warning)
             output_path = Path(args.output)
             dump_batch(batch, output_path)
         except (

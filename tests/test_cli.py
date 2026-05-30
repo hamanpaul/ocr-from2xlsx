@@ -820,6 +820,44 @@ def test_prepare_records_cli_reports_null_source_without_traceback(
     assert "Traceback" not in captured.err
 
 
+def test_prepare_records_name_agent_absent_is_noop(tmp_path):
+    import json as _json
+    from pathlib import Path as _Path
+    from ocr_from2xlsx.cli import main
+
+    pdf = _Path(__file__).parent / "fixtures" / "pdf" / "for testing only.pdf"
+    fixture = _Path(__file__).parent / "fixtures" / "pdf" / "for testing only.ocr.json"
+    out = tmp_path / "prepared.json"
+
+    code = main([
+        "prepare-records", "--input", str(pdf), "--output", str(out),
+        "--ocr-fixture", str(fixture),
+    ])
+    assert code == 0
+    data = _json.loads(out.read_text(encoding="utf-8"))
+    assert data["records"][0]["name"] == "AI test"
+
+
+def test_prepare_records_disabled_name_agent_config_is_noop(tmp_path):
+    import json as _json
+    from pathlib import Path as _Path
+    from ocr_from2xlsx.cli import main
+
+    cfg = tmp_path / "name_agent.toml"
+    cfg.write_text("enabled = false\n", encoding="utf-8")
+    pdf = _Path(__file__).parent / "fixtures" / "pdf" / "for testing only.pdf"
+    fixture = _Path(__file__).parent / "fixtures" / "pdf" / "for testing only.ocr.json"
+    out = tmp_path / "prepared.json"
+
+    code = main([
+        "prepare-records", "--input", str(pdf), "--output", str(out),
+        "--ocr-fixture", str(fixture), "--name-agent-config", str(cfg),
+    ])
+    assert code == 0
+    data = _json.loads(out.read_text(encoding="utf-8"))
+    assert data["records"][0]["name"] == "AI test"
+
+
 def test_prepare_records_cli_reports_missing_ocr_fixture_page_without_traceback(
     tmp_path: Path, capsys
 ) -> None:

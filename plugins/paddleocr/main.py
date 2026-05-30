@@ -12,8 +12,15 @@ from pathlib import Path
 from typing import Any, Callable
 
 _HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(_HERE))
-import field_extract  # noqa: E402  (sibling module, loaded from plugin dir)
+
+import importlib.util as _importlib_util
+
+_FE_SPEC = _importlib_util.spec_from_file_location(
+    "paddleocr_plugin_field_extract", _HERE / "field_extract.py"
+)
+field_extract = _importlib_util.module_from_spec(_FE_SPEC)
+assert _FE_SPEC and _FE_SPEC.loader
+_FE_SPEC.loader.exec_module(field_extract)
 
 CONTRACT_VERSION = "ocr_plugin.v1"
 
@@ -37,7 +44,7 @@ def run(request: dict[str, Any], ocr_fn: OcrFn) -> dict[str, Any]:
         "medical_record_no": fields["medical_record_no"],
         "ocr": {
             "backend": "paddleocr",
-            "model": "PP-OCRv5_mobile",
+            "model": "PP-OCRv5_mobile_det+PP-OCRv5_mobile_rec",
             "raw_text": raw_text,
             "warnings": [],
         },

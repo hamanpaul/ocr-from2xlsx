@@ -30,6 +30,11 @@ def test_normalize_roc_date_slash():
     assert normalize_roc_date("113/12/31") == "2024-12-31"
 
 
+def test_normalize_roc_date_merged_mmdd():
+    # OCR sometimes merges month+day into one run: "114、0625" -> 2025-06-25.
+    assert normalize_roc_date("服務年月日：114、0625") == "2025-06-25"
+
+
 def test_normalize_roc_date_rejects_garbage():
     assert normalize_roc_date("no date here") is None
 

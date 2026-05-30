@@ -9,6 +9,8 @@ import re
 from typing import Any
 
 _ROC_DATE = re.compile(r"(\d{2,3})\D{1,3}(\d{1,2})\D{1,3}(\d{1,2})")
+# Fallback for OCR that merges month+day into one 4-digit run, e.g. "114、0625".
+_ROC_DATE_MMDD = re.compile(r"(\d{2,3})\D{1,3}(\d{2})(\d{2})(?!\d)")
 _DATE_ANCHOR = ("服務年", "年/月/日", "年月日")
 _NAME_ANCHOR = "姓名"
 # A medical-record-no token: >=4 chars of letters/digits/hyphen, must contain at least one digit.
@@ -20,7 +22,7 @@ def normalize_roc_date(text: str) -> str | None:
 
     Day is validated as 1..31 without per-month or leap-year checks (v1 simplification).
     """
-    match = _ROC_DATE.search(text or "")
+    match = _ROC_DATE.search(text or "") or _ROC_DATE_MMDD.search(text or "")
     if not match:
         return None
     roc_year, month, day = (int(part) for part in match.groups())

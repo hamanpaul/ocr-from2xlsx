@@ -81,6 +81,12 @@ def _paddle_ocr_fn(image_path: str) -> list[dict[str, Any]]:
 
 
 def main() -> int:
+    # Force UTF-8 on the contract pipes regardless of the OS console codepage, so the
+    # JSON request/response always round-trips CJK cleanly.
+    for stream in (sys.stdin, sys.stdout):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(encoding="utf-8")
     _configure_offline_models()
     request = json.loads(sys.stdin.read())
     response = run(request, ocr_fn=_paddle_ocr_fn)

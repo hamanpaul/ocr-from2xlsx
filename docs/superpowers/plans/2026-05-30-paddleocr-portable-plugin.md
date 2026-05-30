@@ -303,7 +303,7 @@ def test_run_builds_contract_response_with_extracted_fields():
 
     assert response["contract_version"] == CONTRACT
     record = response["record"]
-    assert record["service_date"] == "2026-06-25"
+    assert record["service_date"] == "2025-06-25"  # ROC 114 + 1911 = 2025
     assert record["name"] == "王小明"
     assert record["medical_record_no"] == "A123456"
     assert record["ocr"]["backend"] == "paddleocr"
@@ -550,7 +550,7 @@ $env:PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK="True"
 .venv\Scripts\python.exe -c "import sys; sys.path.insert(0,'src'); from pathlib import Path; from ocr_from2xlsx.domain import SourceInfo; from ocr_from2xlsx.preprocess import PreparedPage; from ocr_from2xlsx.plugin_backend import PluginOcrBackend; p=PreparedPage(image_path=Path('dist/_form.png'), template_id='service_record.v1', source=SourceInfo(kind='pdf_page', document_path='for testing only.pdf', page_number=1, preprocessed_image_path='_form.png', template_id='service_record.v1')); rec=PluginOcrBackend('dist/plugins/paddleocr').extract(p); print('service_date=', rec.get('service_date')); print('backend=', rec.get('ocr',{}).get('backend'))"
 ```
 
-Expected: prints `service_date= 2026-06-25` (or the date the OCR reads) and `backend= paddleocr`.
+Expected: prints `service_date= 2025-06-25` (ROC 114 + 1911; or the date the OCR reads) and `backend= paddleocr`.
 
 **If the model still loads from `~/.paddlex` instead of the bundle:** determine the correct PaddleX
 cache-home redirect (the env var may differ from `PADDLE_PDX_CACHE_HOME`; check paddlex docs/source for

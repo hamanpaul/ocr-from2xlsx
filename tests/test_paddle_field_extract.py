@@ -145,6 +145,27 @@ def test_extract_mrn_when_ocr_merges_label_and_digits():
     assert fields["medical_record_no"] == "6250712919"
 
 
+def test_extract_fields_ignores_single_character_name_noise_and_recovers_mrn_well_above_anchor():
+    lines = [
+        _line("姓名/病歷號", x=0, y=50),
+        _line("女", x=120, y=50),
+        _line("病人6250712919", x=120, y=20),
+    ]
+    fields = extract_fields(lines, marked_labels=set())
+    assert fields["name"] is None
+    assert fields["medical_record_no"] == "6250712919"
+
+
+def test_extract_fields_recovers_mrn_from_much_higher_line_like_real_ocr():
+    lines = [
+        _line("姓名/病歷號", x=0, y=80),
+        _line("病人6258712919", x=120, y=20),
+    ]
+    fields = extract_fields(lines, marked_labels=set())
+    assert fields["name"] is None
+    assert fields["medical_record_no"] == "6258712919"
+
+
 def test_extract_identity_and_gender_from_marked_labels():
     lines = [
         _line("病人", x=10, y=50),

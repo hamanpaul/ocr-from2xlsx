@@ -11,6 +11,8 @@ _spec.loader.exec_module(mark_detect)
 
 dark_ratio = mark_detect.dark_ratio
 is_marked = mark_detect.is_marked
+match_probe_label = mark_detect.match_probe_label
+text_implied_marked_label = mark_detect.text_implied_marked_label
 
 
 def _filled(w, h, value):
@@ -47,3 +49,31 @@ def test_is_marked_false_for_empty_box():
 
 def test_is_marked_handles_empty_region():
     assert is_marked([]) is False
+
+
+def test_match_probe_label_accepts_exact_label():
+    assert match_probe_label("親友及照顧者") == "親友及照顧者"
+
+
+def test_match_probe_label_accepts_decorated_gender_labels():
+    assert match_probe_label("□女性") == "女性"
+    assert match_probe_label("女性□") == "女性"
+
+
+def test_match_probe_label_rejects_heading_and_quantity_text():
+    assert match_probe_label("女性數量：") is None
+    assert match_probe_label("B.綜合身份統計(病人就會填到ABC：其他一概只需填AB)") is None
+
+
+def test_text_implied_marked_label_detects_selected_gender_tokens():
+    assert text_implied_marked_label("中女性") == "女性"
+    assert text_implied_marked_label("V女性") == "女性"
+
+
+def test_text_implied_marked_label_detects_merged_patient_mrn():
+    assert text_implied_marked_label("病人6250712919") == "病人"
+
+
+def test_text_implied_marked_label_rejects_unselected_and_plain_labels():
+    assert text_implied_marked_label("□男性") is None
+    assert text_implied_marked_label("親友及照顧者") is None

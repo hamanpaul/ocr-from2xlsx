@@ -9,6 +9,8 @@ from typing import Any, Sequence
 DARK_THRESHOLD = 128      # luminance below this counts as ink
 MARKED_RATIO = 0.12       # fraction of dark pixels above which a region is "marked"
 _PROBE_LABELS = ("病人", "親友及照顧者", "一般民眾及其他", "女性", "男性")
+_LABEL_DECORATIONS = {"V", "v", "中", "✓", "✔", "☑", "☒", "✗", "×", "X", "x", "□"}
+_TEXT_IMPLIED_MARKERS = _LABEL_DECORATIONS - {"□"}
 
 
 def dark_ratio(region: Sequence[Sequence[float]], dark_threshold: int = DARK_THRESHOLD) -> float:
@@ -38,17 +40,48 @@ def _line_bbox(line: dict[str, Any]) -> tuple[float, float, float, float]:
     return (min(xs), min(ys), max(xs), max(ys))
 
 
+def match_probe_label(text: str) -> str | None:
+    raw = str(text or "").strip()
+    for label in _PROBE_LABELS:
+        if raw == label:
+            return label
+        if len(raw) == len(label) + 1:
+            if raw[0] in _LABEL_DECORATIONS and raw[1:] == label:
+                return label
+            if raw[:-1] == label and raw[-1] in _LABEL_DECORATIONS:
+                return label
+    return None
+
+
+def text_implied_marked_label(text: str) -> str | None:
+    raw = str(text or "").strip()
+    if not raw:
+        return None
+    for label in ("女性", "男性"):
+        if len(raw) == len(label) + 1:
+            if raw[0] in _TEXT_IMPLIED_MARKERS and raw[1:] == label:
+                return label
+            if raw[:-1] == label and raw[-1] in _TEXT_IMPLIED_MARKERS:
+                return label
+    for label in ("病人", "親友及照顧者", "一般民眾及其他"):
+        if raw.startswith(label) and raw != label and any(ch.isdigit() for ch in raw[len(label):]):
+            return label
+    return None
+
+
 def detect_marked_labels(image_path: str, lines: list[dict[str, Any]]) -> set[str]:
     from PIL import Image
 
     with Image.open(image_path) as image:
         grayscale = image.convert("L")
         width, height = grayscale.size
-
         marked: set[str] = set()
         for line in lines:
-            text = str(line.get("text") or "")
-            label = next((candidate for candidate in _PROBE_LABELS if candidate in text), None)
+            implied = text_implied_marked_label(str(line.get("text") or ""))
+            if implied is not None:
+                marked.add(implied)
+                continue
+            label = match_probe_label(str(line.get("text") or ""))
             if label is None:
                 continue
 

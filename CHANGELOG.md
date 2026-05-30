@@ -9,14 +9,23 @@
 
 ### Added
 - 新增 `plugins/paddleocr/mark_detect.py` 純函式打勾評分核心（灰階區域墨跡比例）。
+- PaddleOCR 外掛新增身分/性別打勾辨識（文字錨點 + 框內墨跡 + OCR 異常文字訊號）與手寫姓名/病歷號擷取。
+- `import-json --allow-incomplete`：辨識到的記錄即使缺病人限定欄位也可寫入（forced）以供核對。
+- 新增參考 PDF ground-truth fixture、可選的實機 PaddleOCR 驗證測試，與 `build/build_paddle_plugin.py` 的 bundle 內容回歸測試。
+
+### Fixed
+- `plugins/paddleocr/mark_detect.py`：改為只接受獨立或單字元裝飾的選項標籤，避免把標題與「數量」類欄位誤判成可勾選標籤。
+- `plugins/paddleocr/mark_detect.py`：新增 OCR 文字異常的勾選推論（如 `中女性`、`V女性`、`病人6250712919`），讓實際被勾選的身份/性別可在未探到像素勾記時仍被辨識；純 `□標籤` 仍只作為 probe label，不視為文字已勾選。
+- `plugins/paddleocr/field_extract.py`：忽略單一中文字元的姓名雜訊，並保留姓名欄錨點上方鄰近行的病歷號回收。
+- 實機 PaddleOCR ground-truth 驗證目前仍會漏掉參考表單的手寫 `name`（`葉心安`）；README 已同步標示這是目前 mobile recognizer 的已知限制，建議搭配 `import-json --allow-incomplete` 進行人工核對。
+- `build/build_paddle_plugin.py`：可攜 bundle 現在會一併打包 `mark_detect.py`。
+- `prepare_records`：當 OCR backend（如 PaddleOCR 外掛）未提供 `record_id` 時，依頁序自動指派穩定 id（`pdf-0001`…），讓真實 OCR 結果能流入 `import-json`；既有 backend 提供的 `record_id` 仍保留。
+- `build/package.py`：清理 `build/` 時保留 `build_paddle_plugin.py`，避免主程式打包誤刪可攜外掛建置腳本。
 
 ### Changed
 - `plugins/paddleocr/field_extract.py`：重構 `extract_name_and_mrn`，改用候選文字列表式擷取（`_name_from_candidates` / `_mrn_from_candidates`），支援手寫姓名與純數字病歷號（`_DIGIT_RUN \d{6,}`）分置兩格的版面；`_mrn_from_candidates` 同時嘗試 `_MRN_TOKEN`（含連字號）與 `_DIGIT_RUN`，保留既有含字母/連字號病歷號相容性。`extract_fields` 新增 `marked_labels=None` 參數（供後續任務使用），並補上 `identity`/`gender` 空字串欄位。
 - `tests/test_paddle_field_extract.py`：新增 2 項測試——手寫姓名/病歷號分置兩格（anchor-row-handwriting）與 OCR 將標籤與數字合併（merges-label-and-digits），共 16 項全通過。
-
-### Fixed
-- `prepare_records`：當 OCR backend（如 PaddleOCR 外掛）未提供 `record_id` 時，依頁序自動指派穩定 id（`pdf-0001`…），讓真實 OCR 結果能流入 `import-json`；既有 backend 提供的 `record_id` 仍保留。
-- `build/package.py`：清理 `build/` 時保留 `build_paddle_plugin.py`，避免主程式打包誤刪可攜外掛建置腳本。
+- `src/ocr_from2xlsx/preprocess.py`：PDF 頁面預處理由 200 DPI 提升到 400 DPI，改善真實 PaddleOCR 對身分/性別與病歷號的擷取表現。
 
 ### Changed
 - `plugins/paddleocr/field_extract.py`：強化姓名/病歷號擷取準確度——過濾打勾框與表單標籤雜訊（病人/親友/民眾/病歷號…），並要求候選值需含病歷號或中文姓名才接受，避免把鄰列的勾選框或雜訊（如 OCR 誤判的 "V"）當成姓名。

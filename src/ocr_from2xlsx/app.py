@@ -7,8 +7,92 @@ from tkinter import filedialog, messagebox, ttk
 from ocr_from2xlsx.capture import JsonRecordSource
 from ocr_from2xlsx.correction_store import default_correction_store_path
 from ocr_from2xlsx.domain import Record
+from ocr_from2xlsx.form_layout import FormLayout
 from ocr_from2xlsx.name_suggestion import NAME_UNCONFIRMED, confirm_name
 from ocr_from2xlsx.session import ImportSession
+
+
+class ConfirmForm:
+    def __init__(self, parent: tk.Misc, layout: FormLayout) -> None:
+        self.layout = layout
+        self.frame = ttk.Frame(parent)
+        self.text_fields: dict[str, tk.StringVar] = {}
+        self.single_choice_fields: dict[str, tk.StringVar] = {}
+        self.multi_choice_fields: dict[str, dict[str, tk.BooleanVar]] = {}
+        self.frame.columnconfigure(0, weight=1)
+
+        for section_row, section in enumerate(layout.sections):
+            group = ttk.LabelFrame(self.frame, text=f"{section.id} {section.title}")
+            group.grid(row=section_row, column=0, sticky="ew", padx=4, pady=4)
+            group.columnconfigure(1, weight=1)
+            for field_row, field in enumerate(section.fields):
+                ttk.Label(group, text=field.title).grid(
+                    row=field_row, column=0, sticky="nw", padx=(0, 8), pady=3
+                )
+                if field.kind == "text":
+                    var = tk.StringVar()
+                    ttk.Entry(group, textvariable=var, width=30).grid(
+                        row=field_row, column=1, sticky="ew", pady=3
+                    )
+                    self.text_fields[field.key] = var
+                elif field.kind == "single_choice":
+                    var = tk.StringVar(value="")
+                    options = ttk.Frame(group)
+                    options.grid(row=field_row, column=1, sticky="w", pady=3)
+                    for option_index, option in enumerate(field.options):
+                        ttk.Radiobutton(
+                            options,
+                            text=option.label,
+                            value=option.code,
+                            variable=var,
+                        ).grid(
+                            row=option_index // 4,
+                            column=option_index % 4,
+                            sticky="w",
+                            padx=(0, 8),
+                            pady=2,
+                        )
+                    self.single_choice_fields[field.key] = var
+                elif field.kind == "multi_choice":
+                    options = ttk.Frame(group)
+                    options.grid(row=field_row, column=1, sticky="w", pady=3)
+                    code_vars: dict[str, tk.BooleanVar] = {}
+                    for option_index, option in enumerate(field.options):
+                        bvar = tk.BooleanVar(value=False)
+                        ttk.Checkbutton(options, text=option.label, variable=bvar).grid(
+                            row=option_index // 4,
+                            column=option_index % 4,
+                            sticky="w",
+                            padx=(0, 8),
+                            pady=2,
+                        )
+                        code_vars[option.code] = bvar
+                    self.multi_choice_fields[field.key] = code_vars
+                else:
+                    raise TypeError(f"Unsupported field kind: {field.kind!r}")
+
+    def prefill(self, state: dict[str, object]) -> None:
+        for key, var in self.text_fields.items():
+            value = state.get(key, "")
+            var.set("" if value is None else str(value))
+        for key, var in self.single_choice_fields.items():
+            value = state.get(key, "")
+            var.set("" if value is None else str(value))
+        for key, code_vars in self.multi_choice_fields.items():
+            selected = state.get(key, set())
+            selected_codes = set() if selected is None else set(selected)
+            for code, bvar in code_vars.items():
+                bvar.set(code in selected_codes)
+
+    def collect(self) -> dict[str, object]:
+        state: dict[str, object] = {}
+        for key, var in self.text_fields.items():
+            state[key] = var.get()
+        for key, var in self.single_choice_fields.items():
+            state[key] = var.get()
+        for key, code_vars in self.multi_choice_fields.items():
+            state[key] = {code for code, bvar in code_vars.items() if bvar.get()}
+        return state
 
 
 class ReviewApp(tk.Tk):

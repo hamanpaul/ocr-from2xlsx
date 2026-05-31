@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import tkinter as tk
 from pathlib import Path
 
 import pytest
 
+from ocr_from2xlsx import app as app_module
 from ocr_from2xlsx.correction_store import load_corrections
 from ocr_from2xlsx.app import ReviewApp
+from ocr_from2xlsx.form_layout import service_record_layout
 from ocr_from2xlsx.session import AcceptResult
 from tests.test_json_io import make_record
 
@@ -47,6 +50,47 @@ class FakeListbox:
 
     def see(self, _index) -> None:
         return None
+
+
+def test_confirm_form_round_trips_prefilled_state() -> None:
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        pytest.skip(f"no display available for Tk: {exc}")
+
+    root.withdraw()
+    try:
+        form = app_module.ConfirmForm(root, service_record_layout())
+        state = {
+            "service_date": "2026-05-31",
+            "identity": "patient",
+            "name": "王小明",
+            "medical_record_no": "A123456",
+            "diagnosis_date": "2026-01-15",
+            "gender": "female",
+            "nationality": "local",
+            "age": "51_60",
+            "channel": "internal_referral",
+            "disease_status": "treating",
+            "source": "outpatient",
+            "newly_diagnosed": "true",
+            "consultation.health_medical": {"screening_prevention", "other"},
+            "consultation.care_support": {"peer_experience"},
+            "supplies": {"wig_hat"},
+            "cancer": {"breast_cancer", "lung_cancer"},
+        }
+
+        form.prefill(state)
+
+        assert isinstance(form.frame, tk.Widget)
+        assert isinstance(form.text_fields["service_date"], tk.StringVar)
+        assert isinstance(form.single_choice_fields["identity"], tk.StringVar)
+        assert isinstance(form.multi_choice_fields["cancer"]["breast_cancer"], tk.BooleanVar)
+        collected = form.collect()
+        for key, value in state.items():
+            assert collected[key] == value
+    finally:
+        root.destroy()
 
 
 @pytest.fixture

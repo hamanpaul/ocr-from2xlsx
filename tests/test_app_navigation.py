@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from ocr_from2xlsx import app as app_module
+from ocr_from2xlsx.confirm_form import record_to_form_state
 from ocr_from2xlsx.correction_store import load_corrections
 from ocr_from2xlsx.app import ReviewApp
 from ocr_from2xlsx.form_layout import service_record_layout
@@ -50,6 +51,103 @@ class FakeListbox:
 
     def see(self, _index) -> None:
         return None
+
+
+class FakePreview:
+    def __init__(self) -> None:
+        self.text = ""
+        self.state = "normal"
+        self.image = None
+
+    def configure(self, state: str | None = None) -> None:
+        if state is not None:
+            self.state = state
+
+    def delete(self, _start: str, _end: str) -> None:
+        self.text = ""
+        self.image = None
+
+    def insert(self, _index: str, value: str) -> None:
+        self.text += value
+
+    def image_create(self, _index: str, image) -> None:
+        self.image = image
+
+    def get(self, _start: str, _end: str) -> str:
+        return self.text
+
+
+class FakeConfirmForm:
+    def __init__(self, fields: dict[str, FakeVar]) -> None:
+        self._fields = fields
+        self.state: dict[str, object] = {}
+
+    def prefill(self, state: dict[str, object]) -> None:
+        self.state = dict(state)
+        for key in ("service_date", "identity", "name", "medical_record_no", "gender"):
+            if key in self._fields and key in state:
+                value = state[key]
+                self._fields[key].set("" if value is None else str(value))
+
+    def collect(self) -> dict[str, object]:
+        collected = dict(self.state)
+        for key in ("service_date", "identity", "name", "medical_record_no", "gender"):
+            if key in self._fields:
+                collected[key] = self._fields[key].get()
+        return collected
+
+
+def _preview_text(preview: object) -> str:
+    if isinstance(preview, tk.Text):
+        return preview.get("1.0", "end-1c")
+    if hasattr(preview, "get"):
+        return preview.get("1.0", "end-1c")
+    return str(preview)
+
+
+def test_review_app_builds_confirm_form_and_prefills_record(tmp_path: Path) -> None:
+    try:
+        app = ReviewApp()
+    except tk.TclError as exc:
+        pytest.skip(f"no display available for Tk: {exc}")
+
+    app.withdraw()
+    try:
+        record = make_record("scan-0003")
+        app.loaded_json_path = tmp_path / "records.json"
+
+        app._show_record(record)
+
+        expected_state = record_to_form_state(app.layout, record)
+        collected = app.confirm_form.collect()
+        assert app.layout == service_record_layout()
+        assert collected["service_date"] == expected_state["service_date"]
+        assert collected["identity"] == expected_state["identity"]
+        assert collected["name"] == expected_state["name"]
+        assert collected["medical_record_no"] == expected_state["medical_record_no"]
+        assert collected["gender"] == expected_state["gender"]
+        assert collected["cancer"] == expected_state["cancer"]
+    finally:
+        app.destroy()
+
+
+def test_show_record_without_source_image_keeps_placeholder_preview(tmp_path: Path) -> None:
+    try:
+        app = ReviewApp()
+    except tk.TclError as exc:
+        pytest.skip(f"no display available for Tk: {exc}")
+
+    app.withdraw()
+    try:
+        record = make_record("scan-0004")
+        record.source.preprocessed_image_path = "missing-preview.png"
+        app.loaded_json_path = tmp_path / "records.json"
+
+        app._show_record(record)
+
+        assert "攝影機或圖片預覽區" in _preview_text(app.preview)
+    finally:
+        app.destroy()
 
 
 def test_confirm_form_round_trips_prefilled_state() -> None:
@@ -125,6 +223,7 @@ def app(monkeypatch: pytest.MonkeyPatch) -> ReviewApp:
     review_app.written_indices = set()
     review_app.loaded_json_path = None
     review_app.correction_store_path = None
+    review_app.layout = service_record_layout()
     review_app.fields = {
         "record_id": FakeVar(),
         "service_date": FakeVar(),
@@ -133,6 +232,9 @@ def app(monkeypatch: pytest.MonkeyPatch) -> ReviewApp:
         "medical_record_no": FakeVar(),
         "gender": FakeVar(),
     }
+    review_app.confirm_form = FakeConfirmForm(review_app.fields)
+    review_app.preview = FakePreview()
+    review_app._preview_image = None
     review_app.status_list = FakeListbox()
     return review_app
 

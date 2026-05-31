@@ -222,3 +222,31 @@ def test_constructor_annotations_accept_sequences() -> None:
     assert sections_annotation != "tuple[Section, ...]", (
         f"FormLayout.sections annotation should accept sequences, not tuple-only: {sections_annotation}"
     )
+
+
+def test_field_options_has_default_in_constructor_and_dataclass_metadata() -> None:
+    """Verify that Field.options has a default both in constructor and dataclass metadata.
+    
+    Regression test: Field.__init__ has options=() default, so dataclass metadata
+    should also report a default (not MISSING). Both normal construction and
+    dataclass introspection must agree on the public contract.
+    """
+    import dataclasses
+    import inspect
+    
+    # Constructor signature should show a default
+    field_sig = inspect.signature(Field)
+    options_param = field_sig.parameters["options"]
+    assert options_param.default is not inspect.Parameter.empty, (
+        "Field.__init__(options=...) should have a default value in signature"
+    )
+    
+    # Dataclass metadata should also show a default (not MISSING)
+    field_info = next(f for f in dataclasses.fields(Field) if f.name == "options")
+    has_default = (
+        field_info.default is not dataclasses.MISSING
+        or field_info.default_factory is not dataclasses.MISSING
+    )
+    assert has_default, (
+        "Field.options dataclass field should have a default or default_factory"
+    )

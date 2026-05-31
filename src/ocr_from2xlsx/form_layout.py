@@ -9,7 +9,7 @@ form templates and their metadata.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Iterator, Literal
 
 Kind = Literal["text", "single_choice", "multi_choice"]
@@ -29,7 +29,7 @@ class Field:
     kind: Kind
     record_path: str | None
     anchor_cell: str
-    options: tuple[Option, ...]
+    options: tuple[Option, ...] = field(default_factory=tuple)
 
     def __init__(
         self,

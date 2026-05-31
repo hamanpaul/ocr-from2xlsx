@@ -37,21 +37,41 @@ def _weighted_choice(items: Sequence[tuple[str, str]], weights: Sequence[float],
     return items[-1]
 
 
+def _option_key(field_key: str, code: str) -> tuple[str, str]:
+    return field_key, code
+
+
+def _feasible_mark_count(fields: Sequence[FieldOptions]) -> int:
+    return sum(1 if field.kind == "single_choice" else len(field.codes) for field in fields)
+
+
+def _coverage_count(coverage: dict[object, int] | None, field_key: str, code: str) -> int:
+    if coverage is None:
+        return 0
+    option_key = _option_key(field_key, code)
+    if option_key in coverage:
+        return coverage[option_key]
+    return coverage.get(code, 0)
+
+
 def sample_selection(
     fields: Sequence[FieldOptions],
     rng: Random,
     *,
     min_ratio: float = 0.10,
     max_ratio: float = 0.50,
-    coverage: dict[str, int] | None = None,
+    coverage: dict[object, int] | None = None,
 ) -> dict[str, list[str]]:
     fields = tuple(fields)
     total_codes = sum(len(field.codes) for field in fields)
     if total_codes <= 0:
         return {}
 
+    feasible_marks = _feasible_mark_count(fields)
     lower = max(1, ceil(total_codes * min_ratio))
     upper = max(lower, floor(total_codes * max_ratio))
+    lower = min(lower, feasible_marks)
+    upper = min(upper, feasible_marks)
     target = rng.randint(lower, upper)
 
     remaining: dict[str, list[str]] = {field.key: list(field.codes) for field in fields}
@@ -71,7 +91,7 @@ def sample_selection(
                 if coverage is None:
                     weights.append(1.0)
                 else:
-                    weights.append(1.0 / (coverage.get(code, 0) + 1.0))
+                    weights.append(1.0 / (_coverage_count(coverage, field.key, code) + 1.0))
 
         if not candidates:
             break
@@ -96,7 +116,7 @@ def generate_until_coverage(
     max_images: int = 1000,
 ) -> list[dict[str, list[str]]]:
     fields = tuple(fields)
-    coverage = {code: 0 for field in fields for code in field.codes}
+    coverage = {_option_key(field.key, code): 0 for field in fields for code in field.codes}
     selections: list[dict[str, list[str]]] = []
 
     for _ in range(max_images):
@@ -106,8 +126,8 @@ def generate_until_coverage(
         if not selection:
             break
         selections.append(selection)
-        for codes in selection.values():
-            for code in codes:
-                coverage[code] += 1
+        for field in fields:
+            for code in selection.get(field.key, []):
+                coverage[_option_key(field.key, code)] += 1
 
     return selections

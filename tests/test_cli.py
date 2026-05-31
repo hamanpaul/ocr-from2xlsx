@@ -335,6 +335,103 @@ def test_import_json_allow_incomplete_writes_forced_row(tmp_path: Path) -> None:
     wb.close()
 
 
+def _make_unconfirmed_name_batch() -> dict:
+    """Build a minimal batch JSON with a public_other record carrying name.unconfirmed."""
+    return {
+        "schema_version": "service_record.v1",
+        "source_batch": {
+            "created_at": "2026-05-31T00:00:00+08:00",
+            "source_type": "manual",
+            "template_name": "t",
+        },
+        "records": [
+            {
+                "record_id": "pdf-0001",
+                "service_date": "2025-06-25",
+                "identity": "public_other",
+                "name": "葉心安",
+                "medical_record_no": "6250712919",
+                "gender": "female",
+                "review": {"status": "pending"},
+                "ocr": {"raw_text": "", "warnings": ["name.unconfirmed"]},
+            }
+        ],
+    }
+
+
+def test_import_json_allow_unconfirmed_name_blocked_without_flag(tmp_path: Path) -> None:
+    import json as _json
+
+    template = tmp_path / "t.xlsx"
+    working = tmp_path / "w.xlsx"
+    create_workbook_template(template)
+
+    inp = tmp_path / "in.json"
+    inp.write_text(_json.dumps(_make_unconfirmed_name_batch()), encoding="utf-8")
+
+    code = main(
+        [
+            "import-json",
+            "--input",
+            str(inp),
+            "--template",
+            str(template),
+            "--working",
+            str(working),
+            "--report-json",
+            str(tmp_path / "r.json"),
+            "--report-csv",
+            str(tmp_path / "r.csv"),
+        ]
+    )
+
+    assert code == 1  # blocked
+    wb = load_workbook(working)
+    ws = wb[WORKBOOK_SHEET]
+    name_col = next(c.column for c in ws[1] if c.value == BASIC_COLUMN_BY_FIELD["name"])
+    assert ws.cell(row=2, column=name_col).value is None  # NOT written
+    wb.close()
+
+
+def test_import_json_allow_unconfirmed_name_writes_and_keeps_warning(tmp_path: Path) -> None:
+    import json as _json
+
+    template = tmp_path / "t.xlsx"
+    working = tmp_path / "w.xlsx"
+    create_workbook_template(template)
+
+    inp = tmp_path / "in.json"
+    inp.write_text(_json.dumps(_make_unconfirmed_name_batch()), encoding="utf-8")
+    report_json = tmp_path / "r.json"
+
+    code = main(
+        [
+            "import-json",
+            "--input",
+            str(inp),
+            "--template",
+            str(template),
+            "--working",
+            str(working),
+            "--report-json",
+            str(report_json),
+            "--report-csv",
+            str(tmp_path / "r.csv"),
+            "--allow-unconfirmed-name",
+        ]
+    )
+
+    assert code == 0
+    wb = load_workbook(working)
+    ws = wb[WORKBOOK_SHEET]
+    name_col = next(c.column for c in ws[1] if c.value == BASIC_COLUMN_BY_FIELD["name"])
+    assert ws.cell(row=2, column=name_col).value == "葉心安"  # written
+    wb.close()
+    report = _json.loads(report_json.read_text(encoding="utf-8"))
+    assert report[0]["status"] in ("written", "forced")
+    assert "name.unconfirmed" in report[0]["warnings"]  # warning retained
+
+
 def test_import_json_cli_warns_when_accept_fails_before_returning_result(
     tmp_path: Path, capsys, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -365,7 +462,7 @@ def test_import_json_cli_warns_when_accept_fails_before_returning_result(
         def __exit__(self, exc_type: object, exc: object, traceback: object) -> None:
             self.closed = True
 
-        def accept_scan(self, record: object, force: bool = False) -> None:
+        def accept_scan(self, record: object, force: bool = False, allow_unconfirmed_name: bool = False) -> None:
             raise OSError("save failed")
 
         def write_report(self, json_path: object, csv_path: object) -> None:

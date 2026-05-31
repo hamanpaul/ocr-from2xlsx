@@ -68,12 +68,20 @@ class ImportSession:
         record: Record,
         force: bool = False,
         human_confirmed: bool = False,
+        allow_unconfirmed_name: bool = False,
     ) -> AcceptResult:
         result = validate_record(record, self.existing_duplicate_keys)
         blockers = list(result.blockers)
         warnings = list(result.warnings)
-        if not human_confirmed and NAME_UNCONFIRMED in record.ocr.warnings and NAME_UNCONFIRMED not in blockers:
+        if (
+            not human_confirmed
+            and not allow_unconfirmed_name
+            and NAME_UNCONFIRMED in record.ocr.warnings
+            and NAME_UNCONFIRMED not in blockers
+        ):
             blockers.append(NAME_UNCONFIRMED)
+        if allow_unconfirmed_name and NAME_UNCONFIRMED in record.ocr.warnings and NAME_UNCONFIRMED not in warnings:
+            warnings.append(NAME_UNCONFIRMED)
         duplicate_key = None
         if _duplicate_key_is_usable(record):
             duplicate_key = record.duplicate_key()
@@ -140,10 +148,15 @@ class ImportSession:
             warnings=warnings,
         )
 
-    def accept_scan_batch(self, batch: Batch, force: bool = False) -> list[AcceptResult]:
+    def accept_scan_batch(
+        self,
+        batch: Batch,
+        force: bool = False,
+        allow_unconfirmed_name: bool = False,
+    ) -> list[AcceptResult]:
         results: list[AcceptResult] = []
         for record in batch.records:
-            results.append(self.accept_scan(record, force=force))
+            results.append(self.accept_scan(record, force=force, allow_unconfirmed_name=allow_unconfirmed_name))
         return results
 
     def write_report(self, json_path: Path | str, csv_path: Path | str) -> None:

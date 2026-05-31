@@ -96,6 +96,13 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Force writable-only blockers to import incomplete records.",
     )
+    import_parser.add_argument(
+        "--allow-unconfirmed-name",
+        action="store_true",
+        help="DEV ONLY: write records whose name is still machine-suggested (name.unconfirmed) "
+             "without GUI confirmation; the unconfirmed warning is retained in the report. "
+             "Deployment should require GUI confirmation instead.",
+    )
     prepare_parser = subparsers.add_parser(
         "prepare-records",
         help="Prepare normalized JSON records from PDF inputs.",
@@ -173,7 +180,11 @@ def main(argv: list[str] | None = None) -> int:
             with ImportSession.start(Path(args.template), Path(args.working)) as session:
                 for record in batch.records:
                     may_have_imports = True
-                    result = session.accept_scan(record, force=args.allow_incomplete)
+                    result = session.accept_scan(
+                        record,
+                        force=args.allow_incomplete,
+                        allow_unconfirmed_name=args.allow_unconfirmed_name,
+                    )
                     if result.status == "blocked":
                         blocked_count += 1
                     if result.status in {"forced", "written"}:

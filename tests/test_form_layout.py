@@ -782,11 +782,11 @@ def _read_workbook_cells():
     """Read all non-empty cell texts from the workbook sheet."""
     if load_workbook is None:
         import pytest
-        pytest.skip("openpyxl not available")
+        pytest.fail("openpyxl not available")
     
     if not _XLSX.exists():
         import pytest
-        pytest.skip(f"Workbook not found: {_XLSX}")
+        pytest.fail(f"Workbook not found: {_XLSX}")
     
     wb = load_workbook(_XLSX, data_only=True)
     ws = wb[_SHEET]
@@ -801,6 +801,29 @@ def _read_workbook_cells():
     
     wb.close()
     return cells
+
+
+# Regression tests for workbook validation fail-fast requirement
+def test_read_workbook_cells_fails_without_openpyxl(monkeypatch):
+    """_read_workbook_cells must fail (not skip) when openpyxl unavailable."""
+    import pytest
+    # Monkeypatch the module-level load_workbook to None
+    monkeypatch.setattr("tests.test_form_layout.load_workbook", None)
+    
+    with pytest.raises(pytest.fail.Exception):
+        _read_workbook_cells()
+
+
+def test_read_workbook_cells_fails_with_missing_workbook(monkeypatch):
+    """_read_workbook_cells must fail (not skip) when workbook file missing."""
+    import pytest
+    from pathlib import Path
+    # Monkeypatch _XLSX to a nonexistent path
+    nonexistent = Path("/nonexistent/workbook.xlsx")
+    monkeypatch.setattr("tests.test_form_layout._XLSX", nonexistent)
+    
+    with pytest.raises(pytest.fail.Exception):
+        _read_workbook_cells()
 
 
 def test_every_modeled_option_matches_sheet_cell():

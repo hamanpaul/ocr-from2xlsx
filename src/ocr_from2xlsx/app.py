@@ -157,7 +157,11 @@ class ReviewApp(tk.Tk):
             side=tk.LEFT, padx=4
         )
         ttk.Button(toolbar, text="匯入 JSON", command=self._load_json).pack(side=tk.LEFT, padx=4)
-        ttk.Button(toolbar, text="下一張 / 確認目前資料", command=self._next_record).pack(
+        ttk.Button(toolbar, text="上一筆", command=self._previous_record).pack(side=tk.LEFT, padx=4)
+        ttk.Button(toolbar, text="下一筆", command=self._next_record).pack(
+            side=tk.LEFT, padx=4
+        )
+        ttk.Button(toolbar, text="確認並寫入", command=self._confirm_current).pack(
             side=tk.LEFT, padx=4
         )
         ttk.Button(toolbar, text="強制寫入", command=self._force_write).pack(side=tk.LEFT, padx=4)
@@ -250,35 +254,58 @@ class ReviewApp(tk.Tk):
             messagebox.showerror("缺少資料", "請先載入 JSON 資料。")
             return
         if self.editing:
-            messagebox.showerror("尚未保存", "目前資料已修改，請先使用「強制寫入」。")
+            messagebox.showerror("尚未保存", "目前資料已修改，請先使用「確認並寫入」或「強制寫入」。")
             return
-        if self.session and self.current_index >= 0:
-            if self.current_index not in self.written_indices:
-                current = self.records[self.current_index]
-                try:
-                    human_confirmed = self._needs_name_confirmation(current)
-                    if human_confirmed:
-                        result = self.session.accept_scan(current, human_confirmed=True)
-                    else:
-                        result = self.session.accept_scan(current)
-                except (OSError, ValueError) as exc:
-                    messagebox.showerror("寫入失敗", str(exc))
-                    return
-                self._push_status(
-                    f"{current.record_id}: {result.status} row={result.row_number} blockers={result.blockers}"
-                )
-                if result.status == "blocked":
-                    return
-                if result.status in {"forced", "written"}:
-                    if human_confirmed:
-                        self._persist_confirmed_name_after_write(current)
-                    self.written_indices.add(self.current_index)
         self.editing = False
-        self.current_index += 1
+        if self.current_index < 0:
+            self.current_index = 0
+        else:
+            self.current_index += 1
         if self.current_index >= len(self.records):
             messagebox.showinfo("完成", "沒有更多資料。")
             return
         self._show_record(self.records[self.current_index])
+
+    def _previous_record(self) -> None:
+        if not self.records:
+            messagebox.showerror("缺少資料", "請先載入 JSON 資料。")
+            return
+        if self.editing:
+            messagebox.showerror("尚未保存", "目前資料已修改，請先使用「確認並寫入」或「強制寫入」。")
+            return
+        if self.current_index <= 0:
+            self.current_index = 0
+        else:
+            self.current_index -= 1
+        self._show_record(self.records[self.current_index])
+
+    def _confirm_current(self) -> None:
+        if not self.session:
+            messagebox.showerror("缺少工作檔", "請先選擇模板 XLSX。")
+            return
+        if self.current_index < 0:
+            messagebox.showerror("缺少資料", "請先載入 JSON 資料。")
+            return
+        if self.current_index in self.written_indices:
+            messagebox.showinfo("提示", "目前資料已寫入，請切換下一筆。")
+            return
+        record = self.records[self.current_index]
+        self._apply_form_to_record(record)
+        human_confirmed = self._needs_name_confirmation(record)
+        try:
+            result = self.session.accept_scan(record, human_confirmed=True)
+        except (OSError, ValueError) as exc:
+            messagebox.showerror("寫入失敗", str(exc))
+            return
+        self._push_status(f"{result.record_id}: {result.status} row={result.row_number} blockers={result.blockers}")
+        if result.status == "blocked":
+            return
+        if result.status in {"forced", "written"}:
+            if human_confirmed:
+                self._persist_confirmed_name_after_write(record)
+            self.written_indices.add(self.current_index)
+            self.editing = False
+            self._next_record()
 
     def _force_write(self) -> None:
         if not self.session:
@@ -292,12 +319,9 @@ class ReviewApp(tk.Tk):
             return
         record = self.records[self.current_index]
         self._apply_form_to_record(record)
+        human_confirmed = self._needs_name_confirmation(record)
         try:
-            human_confirmed = self._needs_name_confirmation(record)
-            if human_confirmed:
-                result = self.session.accept_scan(record, force=True, human_confirmed=True)
-            else:
-                result = self.session.accept_scan(record, force=True)
+            result = self.session.accept_scan(record, force=True, human_confirmed=True)
         except (OSError, ValueError) as exc:
             messagebox.showerror("寫入失敗", str(exc))
             return

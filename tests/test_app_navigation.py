@@ -1,16 +1,20 @@
 from __future__ import annotations
 
 import tkinter as tk
+from tkinter import ttk
 from pathlib import Path
 
 import pytest
+from openpyxl import load_workbook
 
 from ocr_from2xlsx import app as app_module
 from ocr_from2xlsx.confirm_form import record_to_form_state
+from ocr_from2xlsx.constants import BASIC_COLUMN_BY_FIELD
 from ocr_from2xlsx.correction_store import load_corrections
 from ocr_from2xlsx.app import ReviewApp
 from ocr_from2xlsx.form_layout import service_record_layout
-from ocr_from2xlsx.session import AcceptResult
+from ocr_from2xlsx.session import AcceptResult, ImportSession
+from tests.fixtures import create_workbook_template
 from tests.test_json_io import make_record
 
 
@@ -97,6 +101,22 @@ class FakeConfirmForm:
         return collected
 
 
+def _column_for_header(sheet, header: str) -> int:
+    for cell in sheet[1]:
+        if cell.value == header:
+            return cell.column
+    raise AssertionError(f"Missing header in fixture: {header}")
+
+
+def _button_texts(widget: tk.Misc) -> list[str]:
+    texts: list[str] = []
+    for child in widget.winfo_children():
+        if isinstance(child, ttk.Button):
+            texts.append(child.cget("text"))
+        texts.extend(_button_texts(child))
+    return texts
+
+
 def _preview_text(preview: object) -> str:
     if isinstance(preview, tk.Text):
         return preview.get("1.0", "end-1c")
@@ -127,7 +147,58 @@ def test_review_app_builds_confirm_form_and_prefills_record(tmp_path: Path) -> N
         assert collected["medical_record_no"] == expected_state["medical_record_no"]
         assert collected["gender"] == expected_state["gender"]
         assert collected["cancer"] == expected_state["cancer"]
+        assert {"上一筆", "下一筆", "確認並寫入", "強制寫入"} <= set(_button_texts(app))
     finally:
+        app.destroy()
+
+
+def test_confirm_current_writes_whole_page_and_clears_unconfirmed_name(tmp_path: Path) -> None:
+    try:
+        app = ReviewApp()
+    except tk.TclError as exc:
+        pytest.skip(f"no display available for Tk: {exc}")
+
+    app.withdraw()
+    template = tmp_path / "template.xlsx"
+    working = tmp_path / "working.xlsx"
+    create_workbook_template(template)
+    session = ImportSession.start(template, working)
+    try:
+        first = make_record("scan-0001")
+        first.ocr.warnings = ["name.unconfirmed"]
+        first.ocr.raw_text = "癌症資源中心服務紀錄表\n姓名 王小明"
+        second = make_record("scan-0002")
+        app.session = session
+        app.records = [first, second]
+        app.loaded_json_path = tmp_path / "records.json"
+        app.correction_store_path = tmp_path / "name_corrections.jsonl"
+
+        app._next_record()
+        app.confirm_form.text_fields["name"].set(" 王小明 ")
+        app.confirm_form.multi_choice_fields["cancer"]["lung_cancer"].set(True)
+
+        app._confirm_current()
+
+        assert app.written_indices == {0}
+        assert app.current_index == 1
+        assert app.fields["record_id"].get() == second.record_id
+        assert first.name == "王小明"
+        assert first.ocr.warnings == []
+        assert set(first.patient_fields.cancers) == {"breast_cancer", "lung_cancer"}
+        assert load_corrections(app.correction_store_path)[0].final_value == "王小明"
+        assert any(
+            "scan-0001: written" in status for status in app.status_list.get(0, tk.END)
+        )
+
+        workbook = load_workbook(working)
+        try:
+            sheet = workbook["個案總表"]
+            name_col = _column_for_header(sheet, BASIC_COLUMN_BY_FIELD["name"])
+            assert sheet.cell(row=2, column=name_col).value == "王小明"
+        finally:
+            workbook.close()
+    finally:
+        session.close()
         app.destroy()
 
 
@@ -260,7 +331,7 @@ def test_force_write_does_not_advance(app: ReviewApp) -> None:
     assert app.current_index == 0
     assert app.editing is False
     assert app.written_indices == {0}
-    assert session.calls == [(records[0].record_id, True, False)]
+    assert session.calls == [(records[0].record_id, True, True)]
     assert app.fields["record_id"].get() == records[0].record_id
 
 
@@ -316,12 +387,11 @@ def test_force_write_skips_when_already_written(
     assert app.written_indices == {0}
 
 
-def test_next_record_skips_written_record(app: ReviewApp) -> None:
+def test_next_record_browses_without_writing_current_record(app: ReviewApp) -> None:
     records = [make_record("scan-0001"), make_record("scan-0002")]
     app.records = records
     app.current_index = 0
     app._show_record(records[0])
-    app.written_indices = {0}
 
     class FailingSession:
         def accept_scan(self, record, force: bool = False) -> AcceptResult:
@@ -336,6 +406,47 @@ def test_next_record_skips_written_record(app: ReviewApp) -> None:
 
     assert app.current_index == 1
     assert app.fields["record_id"].get() == records[1].record_id
+    assert app.written_indices == set()
+
+
+def test_previous_record_browses_without_writing_current_record(app: ReviewApp) -> None:
+    records = [make_record("scan-0001"), make_record("scan-0002")]
+    app.records = records
+    app.current_index = 1
+    app._show_record(records[1])
+
+    class FailingSession:
+        def accept_scan(self, record, force: bool = False) -> AcceptResult:
+            raise AssertionError("accept_scan should not be called")
+
+        def close(self) -> None:
+            return None
+
+    app.session = FailingSession()
+
+    ReviewApp._previous_record(app)
+
+    assert app.current_index == 0
+    assert app.fields["record_id"].get() == records[0].record_id
+
+
+def test_next_record_from_initial_index_shows_first_record(app: ReviewApp) -> None:
+    record = make_record("scan-0001")
+    app.records = [record]
+
+    class FailingSession:
+        def accept_scan(self, record, force: bool = False) -> AcceptResult:
+            raise AssertionError("accept_scan should not be called")
+
+        def close(self) -> None:
+            return None
+
+    app.session = FailingSession()
+
+    app._next_record()
+
+    assert app.current_index == 0
+    assert app.fields["record_id"].get() == record.record_id
 
 
 def test_load_json_sets_default_correction_store_path(
@@ -363,45 +474,17 @@ def test_load_json_sets_default_correction_store_path(
     assert app.correction_store_path == json_path.parent / "name_corrections.jsonl"
 
 
-def test_next_record_confirms_unconfirmed_name_and_clears_warning(
+def test_confirm_current_blocked_does_not_advance_or_persist_unconfirmed_name(
     app: ReviewApp, tmp_path: Path
 ) -> None:
     record = make_record("scan-0001")
-    expected_name = record.name
+    next_record = make_record("scan-0002")
     record.ocr.warnings = ["name.unconfirmed"]
     record.ocr.raw_text = "癌症資源中心服務紀錄表\n姓名 王小明\n病歷號 6250712919"
-    app.records = [record]
+    app.records = [record, next_record]
     app.current_index = 0
     app.correction_store_path = tmp_path / "name_corrections.jsonl"
-    app.session = StubSession(
-        AcceptResult(
-            record_id=record.record_id,
-            status="written",
-            row_number=2,
-            blockers=[],
-            warnings=[],
-        )
-    )
-    app._show_record(record)
-
-    app._next_record()
-
-    assert record.ocr.warnings == []
-    assert record.review.edited_by_user is False
-    assert app.session.calls == [(record.record_id, False, True)]
-    saved = load_corrections(app.correction_store_path)[0]
-    assert saved.final_value == expected_name
-    assert saved.ocr_raw == ""
-
-
-def test_next_record_blocked_does_not_persist_unconfirmed_name(app: ReviewApp, tmp_path: Path) -> None:
-    record = make_record("scan-0001")
-    record.ocr.warnings = ["name.unconfirmed"]
-    record.ocr.raw_text = "王小明"
-    app.records = [record]
-    app.current_index = 0
-    app.correction_store_path = tmp_path / "name_corrections.jsonl"
-    app.session = StubSession(
+    session = StubSession(
         AcceptResult(
             record_id=record.record_id,
             status="blocked",
@@ -410,11 +493,16 @@ def test_next_record_blocked_does_not_persist_unconfirmed_name(app: ReviewApp, t
             warnings=[],
         )
     )
+    app.session = session
     app._show_record(record)
 
-    app._next_record()
+    ReviewApp._confirm_current(app)
 
+    assert app.current_index == 0
+    assert app.fields["record_id"].get() == record.record_id
+    assert app.written_indices == set()
     assert record.ocr.warnings == ["name.unconfirmed"]
+    assert session.calls == [(record.record_id, False, True)]
     assert load_corrections(app.correction_store_path) == []
 
 
@@ -444,7 +532,7 @@ def test_force_write_failure_does_not_persist_unconfirmed_name(app: ReviewApp, t
     assert load_corrections(app.correction_store_path) == []
 
 
-def test_next_record_successful_write_tolerates_correction_store_failure(
+def test_confirm_current_successful_write_tolerates_correction_store_failure(
     app: ReviewApp, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     records = [make_record("scan-0001"), make_record("scan-0002")]
@@ -473,7 +561,7 @@ def test_next_record_successful_write_tolerates_correction_store_failure(
 
     monkeypatch.setattr("ocr_from2xlsx.app.confirm_name", _raise_store_locked)
 
-    app._next_record()
+    ReviewApp._confirm_current(app)
 
     assert errors == [("寫入失敗", "store locked")]
     assert app.written_indices == {0}
@@ -518,24 +606,3 @@ def test_choose_template_clears_written_indices(
     assert closed == [True]
     assert start_calls == [(template_path, Path(output_dir) / "匯入中.xlsx")]
     assert app.written_indices == set()
-
-
-def test_next_record_blocked_does_not_advance(app: ReviewApp) -> None:
-    records = [make_record("scan-0001"), make_record("scan-0002")]
-    app.records = records
-    app.current_index = 0
-    app._show_record(records[0])
-    result = AcceptResult(
-        record_id=records[0].record_id,
-        status="blocked",
-        row_number=None,
-        blockers=["service_date.invalid"],
-        warnings=[],
-    )
-    app.session = StubSession(result)
-
-    app._next_record()
-
-    assert app.current_index == 0
-    assert app.fields["record_id"].get() == records[0].record_id
-    assert 0 not in app.written_indices

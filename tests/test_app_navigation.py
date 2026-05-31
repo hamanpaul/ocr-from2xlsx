@@ -569,6 +569,38 @@ def test_confirm_current_successful_write_tolerates_correction_store_failure(
     assert app.fields["record_id"].get() == records[1].record_id
 
 
+def test_confirm_and_force_write_tolerate_end_of_record_list(
+    app: ReviewApp, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    record = make_record("scan-0001")
+    app.records = [record]
+    app.current_index = 0
+    app._show_record(record)
+    app.editing = True
+    app.session = StubSession(
+        AcceptResult(
+            record_id=record.record_id,
+            status="written",
+            row_number=2,
+            blockers=[],
+            warnings=[],
+        )
+    )
+    infos: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        "ocr_from2xlsx.app.messagebox.showinfo",
+        lambda title, message: infos.append((title, message)),
+    )
+
+    ReviewApp._confirm_current(app)
+    ReviewApp._confirm_current(app)
+    ReviewApp._force_write(app)
+
+    assert app.current_index == 1
+    assert app.session.calls == [(record.record_id, False, True)]
+    assert infos
+
+
 def test_choose_template_clears_written_indices(
     app: ReviewApp, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -283,7 +283,7 @@ class ReviewApp(tk.Tk):
         if not self.session:
             messagebox.showerror("缺少工作檔", "請先選擇模板 XLSX。")
             return
-        if self.current_index < 0:
+        if self.current_index < 0 or self.current_index >= len(self.records):
             messagebox.showerror("缺少資料", "請先載入 JSON 資料。")
             return
         if self.current_index in self.written_indices:
@@ -311,7 +311,7 @@ class ReviewApp(tk.Tk):
         if not self.session:
             messagebox.showerror("缺少工作檔", "請先選擇模板 XLSX。")
             return
-        if self.current_index < 0:
+        if self.current_index < 0 or self.current_index >= len(self.records):
             messagebox.showerror("缺少資料", "請先載入 JSON 資料。")
             return
         if self.current_index in self.written_indices:

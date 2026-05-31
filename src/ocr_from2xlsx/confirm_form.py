@@ -21,9 +21,13 @@ def _is_bool_field(record_path: str | None) -> bool:
     return record_path == _NEWLY_DIAGNOSED_PATH
 
 
-def _single_choice_write_value(record_path: str | None, value: Any) -> Any:
+def _single_choice_write_value(record_path: str | None, value: Any, current_value: Any) -> Any:
     if _is_bool_field(record_path):
-        return value == _BOOL_TRUE_CODE
+        if value == _BOOL_TRUE_CODE:
+            return True
+        if current_value is None:
+            return None
+        return False
 
     normalized = "" if value is None else str(value)
     if normalized == "" and record_path in _OPTIONAL_PATIENT_SINGLE_CHOICE_PATHS:
@@ -55,6 +59,7 @@ def apply_form_state(layout: FormLayout, record: Any, state: dict[str, Any]) -> 
             continue
 
         value = state[field.key]
+        current_value = get_by_path(record, field.record_path)
         if field.kind == "text":
             set_by_path(record, field.record_path, "" if value is None else str(value))
         elif field.kind == "multi_choice":
@@ -62,6 +67,10 @@ def apply_form_state(layout: FormLayout, record: Any, state: dict[str, Any]) -> 
                 raise TypeError(f"multi_choice field {field.key!r} must be set[str]")
             set_by_path(record, field.record_path, sorted(value))
         elif field.kind == "single_choice":
-            set_by_path(record, field.record_path, _single_choice_write_value(field.record_path, value))
+            set_by_path(
+                record,
+                field.record_path,
+                _single_choice_write_value(field.record_path, value, current_value),
+            )
         else:
             raise TypeError(f"Unsupported field kind: {field.kind!r}")

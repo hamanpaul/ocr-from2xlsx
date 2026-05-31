@@ -108,3 +108,12 @@ def test_round_trip_preserves_missing_optional_single_choice_fields():
     assert record.patient_fields.disease_status is None
     assert record.patient_fields.source is None
     assert validate_record(record).blockers == blockers_before
+
+
+def test_round_trip_preserves_unknown_newly_diagnosed_state():
+    layout = service_record_layout()
+    record = _sparse_patient_record()
+
+    apply_form_state(layout, record, record_to_form_state(layout, record))
+
+    assert record.patient_fields.newly_diagnosed_within_year is None

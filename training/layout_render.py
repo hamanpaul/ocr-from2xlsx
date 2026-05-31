@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import ceil, floor
 from pathlib import Path
 import re
+from typing import Optional
 
 from openpyxl import load_workbook
+from ocr_from2xlsx.form_layout import FormLayout
 
 _CELL_RE = re.compile(r"^([A-Z]+)([1-9]\d*)$")
 
@@ -79,3 +82,31 @@ def cell_box(cell: str, geom: SheetGeometry) -> tuple[float, float, float, float
     if not (1 <= col <= TRAINING_MAX_COL and 1 <= row <= TRAINING_MAX_ROW):
         raise ValueError(f"cell out of bounds: {cell!r}")
     return geom.col_x[col - 1], geom.row_y[row - 1], geom.col_x[col], geom.row_y[row]
+
+
+def _pixel_box(box: tuple[float, float, float, float]) -> tuple[int, int, int, int]:
+    x0, y0, x1, y1 = box
+    left = floor(x0)
+    top = floor(y0)
+    right = max(left, ceil(x1) - 1)
+    bottom = max(top, ceil(y1) - 1)
+    return left, top, right, bottom
+
+
+def draw_base_form(layout: FormLayout, geom: SheetGeometry, font_path: Optional[str] = None):
+    from PIL import Image, ImageDraw, ImageFont
+
+    image = Image.new("L", (max(1, ceil(geom.width)), max(1, ceil(geom.height))), color=255)
+    draw = ImageDraw.Draw(image)
+    font = ImageFont.truetype(font_path, 12) if font_path else ImageFont.load_default()
+    drawn_cells: set[str] = set()
+
+    for _, option in layout.iter_options():
+        left, top, right, bottom = _pixel_box(cell_box(option.cell, geom))
+        if option.cell not in drawn_cells:
+            draw.rectangle((left, top, right, bottom), outline=0, width=1)
+            drawn_cells.add(option.cell)
+        if option.label:
+            draw.text((left + 2, top + 1), option.label, fill=0, font=font)
+
+    return image

@@ -18,6 +18,7 @@ class ConfirmForm:
         self.frame = ttk.Frame(parent)
         self.text_fields: dict[str, tk.StringVar] = {}
         self.single_choice_fields: dict[str, tk.StringVar] = {}
+        self.single_choice_clear_buttons: dict[str, ttk.Button] = {}
         self.multi_choice_fields: dict[str, dict[str, tk.BooleanVar]] = {}
         self.frame.columnconfigure(0, weight=1)
 
@@ -39,6 +40,9 @@ class ConfirmForm:
                     var = tk.StringVar(value="")
                     options = ttk.Frame(group)
                     options.grid(row=field_row, column=1, sticky="w", pady=3)
+                    clear_button = ttk.Button(options, text="清除", command=lambda v=var: v.set(""))
+                    clear_button.grid(row=0, column=0, sticky="w", padx=(0, 8), pady=2)
+                    self.single_choice_clear_buttons[field.key] = clear_button
                     for option_index, option in enumerate(field.options):
                         ttk.Radiobutton(
                             options,
@@ -47,7 +51,7 @@ class ConfirmForm:
                             variable=var,
                         ).grid(
                             row=option_index // 4,
-                            column=option_index % 4,
+                            column=(option_index % 4) + 1,
                             sticky="w",
                             padx=(0, 8),
                             pady=2,

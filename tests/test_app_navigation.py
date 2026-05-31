@@ -93,6 +93,26 @@ def test_confirm_form_round_trips_prefilled_state() -> None:
         root.destroy()
 
 
+def test_confirm_form_single_choice_can_clear_to_unselected() -> None:
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        pytest.skip(f"no display available for Tk: {exc}")
+
+    root.withdraw()
+    try:
+        form = app_module.ConfirmForm(root, service_record_layout())
+
+        form.prefill({"nationality": "local"})
+        assert form.collect()["nationality"] == "local"
+
+        form.single_choice_clear_buttons["nationality"].invoke()
+
+        assert form.collect()["nationality"] == ""
+    finally:
+        root.destroy()
+
+
 @pytest.fixture
 def app(monkeypatch: pytest.MonkeyPatch) -> ReviewApp:
     monkeypatch.setattr("ocr_from2xlsx.app.messagebox.showerror", lambda *args, **kwargs: None)

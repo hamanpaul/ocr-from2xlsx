@@ -31,6 +31,14 @@ def _tiny_layout() -> FormLayout:
                         anchor_cell="B23",
                         options=(),
                     ),
+                    Field(
+                        key="page_num",
+                        title="頁碼",
+                        kind="text",
+                        record_path=None,
+                        anchor_cell="Z1",
+                        options=(),
+                    ),
                 ),
             ),
         ),
@@ -47,7 +55,16 @@ def test_field_by_key_and_iter() -> None:
     
     # iter_fields yields Field objects
     field_keys = [f.key for f in layout.iter_fields()]
-    assert field_keys == ["gender", "name"]
+    assert field_keys == ["gender", "name", "page_num"]
+
+
+def test_field_with_no_record_counterpart() -> None:
+    layout = _tiny_layout()
+    
+    # Fields can have record_path=None when no Record counterpart exists
+    page_num = layout.field_by_key("page_num")
+    assert page_num is not None
+    assert page_num.record_path is None
 
 
 def test_iter_options_and_options_by_code() -> None:
@@ -64,3 +81,14 @@ def test_iter_options_and_options_by_code() -> None:
     # options_by_code for text field returns empty dict
     name_opts = layout.options_by_code("name")
     assert name_opts == {}
+
+
+def test_options_by_code_fails_on_missing_field() -> None:
+    layout = _tiny_layout()
+    
+    # options_by_code should raise KeyError for unknown field keys
+    try:
+        layout.options_by_code("missing")
+        assert False, "Expected KeyError but call succeeded"
+    except KeyError as e:
+        assert "missing" in str(e)

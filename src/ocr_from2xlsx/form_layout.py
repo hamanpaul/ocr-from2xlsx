@@ -26,7 +26,7 @@ class Field:
     key: str
     title: str
     kind: Kind
-    record_path: str
+    record_path: str | None
     anchor_cell: str
     options: tuple[Option, ...] = ()
 
@@ -64,7 +64,7 @@ class FormLayout:
     def options_by_code(self, field_key: str) -> dict[str, Option]:
         fld = self.field_by_key(field_key)
         if fld is None:
-            return {}
+            raise KeyError(field_key)
         return {opt.code: opt for opt in fld.options}
 
 

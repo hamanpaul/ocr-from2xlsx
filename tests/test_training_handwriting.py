@@ -20,6 +20,13 @@ def _windows_font() -> Path:
     pytest.skip("requires one of arial.ttf, segoeui.ttf, or tahoma.ttf")
 
 
+def _arial_font() -> Path:
+    path = Path(r"C:\Windows\Fonts\arial.ttf")
+    if path.exists():
+        return path
+    pytest.skip("requires arial.ttf")
+
+
 def _ink_pixels(image: Image.Image) -> list[tuple[int, int]]:
     pixels = image.load()
     return [(x, y) for y in range(image.height) for x in range(image.width) if pixels[x, y] < 255]
@@ -33,3 +40,13 @@ def test_draw_text_keeps_ink_inside_target_box() -> None:
     ink_pixels = _ink_pixels(image)
     assert ink_pixels
     assert all(10 <= x < 40 and 10 <= y < 22 for x, y in ink_pixels), ink_pixels
+
+
+def test_draw_text_shrinks_or_skips_when_tight_box_cannot_fit_initial_font() -> None:
+    image = Image.new("L", (24, 18), color=255)
+
+    draw_text(image, (2.0, 2.0, 20.0, 14.0), "TEST", _arial_font(), Random(0))
+
+    ink_pixels = _ink_pixels(image)
+    assert ink_pixels
+    assert all(2 <= x < 20 and 2 <= y < 14 for x, y in ink_pixels), ink_pixels

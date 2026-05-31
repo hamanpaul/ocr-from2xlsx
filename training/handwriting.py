@@ -45,20 +45,25 @@ def draw_text(
     min_size = max(8, int(height * 0.55))
     max_size = max(min_size, min(48, int(height * 0.95)))
     size = rng.randint(min_size, max_size)
+    absolute_min_size = 1
 
     while True:
         font = ImageFont.truetype(str(font_path), size=size)
         text_box = draw.textbbox((0, 0), text, font=font)
         text_width = text_box[2] - text_box[0]
         text_height = text_box[3] - text_box[1]
-        if (text_width <= width and text_height <= height) or size <= 8:
+        if text_width <= width and text_height <= height:
             break
+        if size <= absolute_min_size:
+            return
         size -= 1
 
     min_x = left - text_box[0]
     max_x = right - text_box[2]
     min_y = top - text_box[1]
     max_y = bottom - text_box[3]
+    if min_x > max_x or min_y > max_y:
+        return
     base_x = left + 1 - text_box[0]
     base_y = top + max(0, (height - text_height) // 2) - text_box[1]
     x_jitter = rng.randint(-max(1, width // 10), max(1, width // 10))

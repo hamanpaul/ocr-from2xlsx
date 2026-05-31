@@ -438,6 +438,79 @@ def test_field_selected_codes_list_only_for_multi_choice():
         gender.selected_codes(["female", "male"])
 
 
+def test_field_selected_codes_bool_backed_maps_by_code_not_order():
+    """Bool-backed field with both true and false codes must map by code value, not option order."""
+    import pytest
+    from ocr_from2xlsx.form_layout import Field, Option
+    
+    # Create a bool-backed field with options in reverse order: false, then true
+    field_reverse_order = Field(
+        key="reversed_bool",
+        title="Reversed Boolean Field",
+        kind="single_choice",
+        record_path="reversed_bool",
+        anchor_cell="A1",
+        options=(
+            Option(label="No", code="false", cell="A1"),
+            Option(label="Yes", code="true", cell="A2"),
+        ),
+    )
+    
+    # True must map to "true" code, not the first option
+    assert field_reverse_order.selected_codes(True) == ("true",)
+    # False must map to "false" code, not empty tuple
+    assert field_reverse_order.selected_codes(False) == ("false",)
+    # None still maps to empty tuple
+    assert field_reverse_order.selected_codes(None) == ()
+
+
+def test_field_selected_codes_newly_diagnosed_preserves_behavior():
+    """Verify newly_diagnosed (only has 'true' option) still behaves correctly."""
+    layout = service_record_layout()
+    fld = layout.field_by_key("newly_diagnosed")
+    
+    # True maps to ("true",)
+    assert fld.selected_codes(True) == ("true",)
+    # False maps to () because there's no "false" option
+    assert fld.selected_codes(False) == ()
+    # None maps to ()
+    assert fld.selected_codes(None) == ()
+
+
+def test_field_selected_codes_rejects_invalid_scalar_types():
+    """Invalid scalar types like int should raise TypeError."""
+    import pytest
+    layout = service_record_layout()
+    
+    gender = layout.field_by_key("gender")
+    with pytest.raises(TypeError, match=r"int.*not supported"):
+        gender.selected_codes(123)
+    
+    cancer = layout.field_by_key("cancer")
+    with pytest.raises(TypeError, match=r"int.*not supported"):
+        cancer.selected_codes(456)
+
+
+def test_field_selected_codes_rejects_invalid_list_members():
+    """Lists containing non-string elements should raise TypeError."""
+    import pytest
+    layout = service_record_layout()
+    
+    cancer = layout.field_by_key("cancer")
+    
+    # List with bool should fail
+    with pytest.raises(TypeError, match=r"list.*bool"):
+        cancer.selected_codes([True])
+    
+    # List with int should fail
+    with pytest.raises(TypeError, match=r"list.*int"):
+        cancer.selected_codes([1, "brain_cancer"])
+    
+    # Mixed valid and invalid should also fail
+    with pytest.raises(TypeError, match=r"list.*int"):
+        cancer.selected_codes(["lung_cancer", 42])
+
+
 def test_check_option_codes_match_constants_verifies_exact_labels():
     """Verify _check_option_codes_match_constants checks exact label equality when expected_labels provided."""
     import pytest

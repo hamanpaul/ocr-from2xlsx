@@ -94,13 +94,11 @@ class Field:
                     f"bool value not supported for field {self.key!r}: "
                     f"field is not bool-backed (codes: {option_codes})"
                 )
-            # For bool-backed fields: True -> first code, False -> ()
-            if value:
-                if self.options:
-                    return (self.options[0].code,)
-                return ()
-            else:
-                return ()
+            # For bool-backed fields: map by code value, not option order
+            target_code = "true" if value else "false"
+            if target_code in option_codes:
+                return (target_code,)
+            return ()
         
         if isinstance(value, str):
             # String value only valid for single_choice fields
@@ -118,9 +116,20 @@ class Field:
                     f"list value not supported for {self.kind} field "
                     f"(field is single_choice, not multi_choice)"
                 )
+            # Validate all list members are strings
+            for i, item in enumerate(value):
+                if not isinstance(item, str):
+                    raise TypeError(
+                        f"list member at index {i} has type {type(item).__name__}, "
+                        f"expected str (multi_choice requires list[str])"
+                    )
             return tuple(value)
         
-        return ()
+        # Reject all other types
+        raise TypeError(
+            f"value type {type(value).__name__} not supported for {self.kind} field "
+            f"(expected: {'str' if self.kind == 'single_choice' else 'list[str]' if self.kind == 'multi_choice' else 'None'})"
+        )
 
 
 @dataclass(frozen=True, slots=True)

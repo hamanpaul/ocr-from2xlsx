@@ -108,10 +108,27 @@ such as `中女性` / `病人625...` as secondary marked signals. The current pl
 identity, gender, handwritten name, and medical-record-no; PDF preprocessing now renders at 400 DPI to
 improve real-form MRN recovery.
 
+The plugin also emits a PII-minimized handwritten-name crop. When `prepare-records` runs with
+`--name-agent-config`, it uses `record.ocr.name_crop` if present and otherwise falls back to the sibling
+`*-name.png` next to `source.preprocessed_image_path`; only that crop is sent to the optional agent.
+
 For review-oriented verification, `import-json --allow-incomplete` will still write a recognized record
 as `forced` when only writable patient-only fields are missing. On the reference form, the mobile
 recognizer still may not recover the handwritten name reliably, so this path remains the practical way
 to inspect real OCR output before manual completion.
+
+### Handwritten name agent
+
+`--name-agent-config` points to a TOML file that enables the optional handwritten-name agent. The
+agent is a no-op when the file is missing, disabled, or uses an unsupported provider. The API key is
+read from the env var named in the config (`api_key_env`, default `ANTHROPIC_API_KEY`), and only the
+name crop is sent.
+
+Suggested names are always tagged `name.unconfirmed` until a human confirms them. Confirmations are
+handled through the review/edit workflow in `ocr-from2xlsx app`; there is no dedicated `confirm-name`
+CLI. That confirmation is written to the local correction store and roster, which later matching can
+reuse to improve hits and reduce cloud calls. If you are importing without the app, review the record
+manually before import.
 
 ## Packaging
 

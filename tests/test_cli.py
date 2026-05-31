@@ -7,7 +7,7 @@ import fitz
 import pytest
 from openpyxl import load_workbook
 
-from ocr_from2xlsx.cli import build_parser, main
+from ocr_from2xlsx.cli import _resolve_name_crop_path, build_parser, main
 from ocr_from2xlsx.constants import BASIC_COLUMN_BY_FIELD, WORKBOOK_SHEET
 from ocr_from2xlsx.domain import Batch, SourceBatch
 from ocr_from2xlsx.json_io import dump_batch
@@ -335,6 +335,103 @@ def test_import_json_allow_incomplete_writes_forced_row(tmp_path: Path) -> None:
     wb.close()
 
 
+def _make_unconfirmed_name_batch() -> dict:
+    """Build a minimal batch JSON with a public_other record carrying name.unconfirmed."""
+    return {
+        "schema_version": "service_record.v1",
+        "source_batch": {
+            "created_at": "2026-05-31T00:00:00+08:00",
+            "source_type": "manual",
+            "template_name": "t",
+        },
+        "records": [
+            {
+                "record_id": "pdf-0001",
+                "service_date": "2025-06-25",
+                "identity": "public_other",
+                "name": "葉心安",
+                "medical_record_no": "6250712919",
+                "gender": "female",
+                "review": {"status": "pending"},
+                "ocr": {"raw_text": "", "warnings": ["name.unconfirmed"]},
+            }
+        ],
+    }
+
+
+def test_import_json_allow_unconfirmed_name_blocked_without_flag(tmp_path: Path) -> None:
+    import json as _json
+
+    template = tmp_path / "t.xlsx"
+    working = tmp_path / "w.xlsx"
+    create_workbook_template(template)
+
+    inp = tmp_path / "in.json"
+    inp.write_text(_json.dumps(_make_unconfirmed_name_batch()), encoding="utf-8")
+
+    code = main(
+        [
+            "import-json",
+            "--input",
+            str(inp),
+            "--template",
+            str(template),
+            "--working",
+            str(working),
+            "--report-json",
+            str(tmp_path / "r.json"),
+            "--report-csv",
+            str(tmp_path / "r.csv"),
+        ]
+    )
+
+    assert code == 1  # blocked
+    wb = load_workbook(working)
+    ws = wb[WORKBOOK_SHEET]
+    name_col = next(c.column for c in ws[1] if c.value == BASIC_COLUMN_BY_FIELD["name"])
+    assert ws.cell(row=2, column=name_col).value is None  # NOT written
+    wb.close()
+
+
+def test_import_json_allow_unconfirmed_name_writes_and_keeps_warning(tmp_path: Path) -> None:
+    import json as _json
+
+    template = tmp_path / "t.xlsx"
+    working = tmp_path / "w.xlsx"
+    create_workbook_template(template)
+
+    inp = tmp_path / "in.json"
+    inp.write_text(_json.dumps(_make_unconfirmed_name_batch()), encoding="utf-8")
+    report_json = tmp_path / "r.json"
+
+    code = main(
+        [
+            "import-json",
+            "--input",
+            str(inp),
+            "--template",
+            str(template),
+            "--working",
+            str(working),
+            "--report-json",
+            str(report_json),
+            "--report-csv",
+            str(tmp_path / "r.csv"),
+            "--allow-unconfirmed-name",
+        ]
+    )
+
+    assert code == 0
+    wb = load_workbook(working)
+    ws = wb[WORKBOOK_SHEET]
+    name_col = next(c.column for c in ws[1] if c.value == BASIC_COLUMN_BY_FIELD["name"])
+    assert ws.cell(row=2, column=name_col).value == "葉心安"  # written
+    wb.close()
+    report = _json.loads(report_json.read_text(encoding="utf-8"))
+    assert report[0]["status"] in ("written", "forced")
+    assert "name.unconfirmed" in report[0]["warnings"]  # warning retained
+
+
 def test_import_json_cli_warns_when_accept_fails_before_returning_result(
     tmp_path: Path, capsys, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -365,7 +462,7 @@ def test_import_json_cli_warns_when_accept_fails_before_returning_result(
         def __exit__(self, exc_type: object, exc: object, traceback: object) -> None:
             self.closed = True
 
-        def accept_scan(self, record: object, force: bool = False) -> None:
+        def accept_scan(self, record: object, force: bool = False, allow_unconfirmed_name: bool = False) -> None:
             raise OSError("save failed")
 
         def write_report(self, json_path: object, csv_path: object) -> None:
@@ -818,6 +915,493 @@ def test_prepare_records_cli_reports_null_source_without_traceback(
     assert exit_code == 2
     assert captured.err.startswith("error: ")
     assert "Traceback" not in captured.err
+
+
+def test_prepare_records_name_agent_absent_is_noop(tmp_path):
+    import json as _json
+    from pathlib import Path as _Path
+    from ocr_from2xlsx.cli import main
+
+    def _prepare_records_from_paths(*args, **kwargs):
+        record = make_record()
+        record.name = ""
+        record.ocr.warnings = []
+        return Batch(
+            source_batch=SourceBatch(
+                created_at="2026-05-24T15:30:00+08:00",
+                source_type="prepare_records",
+                template_name="service_record.v1",
+            ),
+            records=[record],
+        )
+
+    pdf = _Path(__file__).parent / "fixtures" / "pdf" / "for testing only.pdf"
+    fixture = _Path(__file__).parent / "fixtures" / "pdf" / "for testing only.ocr.json"
+    out = tmp_path / "prepared.json"
+
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(
+            "ocr_from2xlsx.prepare_records.prepare_records_from_paths",
+            _prepare_records_from_paths,
+        )
+        code = main(
+            [
+                "prepare-records",
+                "--input",
+                str(pdf),
+                "--output",
+                str(out),
+                "--ocr-fixture",
+                str(fixture),
+            ]
+        )
+
+    assert code == 0
+    data = _json.loads(out.read_text(encoding="utf-8"))
+    assert data["records"][0]["name"] == ""
+    assert data["records"][0]["ocr"]["warnings"] == []
+
+
+def test_prepare_records_disabled_name_agent_config_is_noop(tmp_path):
+    import json as _json
+    from pathlib import Path as _Path
+    from ocr_from2xlsx.cli import main
+
+    def _prepare_records_from_paths(*args, **kwargs):
+        record = make_record()
+        record.name = ""
+        record.ocr.warnings = []
+        return Batch(
+            source_batch=SourceBatch(
+                created_at="2026-05-24T15:30:00+08:00",
+                source_type="prepare_records",
+                template_name="service_record.v1",
+            ),
+            records=[record],
+        )
+
+    cfg = tmp_path / "name_agent.toml"
+    cfg.write_text("enabled = false\n", encoding="utf-8")
+    pdf = _Path(__file__).parent / "fixtures" / "pdf" / "for testing only.pdf"
+    fixture = _Path(__file__).parent / "fixtures" / "pdf" / "for testing only.ocr.json"
+    out = tmp_path / "prepared.json"
+
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(
+            "ocr_from2xlsx.prepare_records.prepare_records_from_paths",
+            _prepare_records_from_paths,
+        )
+        code = main(
+            [
+                "prepare-records",
+                "--input",
+                str(pdf),
+                "--output",
+                str(out),
+                "--ocr-fixture",
+                str(fixture),
+                "--name-agent-config",
+                str(cfg),
+            ]
+        )
+    assert code == 0
+    data = _json.loads(out.read_text(encoding="utf-8"))
+    assert data["records"][0]["name"] == ""
+    assert data["records"][0]["ocr"]["warnings"] == []
+
+
+def test_prepare_records_unsupported_name_agent_config_is_noop(tmp_path):
+    import json as _json
+    from pathlib import Path as _Path
+
+    from ocr_from2xlsx.cli import main
+
+    record = make_record()
+    record.name = ""
+    record.ocr.raw_text = "王小明"
+    record.ocr.warnings = []
+    record.source.preprocessed_image_path = "for testing only-page-0001.png"
+
+    def _prepare_records_from_paths(*args, **kwargs):
+        return Batch(
+            source_batch=SourceBatch(
+                created_at="2026-05-24T15:30:00+08:00",
+                source_type="prepare_records",
+                template_name="service_record.v1",
+            ),
+            records=[record],
+        )
+
+    cfg = tmp_path / "name_agent.toml"
+    cfg.write_text('enabled = true\nprovider = "nope"\n', encoding="utf-8")
+    crop_path = tmp_path / "for testing only-page-0001-name.png"
+    crop_path.write_bytes(b"fake png bytes")
+    pdf = _Path(__file__).parent / "fixtures" / "pdf" / "for testing only.pdf"
+    fixture = _Path(__file__).parent / "fixtures" / "pdf" / "for testing only.ocr.json"
+    out = tmp_path / "prepared.json"
+
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(
+            "ocr_from2xlsx.prepare_records.prepare_records_from_paths",
+            _prepare_records_from_paths,
+        )
+        code = main(
+            [
+                "prepare-records",
+                "--input",
+                str(pdf),
+                "--output",
+                str(out),
+                "--ocr-fixture",
+                str(fixture),
+                "--name-agent-config",
+                str(cfg),
+            ]
+        )
+
+    assert code == 0
+    data = _json.loads(out.read_text(encoding="utf-8"))
+    assert data["records"][0]["name"] == ""
+    assert data["records"][0]["ocr"]["warnings"] == []
+
+
+def test_prepare_records_effectively_null_name_agent_config_is_noop(tmp_path):
+    import json as _json
+    from pathlib import Path as _Path
+
+    from ocr_from2xlsx.cli import main
+
+    record = make_record()
+    record.name = ""
+    record.ocr.raw_text = "王小明"
+    record.ocr.warnings = []
+    record.source.preprocessed_image_path = "for testing only-page-0001.png"
+
+    def _prepare_records_from_paths(*args, **kwargs):
+        return Batch(
+            source_batch=SourceBatch(
+                created_at="2026-05-24T15:30:00+08:00",
+                source_type="prepare_records",
+                template_name="service_record.v1",
+            ),
+            records=[record],
+        )
+
+    cfg = tmp_path / "name_agent.toml"
+    cfg.write_text('enabled = true\nprovider = "claude"\nmodel = "claude-x"\n', encoding="utf-8")
+    crop_path = tmp_path / "for testing only-page-0001-name.png"
+    crop_path.write_bytes(b"fake png bytes")
+    pdf = _Path(__file__).parent / "fixtures" / "pdf" / "for testing only.pdf"
+    fixture = _Path(__file__).parent / "fixtures" / "pdf" / "for testing only.ocr.json"
+    out = tmp_path / "prepared.json"
+
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(
+            "ocr_from2xlsx.prepare_records.prepare_records_from_paths",
+            _prepare_records_from_paths,
+        )
+        code = main(
+            [
+                "prepare-records",
+                "--input",
+                str(pdf),
+                "--output",
+                str(out),
+                "--ocr-fixture",
+                str(fixture),
+                "--name-agent-config",
+                str(cfg),
+            ]
+        )
+
+    assert code == 0
+    data = _json.loads(out.read_text(encoding="utf-8"))
+    assert data["records"][0]["name"] == ""
+    assert data["records"][0]["ocr"]["warnings"] == []
+
+
+def test_prepare_records_enabled_name_agent_suggests_name_from_preprocessed_crop(tmp_path):
+    import json as _json
+    from pathlib import Path as _Path
+    from ocr_from2xlsx.correction_store import Correction, append_correction
+
+    from ocr_from2xlsx.cli import main
+
+    record = make_record()
+    record.name = ""
+    record.ocr.warnings = ["existing-warning"]
+    record.source.preprocessed_image_path = "for testing only-page-0001.png"
+
+    def _prepare_records_from_paths(*args, **kwargs):
+        return Batch(
+            source_batch=SourceBatch(
+                created_at="2026-05-24T15:30:00+08:00",
+                source_type="prepare_records",
+                template_name="service_record.v1",
+            ),
+            records=[record],
+        )
+
+    class FakeAgent:
+        pass
+
+    fake_agent = FakeAgent()
+    observed: dict[str, object] = {}
+
+    def _build_agent(config):
+        observed["config_enabled"] = config.enabled
+        return fake_agent
+
+    def _suggest_name(*, crop_path, agent, roster, ocr_raw=""):
+        observed["crop_path"] = crop_path
+        observed["agent"] = agent
+        observed["roster"] = roster
+        observed["ocr_raw"] = ocr_raw
+        return ("陳小華", ["name.unconfirmed", "name.unconfirmed"])
+
+    cfg = tmp_path / "name_agent.toml"
+    cfg.write_text('enabled = true\nprovider = "claude"\n', encoding="utf-8")
+    crop_path = tmp_path / "for testing only-page-0001-name.png"
+    crop_path.write_bytes(b"fake png bytes")
+    append_correction(
+        tmp_path / "name_corrections.jsonl",
+        Correction(field="name", final_value="葉心安", record_id="pdf-0001"),
+    )
+    pdf = _Path(__file__).parent / "fixtures" / "pdf" / "for testing only.pdf"
+    fixture = _Path(__file__).parent / "fixtures" / "pdf" / "for testing only.ocr.json"
+    out = tmp_path / "prepared.json"
+
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(
+            "ocr_from2xlsx.prepare_records.prepare_records_from_paths",
+            _prepare_records_from_paths,
+        )
+        monkeypatch.setattr("ocr_from2xlsx.name_agent.build_agent", _build_agent)
+        monkeypatch.setattr("ocr_from2xlsx.name_suggestion.suggest_name", _suggest_name)
+        code = main(
+            [
+                "prepare-records",
+                "--input",
+                str(pdf),
+                "--output",
+                str(out),
+                "--ocr-fixture",
+                str(fixture),
+                "--name-agent-config",
+                str(cfg),
+            ]
+        )
+
+    assert code == 0
+    data = _json.loads(out.read_text(encoding="utf-8"))
+    assert data["records"][0]["name"] == "陳小華"
+    assert data["records"][0]["ocr"]["warnings"] == ["existing-warning", "name.unconfirmed"]
+    assert observed == {
+        "config_enabled": True,
+        "crop_path": str(crop_path),
+        "agent": fake_agent,
+        "roster": ["葉心安"],
+        "ocr_raw": "raw",
+    }
+
+
+def test_resolve_name_crop_path_prefers_backend_supplied_name_crop_after_round_trip(tmp_path: Path) -> None:
+    batch = Batch(
+        source_batch=SourceBatch(
+            created_at="2026-05-26T09:00:00+08:00",
+            source_type="prepare_records",
+            template_name="service_record.v1",
+        ),
+        records=[make_record("pdf-0001")],
+    )
+    record = batch.records[0]
+    record.ocr.name_crop = "custom-crops/pdf-0001-handwritten-name.png"
+    record.source.preprocessed_image_path = "fallback-page-0001.png"
+    input_json = tmp_path / "prepared.json"
+    expected_crop = tmp_path / "custom-crops" / "pdf-0001-handwritten-name.png"
+    expected_crop.parent.mkdir(parents=True)
+    expected_crop.write_bytes(b"fake png bytes")
+    fallback_crop = tmp_path / "fallback-page-0001-name.png"
+    fallback_crop.write_bytes(b"fallback bytes")
+
+    dump_batch(batch, input_json)
+    loaded = Batch.from_dict(json.loads(input_json.read_text(encoding="utf-8")))
+
+    assert loaded.records[0].ocr.name_crop == "custom-crops/pdf-0001-handwritten-name.png"
+    assert _resolve_name_crop_path(loaded.records[0], tmp_path) == str(expected_crop)
+
+
+def test_resolve_name_crop_path_rejects_backend_path_outside_output_dir_and_uses_fallback(
+    tmp_path: Path,
+) -> None:
+    record = make_record("pdf-0001")
+    record.ocr.name_crop = "..\\escaped-name.png"
+    record.source.preprocessed_image_path = "fallback-page-0001.png"
+    fallback_crop = tmp_path / "fallback-page-0001-name.png"
+    fallback_crop.write_bytes(b"fallback bytes")
+    (tmp_path.parent / "escaped-name.png").write_bytes(b"backend bytes")
+
+    assert _resolve_name_crop_path(record, tmp_path) == str(fallback_crop)
+
+
+def test_resolve_name_crop_path_rejects_absolute_backend_path_outside_output_dir_and_uses_fallback(
+    tmp_path: Path,
+) -> None:
+    record = make_record("pdf-0001")
+    escaped_crop = tmp_path.parent / "absolute-escaped-name.png"
+    escaped_crop.write_bytes(b"backend bytes")
+    record.ocr.name_crop = str(escaped_crop.resolve())
+    record.source.preprocessed_image_path = "fallback-page-0001.png"
+    fallback_crop = tmp_path / "fallback-page-0001-name.png"
+    fallback_crop.write_bytes(b"fallback bytes")
+
+    assert _resolve_name_crop_path(record, tmp_path) == str(fallback_crop)
+
+
+def test_prepare_records_enabled_name_agent_without_crop_is_noop(tmp_path):
+    import json as _json
+    from pathlib import Path as _Path
+
+    from ocr_from2xlsx.cli import main
+
+    record = make_record()
+    record.name = ""
+    record.ocr.warnings = []
+    record.source.preprocessed_image_path = "for testing only-page-0001.png"
+
+    def _prepare_records_from_paths(*args, **kwargs):
+        return Batch(
+            source_batch=SourceBatch(
+                created_at="2026-05-24T15:30:00+08:00",
+                source_type="prepare_records",
+                template_name="service_record.v1",
+            ),
+            records=[record],
+        )
+
+    cfg = tmp_path / "name_agent.toml"
+    cfg.write_text('enabled = true\nprovider = "claude"\n', encoding="utf-8")
+    pdf = _Path(__file__).parent / "fixtures" / "pdf" / "for testing only.pdf"
+    fixture = _Path(__file__).parent / "fixtures" / "pdf" / "for testing only.ocr.json"
+    out = tmp_path / "prepared.json"
+
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(
+            "ocr_from2xlsx.prepare_records.prepare_records_from_paths",
+            _prepare_records_from_paths,
+        )
+        monkeypatch.setattr(
+            "ocr_from2xlsx.name_suggestion.suggest_name",
+            lambda **kwargs: pytest.fail("suggest_name should not be called without a crop"),
+        )
+        code = main(
+            [
+                "prepare-records",
+                "--input",
+                str(pdf),
+                "--output",
+                str(out),
+                "--ocr-fixture",
+                str(fixture),
+                "--name-agent-config",
+                str(cfg),
+            ]
+        )
+
+    assert code == 0
+    data = _json.loads(out.read_text(encoding="utf-8"))
+    assert data["records"][0]["name"] == ""
+    assert data["records"][0]["ocr"]["warnings"] == []
+
+
+def test_prepare_records_enabled_name_agent_skips_malformed_correction_store_entries(tmp_path):
+    import json as _json
+    from pathlib import Path as _Path
+
+    from ocr_from2xlsx.cli import main
+
+    record = make_record()
+    record.name = ""
+    record.ocr.warnings = []
+    record.source.preprocessed_image_path = "for testing only-page-0001.png"
+
+    def _prepare_records_from_paths(*args, **kwargs):
+        return Batch(
+            source_batch=SourceBatch(
+                created_at="2026-05-24T15:30:00+08:00",
+                source_type="prepare_records",
+                template_name="service_record.v1",
+            ),
+            records=[record],
+        )
+
+    class FakeAgent:
+        pass
+
+    fake_agent = FakeAgent()
+    observed: dict[str, object] = {}
+
+    def _build_agent(config):
+        observed["config_enabled"] = config.enabled
+        return fake_agent
+
+    def _suggest_name(*, crop_path, agent, roster, ocr_raw=""):
+        observed["crop_path"] = crop_path
+        observed["agent"] = agent
+        observed["roster"] = roster
+        observed["ocr_raw"] = ocr_raw
+        return ("陳小華", ["name.unconfirmed"])
+
+    cfg = tmp_path / "name_agent.toml"
+    cfg.write_text('enabled = true\nprovider = "claude"\n', encoding="utf-8")
+    crop_path = tmp_path / "for testing only-page-0001-name.png"
+    crop_path.write_bytes(b"fake png bytes")
+    (tmp_path / "name_corrections.jsonl").write_text(
+        "\n".join(
+            [
+                '{"field":"name","final_value":"葉心安","record_id":"pdf-0001"}',
+                '{"field":"name","final_value":["bad"],"record_id":"pdf-0002"}',
+                '{"field":"name","final_value":"broken"',
+            ]
+        ),
+        encoding="utf-8",
+    )
+    pdf = _Path(__file__).parent / "fixtures" / "pdf" / "for testing only.pdf"
+    fixture = _Path(__file__).parent / "fixtures" / "pdf" / "for testing only.ocr.json"
+    out = tmp_path / "prepared.json"
+
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(
+            "ocr_from2xlsx.prepare_records.prepare_records_from_paths",
+            _prepare_records_from_paths,
+        )
+        monkeypatch.setattr("ocr_from2xlsx.name_agent.build_agent", _build_agent)
+        monkeypatch.setattr("ocr_from2xlsx.name_suggestion.suggest_name", _suggest_name)
+        code = main(
+            [
+                "prepare-records",
+                "--input",
+                str(pdf),
+                "--output",
+                str(out),
+                "--ocr-fixture",
+                str(fixture),
+                "--name-agent-config",
+                str(cfg),
+            ]
+        )
+
+    assert code == 0
+    data = _json.loads(out.read_text(encoding="utf-8"))
+    assert data["records"][0]["name"] == "陳小華"
+    assert data["records"][0]["ocr"]["warnings"] == ["name.unconfirmed"]
+    assert observed == {
+        "config_enabled": True,
+        "crop_path": str(crop_path),
+        "agent": fake_agent,
+        "roster": ["葉心安"],
+        "ocr_raw": "raw",
+    }
 
 
 def test_prepare_records_cli_reports_missing_ocr_fixture_page_without_traceback(

@@ -29,6 +29,13 @@ mark_detect = _importlib_util.module_from_spec(_MD_SPEC)
 assert _MD_SPEC and _MD_SPEC.loader
 _MD_SPEC.loader.exec_module(mark_detect)
 
+_NC_SPEC = _importlib_util.spec_from_file_location(
+    "paddleocr_plugin_name_crop", _HERE / "name_crop.py"
+)
+name_crop = _importlib_util.module_from_spec(_NC_SPEC)
+assert _NC_SPEC and _NC_SPEC.loader
+_NC_SPEC.loader.exec_module(name_crop)
+
 CONTRACT_VERSION = "ocr_plugin.v1"
 
 OcrFn = Callable[[str], list[dict[str, Any]]]
@@ -92,15 +99,22 @@ def _paddle_ocr_fn(image_path: str) -> list[dict[str, Any]]:
 
 
 def main() -> int:
-    # Force UTF-8 on the contract pipes regardless of the OS console codepage, so the
-    # JSON request/response always round-trips CJK cleanly.
     for stream in (sys.stdin, sys.stdout):
         reconfigure = getattr(stream, "reconfigure", None)
         if reconfigure is not None:
             reconfigure(encoding="utf-8")
     _configure_offline_models()
     request = json.loads(sys.stdin.read())
-    response = run(request, ocr_fn=_paddle_ocr_fn, mark_fn=mark_detect.detect_marked_labels)
+    page = request.get("page") or {}
+    image_path = str(page.get("image_path") or "")
+    lines = _paddle_ocr_fn(image_path) if image_path else []
+    response = run(request, ocr_fn=lambda _path: lines, mark_fn=mark_detect.detect_marked_labels)
+    if image_path:
+        from pathlib import Path as _Path
+        crop_out = _Path(image_path).with_name(_Path(image_path).stem + "-name.png")
+        saved = name_crop.save_name_crop(image_path, lines, str(crop_out))
+        if saved:
+            response["record"]["ocr"]["name_crop"] = _Path(saved).name
     sys.stdout.write(json.dumps(response, ensure_ascii=False))
     return 0
 

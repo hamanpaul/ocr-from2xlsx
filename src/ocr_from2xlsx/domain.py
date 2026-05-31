@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from datetime import date
 from typing import Any
 
@@ -144,6 +144,17 @@ class SourceInfo:
             template_id=_optional_string(data.get("template_id"), "source.template_id"),
         )
 
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "kind": self.kind,
+            "document_path": self.document_path,
+            "page_number": self.page_number,
+            "image_path": self.image_path,
+            "preprocessed_image_path": self.preprocessed_image_path,
+            "capture_time": self.capture_time,
+            "template_id": self.template_id,
+        }
+
 
 @dataclass(slots=True)
 class PatientFields:
@@ -170,6 +181,17 @@ class PatientFields:
                 "patient_fields.newly_diagnosed_within_year",
             ),
         )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "nationality": self.nationality,
+            "age_group": self.age_group,
+            "channel": self.channel,
+            "disease_status": self.disease_status,
+            "source": self.source,
+            "cancers": list(self.cancers),
+            "newly_diagnosed_within_year": self.newly_diagnosed_within_year,
+        }
 
 
 @dataclass(slots=True)
@@ -206,6 +228,15 @@ class Services:
                 parts.append(f"{name}:{code}")
         return "|".join(parts)
 
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "consultation": {key: list(values) for key, values in self.consultation.items()},
+            "supplies": list(self.supplies),
+            "internal_referrals": list(self.internal_referrals),
+            "external_referrals": list(self.external_referrals),
+            "referral_outcomes": list(self.referral_outcomes),
+        }
+
 
 @dataclass(slots=True)
 class OcrInfo:
@@ -215,6 +246,7 @@ class OcrInfo:
     raw_text: str = ""
     warnings: list[str] = field(default_factory=list)
     field_confidences: dict[str, float] = field(default_factory=dict)
+    name_crop: str | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any] | None) -> "OcrInfo":
@@ -226,7 +258,22 @@ class OcrInfo:
             raw_text=_lenient_string(data.get("raw_text"), "ocr.raw_text"),
             warnings=_require_list(data.get("warnings"), "ocr.warnings", item_type=str),
             field_confidences=_require_float_map(data.get("field_confidences"), "ocr.field_confidences"),
+            name_crop=_optional_string(data.get("name_crop"), "ocr.name_crop"),
         )
+
+    def to_dict(self) -> dict[str, Any]:
+        result: dict[str, Any] = {
+            "backend": self.backend,
+            "model": self.model,
+            "raw_text": self.raw_text,
+            "warnings": list(self.warnings),
+            "field_confidences": dict(self.field_confidences),
+        }
+        if self.confidence is not None:
+            result["confidence"] = self.confidence
+        if self.name_crop is not None:
+            result["name_crop"] = self.name_crop
+        return result
 
 
 @dataclass(slots=True)
@@ -242,6 +289,12 @@ class ReviewInfo:
         else:
             edited_by_user = False
         return cls(status=_lenient_string(data.get("status"), "review.status"), edited_by_user=edited_by_user)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "status": self.status,
+            "edited_by_user": self.edited_by_user,
+        }
 
 
 @dataclass(slots=True)
@@ -283,7 +336,22 @@ class Record:
         )
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        return {
+            "record_id": self.record_id,
+            "service_date": self.service_date,
+            "identity": self.identity,
+            "name": self.name,
+            "medical_record_no": self.medical_record_no,
+            "gender": self.gender,
+            "source": self.source.to_dict(),
+            "birthdate": self.birthdate,
+            "patient_fields": self.patient_fields.to_dict(),
+            "services": self.services.to_dict(),
+            "discharge_followup": self.discharge_followup,
+            "notes": self.notes,
+            "ocr": self.ocr.to_dict(),
+            "review": self.review.to_dict(),
+        }
 
     def service_month_label(self) -> str:
         if not self.service_date:
@@ -312,6 +380,13 @@ class SourceBatch:
             source_type=_lenient_string(data.get("source_type"), "source_batch.source_type"),
             template_name=_lenient_string(data.get("template_name"), "source_batch.template_name"),
         )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "created_at": self.created_at,
+            "source_type": self.source_type,
+            "template_name": self.template_name,
+        }
 
 
 @dataclass(slots=True)
@@ -342,4 +417,8 @@ class Batch:
         )
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        return {
+            "schema_version": self.schema_version,
+            "source_batch": self.source_batch.to_dict(),
+            "records": [record.to_dict() for record in self.records],
+        }

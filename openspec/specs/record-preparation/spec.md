@@ -24,6 +24,42 @@ The system SHALL retain OCR metadata in the normalized output, including backend
 - **WHEN** the OCR backend reports low confidence or ambiguous field detection
 - **THEN** the normalized record includes that warning information in its OCR metadata without changing the workbook-facing field contract
 
+### Requirement: Emit a privacy-minimized handwritten-name crop
+The system SHALL emit a cropped image containing only the handwritten name line from the fixed-layout form and SHALL exclude the medical-record-no digit line and the diagnosis-date line. The preparation flow SHALL make that crop discoverable to downstream handwritten-name suggestion logic, either by recording the crop path in OCR metadata or by following the stable sibling naming convention derived from the prepared page image.
+
+#### Scenario: Name crop excludes the medical-record-no
+- **WHEN** the form's 姓名/病歷號 region contains a handwritten name on its line and the medical-record-no on a different line
+- **THEN** the emitted name crop covers only the name line, excludes the medical-record-no digits, and remains discoverable to the downstream suggestion flow
+
+### Requirement: Support optional handwritten-name suggestions with local roster reuse
+The system SHALL support an optional handwritten-name suggestion pass that can reuse previously confirmed local names and, when configured, call a cloud name agent using only the privacy-minimized name crop. When the agent is absent, disabled, unreachable, errors, or no crop is available, the preparation flow SHALL behave as a no-op and leave the existing normalized output unchanged.
+
+#### Scenario: Enabled suggestion pass populates an unconfirmed name
+- **WHEN** a handwritten-name agent is configured and enabled, a discoverable name crop is available, and a local roster or agent suggestion yields a candidate
+- **THEN** the prepared record's name is populated with that candidate and marked for human confirmation
+
+#### Scenario: Absent or disabled suggestion pass does not affect the pipeline
+- **WHEN** no handwritten-name agent is configured, the configuration is disabled, or no discoverable crop is available
+- **THEN** the pipeline produces the same normalized record it would have without the suggestion pass and raises no error
+
+### Requirement: Keep machine-produced names unconfirmed until a human review
+The system SHALL mark machine-produced or roster-recommended names with `name.unconfirmed` and SHALL NOT allow direct import of those names until a human explicitly confirms them in the review workflow or by an equivalent explicit confirmation step.
+
+#### Scenario: Direct import blocks an unconfirmed machine-produced name
+- **WHEN** an `import-json` attempt reaches a record whose name still carries `name.unconfirmed`
+- **THEN** the write is blocked until a human confirms the name
+
+#### Scenario: Review confirmation clears the unconfirmed flag
+- **WHEN** a human accepts or corrects a record in the review workflow
+- **THEN** the record is written without the `name.unconfirmed` warning
+
+### Requirement: Record confirmed names for future local reuse
+The system SHALL append each human confirmation or correction of a previously unconfirmed name to a local JSONL correction store adjacent to the prepared JSON, capturing enough provenance for future roster reuse, and SHALL load confirmed names from that store as the local roster for future suggestion passes.
+
+#### Scenario: Review confirmation updates the correction store
+- **WHEN** a human confirms or corrects an unconfirmed handwritten-name suggestion in the review workflow
+- **THEN** a correction entry is appended to the local store and the confirmed value becomes available to future roster-based suggestions
+
 ### Requirement: Support replaceable OCR backends behind a stable preparation interface
 The system SHALL expose a preparation pipeline that can switch OCR backends without changing the normalized JSON contract consumed by downstream commands.
 

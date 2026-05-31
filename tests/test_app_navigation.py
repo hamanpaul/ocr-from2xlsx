@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from ocr_from2xlsx.correction_store import load_corrections
 from ocr_from2xlsx.app import ReviewApp
 from ocr_from2xlsx.session import AcceptResult
 from tests.test_json_io import make_record
@@ -12,10 +13,14 @@ from tests.test_json_io import make_record
 class StubSession:
     def __init__(self, result: AcceptResult) -> None:
         self.result = result
-        self.calls: list[tuple[str, bool]] = []
+        self.calls: list[tuple[str, bool, bool]] = []
 
-    def accept_scan(self, record, force: bool = False) -> AcceptResult:
-        self.calls.append((record.record_id, force))
+    def accept_scan(
+        self, record, force: bool = False, human_confirmed: bool = False
+    ) -> AcceptResult:
+        self.calls.append((record.record_id, force, human_confirmed))
+        if human_confirmed and self.result.status in {"forced", "written"}:
+            record.ocr.warnings = [warning for warning in record.ocr.warnings if warning != "name.unconfirmed"]
         return self.result
 
     def close(self) -> None:
@@ -54,6 +59,8 @@ def app(monkeypatch: pytest.MonkeyPatch) -> ReviewApp:
     review_app.session = None
     review_app.editing = False
     review_app.written_indices = set()
+    review_app.loaded_json_path = None
+    review_app.correction_store_path = None
     review_app.fields = {
         "record_id": FakeVar(),
         "service_date": FakeVar(),
@@ -87,7 +94,7 @@ def test_force_write_does_not_advance(app: ReviewApp) -> None:
     assert app.current_index == 0
     assert app.editing is False
     assert app.written_indices == {0}
-    assert session.calls == [(records[0].record_id, True)]
+    assert session.calls == [(records[0].record_id, True, False)]
     assert app.fields["record_id"].get() == records[0].record_id
 
 
@@ -139,6 +146,149 @@ def test_next_record_skips_written_record(app: ReviewApp) -> None:
 
     app._next_record()
 
+    assert app.current_index == 1
+    assert app.fields["record_id"].get() == records[1].record_id
+
+
+def test_load_json_sets_default_correction_store_path(
+    app: ReviewApp, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    json_path = tmp_path / "records.json"
+    records = [make_record("scan-0001")]
+
+    monkeypatch.setattr(
+        "ocr_from2xlsx.app.filedialog.askopenfilename", lambda **kwargs: str(json_path)
+    )
+
+    class FakeSource:
+        def __init__(self, path: str) -> None:
+            assert Path(path) == json_path
+
+        def records(self):
+            return iter(records)
+
+    monkeypatch.setattr("ocr_from2xlsx.app.JsonRecordSource", FakeSource)
+
+    app._load_json()
+
+    assert app.loaded_json_path == json_path
+    assert app.correction_store_path == json_path.parent / "name_corrections.jsonl"
+
+
+def test_next_record_confirms_unconfirmed_name_and_clears_warning(
+    app: ReviewApp, tmp_path: Path
+) -> None:
+    record = make_record("scan-0001")
+    expected_name = record.name
+    record.ocr.warnings = ["name.unconfirmed"]
+    record.ocr.raw_text = "癌症資源中心服務紀錄表\n姓名 王小明\n病歷號 6250712919"
+    app.records = [record]
+    app.current_index = 0
+    app.correction_store_path = tmp_path / "name_corrections.jsonl"
+    app.session = StubSession(
+        AcceptResult(
+            record_id=record.record_id,
+            status="written",
+            row_number=2,
+            blockers=[],
+            warnings=[],
+        )
+    )
+    app._show_record(record)
+
+    app._next_record()
+
+    assert record.ocr.warnings == []
+    assert record.review.edited_by_user is False
+    assert app.session.calls == [(record.record_id, False, True)]
+    saved = load_corrections(app.correction_store_path)[0]
+    assert saved.final_value == expected_name
+    assert saved.ocr_raw == ""
+
+
+def test_next_record_blocked_does_not_persist_unconfirmed_name(app: ReviewApp, tmp_path: Path) -> None:
+    record = make_record("scan-0001")
+    record.ocr.warnings = ["name.unconfirmed"]
+    record.ocr.raw_text = "王小明"
+    app.records = [record]
+    app.current_index = 0
+    app.correction_store_path = tmp_path / "name_corrections.jsonl"
+    app.session = StubSession(
+        AcceptResult(
+            record_id=record.record_id,
+            status="blocked",
+            row_number=None,
+            blockers=["name.unconfirmed"],
+            warnings=[],
+        )
+    )
+    app._show_record(record)
+
+    app._next_record()
+
+    assert record.ocr.warnings == ["name.unconfirmed"]
+    assert load_corrections(app.correction_store_path) == []
+
+
+def test_force_write_failure_does_not_persist_unconfirmed_name(app: ReviewApp, tmp_path: Path) -> None:
+    record = make_record("scan-0001")
+    record.ocr.warnings = ["name.unconfirmed"]
+    record.ocr.raw_text = "王小明"
+    app.records = [record]
+    app.current_index = 0
+    app.correction_store_path = tmp_path / "name_corrections.jsonl"
+    app._show_record(record)
+
+    class FailingSession:
+        def accept_scan(
+            self, record, force: bool = False, human_confirmed: bool = False
+        ) -> AcceptResult:
+            raise OSError("disk full")
+
+        def close(self) -> None:
+            return None
+
+    app.session = FailingSession()
+
+    app._force_write()
+
+    assert record.ocr.warnings == ["name.unconfirmed"]
+    assert load_corrections(app.correction_store_path) == []
+
+
+def test_next_record_successful_write_tolerates_correction_store_failure(
+    app: ReviewApp, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    records = [make_record("scan-0001"), make_record("scan-0002")]
+    records[0].ocr.warnings = ["name.unconfirmed"]
+    app.records = records
+    app.current_index = 0
+    app.correction_store_path = Path("C:\\fake\\name_corrections.jsonl")
+    app._show_record(records[0])
+    app.session = StubSession(
+        AcceptResult(
+            record_id=records[0].record_id,
+            status="written",
+            row_number=2,
+            blockers=[],
+            warnings=[],
+        )
+    )
+    errors: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        "ocr_from2xlsx.app.messagebox.showerror",
+        lambda title, message: errors.append((title, message)),
+    )
+
+    def _raise_store_locked(**kwargs):
+        raise OSError("store locked")
+
+    monkeypatch.setattr("ocr_from2xlsx.app.confirm_name", _raise_store_locked)
+
+    app._next_record()
+
+    assert errors == [("寫入失敗", "store locked")]
+    assert app.written_indices == {0}
     assert app.current_index == 1
     assert app.fields["record_id"].get() == records[1].record_id
 

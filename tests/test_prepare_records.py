@@ -185,6 +185,40 @@ def test_prepare_records_preserves_backend_supplied_record_id(tmp_path: Path) ->
     assert [record.record_id for record in batch.records] == ["gold-9"]
 
 
+def test_prepare_records_marks_backend_supplied_name_as_unconfirmed(tmp_path: Path) -> None:
+    pdf_path = tmp_path / "has-name.pdf"
+    document = fitz.open()
+    document.new_page(width=595.44, height=841.68)
+    document.save(pdf_path)
+    document.close()
+
+    class _WithNameBackend:
+        def extract(self, page: PreparedPage) -> dict:
+            return {
+                "record_id": "gold-9",
+                "service_date": "2026-05-26",
+                "identity": "patient",
+                "name": "AI test",
+                "medical_record_no": "Y",
+                "gender": "female",
+                "ocr": {
+                    "raw_text": "AI test",
+                    "warnings": ["existing-warning"],
+                },
+            }
+
+    batch = prepare_records_from_paths(
+        input_paths=[pdf_path],
+        output_dir=tmp_path,
+        template=service_record_template(),
+        backend=_WithNameBackend(),
+        created_at="2026-05-26T00:00:00+08:00",
+    )
+
+    assert batch.records[0].name == "AI test"
+    assert batch.records[0].ocr.warnings == ["existing-warning", "name.unconfirmed"]
+
+
 def test_prepare_records_from_paths_rejects_non_object_source_metadata(
     tmp_path: Path,
 ) -> None:

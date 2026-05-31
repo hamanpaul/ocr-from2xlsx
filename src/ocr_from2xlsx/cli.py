@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from pathlib import Path
 from typing import TextIO
 
 
@@ -30,6 +31,29 @@ def _resolve_template(template_id: str):
     if template_id == "service_record.v1":
         return service_record_template()
     raise ValueError(f"Unsupported template_id: {template_id!r}")
+
+
+def _resolve_name_crop_path(record, output_dir: Path) -> str | None:
+    crop_value = getattr(record.ocr, "name_crop", None)
+    if crop_value:
+        crop_path = Path(crop_value)
+        if not crop_path.is_absolute():
+            crop_path = output_dir / crop_path
+        try:
+            crop_path.resolve(strict=False).relative_to(output_dir.resolve(strict=False))
+        except ValueError:
+            crop_path = None
+        else:
+            if crop_path.is_file():
+                return str(crop_path)
+    prepared_image = record.source.preprocessed_image_path
+    if not prepared_image:
+        return None
+    prepared_path = Path(prepared_image)
+    crop_path = prepared_path.with_name(f"{prepared_path.stem}-name.png")
+    if not crop_path.is_absolute():
+        crop_path = output_dir / crop_path
+    return str(crop_path) if crop_path.is_file() else None
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -72,6 +96,13 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Force writable-only blockers to import incomplete records.",
     )
+    import_parser.add_argument(
+        "--allow-unconfirmed-name",
+        action="store_true",
+        help="DEV ONLY: write records whose name is still machine-suggested (name.unconfirmed) "
+             "without GUI confirmation; the unconfirmed warning is retained in the report. "
+             "Deployment should require GUI confirmation instead.",
+    )
     prepare_parser = subparsers.add_parser(
         "prepare-records",
         help="Prepare normalized JSON records from PDF inputs.",
@@ -98,6 +129,10 @@ def build_parser() -> argparse.ArgumentParser:
         default="service_record.v1",
         help="Form template identifier (currently only service_record.v1 is supported).",
     )
+    prepare_parser.add_argument(
+        "--name-agent-config",
+        help="Optional TOML config for the handwritten-name agent; absent or disabled = no-op.",
+    )
     subparsers.add_parser("app", help="Launch the native desktop review UI.")
     return parser
 
@@ -111,8 +146,6 @@ def main(argv: list[str] | None = None) -> int:
         print(__version__)
         return 0
     if args.command == "sample-json":
-        from pathlib import Path
-
         from ocr_from2xlsx.json_io import dump_batch
         from ocr_from2xlsx.sample_data import generate_sample_batch
 
@@ -122,8 +155,6 @@ def main(argv: list[str] | None = None) -> int:
         print(output_path)
         return 0
     if args.command == "validate-json":
-        from pathlib import Path
-
         from ocr_from2xlsx.json_io import load_batch
         from ocr_from2xlsx.validation import validate_batch
 
@@ -138,8 +169,6 @@ def main(argv: list[str] | None = None) -> int:
         print(f"records={len(batch.records)} blockers={blocker_count} warnings={warning_count}")
         return 1 if blocker_count else 0
     if args.command == "import-json":
-        from pathlib import Path
-
         from ocr_from2xlsx.json_io import load_batch
         from ocr_from2xlsx.session import ImportSession
 
@@ -151,7 +180,11 @@ def main(argv: list[str] | None = None) -> int:
             with ImportSession.start(Path(args.template), Path(args.working)) as session:
                 for record in batch.records:
                     may_have_imports = True
-                    result = session.accept_scan(record, force=args.allow_incomplete)
+                    result = session.accept_scan(
+                        record,
+                        force=args.allow_incomplete,
+                        allow_unconfirmed_name=args.allow_unconfirmed_name,
+                    )
                     if result.status == "blocked":
                         blocked_count += 1
                     if result.status in {"forced", "written"}:
@@ -177,8 +210,6 @@ def main(argv: list[str] | None = None) -> int:
         print(Path(args.working))
         return 1 if blocked_count else 0
     if args.command == "prepare-records":
-        from pathlib import Path
-
         from ocr_from2xlsx.json_io import dump_batch
         from ocr_from2xlsx.prepare_records import prepare_records_from_paths
 
@@ -211,6 +242,37 @@ def main(argv: list[str] | None = None) -> int:
                 backend=backend,
             )
             output_path = Path(args.output)
+            if args.name_agent_config:
+                from ocr_from2xlsx.correction_store import (
+                    default_correction_store_path,
+                    roster_from_store,
+                )
+                from ocr_from2xlsx.name_agent import NullNameAgent, build_agent, load_config
+                from ocr_from2xlsx.name_suggestion import suggest_name
+
+                config = load_config(Path(args.name_agent_config))
+                if config.enabled:
+                    agent = build_agent(config)
+                    if not isinstance(agent, NullNameAgent):
+                        output_dir = output_path.parent
+                        roster = roster_from_store(default_correction_store_path(output_path))
+                        for record in batch.records:
+                            if record.name:
+                                continue
+                            crop_path = _resolve_name_crop_path(record, output_dir)
+                            if not crop_path:
+                                continue
+                            name, warnings = suggest_name(
+                                crop_path=crop_path,
+                                agent=agent,
+                                roster=roster,
+                                ocr_raw=record.ocr.raw_text or "",
+                            )
+                            if name:
+                                record.name = name
+                            for warning in warnings:
+                                if warning not in record.ocr.warnings:
+                                    record.ocr.warnings.append(warning)
             dump_batch(batch, output_path)
         except (
             OSError,

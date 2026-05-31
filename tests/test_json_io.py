@@ -16,6 +16,7 @@ from ocr_from2xlsx.domain import (
     SourceBatch,
 )
 from ocr_from2xlsx.json_io import dump_batch, load_batch
+from ocr_from2xlsx.normalizer import normalize_raw_record
 
 
 def make_record(record_id: str = "scan-0001") -> Record:
@@ -115,6 +116,52 @@ def test_batch_json_round_trip_keeps_pdf_source_and_ocr_metadata(tmp_path: Path)
     assert loaded.records[0].ocr.backend == "fixture"
     assert loaded.records[0].ocr.model == "manual-gold"
     assert loaded.records[0].ocr.field_confidences == {"name": 0.99, "service_date": 0.95}
+
+
+def test_normalize_raw_record_preserves_backend_name_crop_metadata() -> None:
+    record = normalize_raw_record(
+        {
+            "record_id": "pdf-0001",
+            "service_date": "2026-03-15",
+            "identity": "patient",
+            "name": "",
+            "medical_record_no": "A123456",
+            "gender": "female",
+            "source": {"preprocessed_image_path": "scan-0001.png"},
+            "ocr": {
+                "backend": "plugin",
+                "model": "paddle",
+                "raw_text": "raw",
+                "warnings": [],
+                "name_crop": "custom-crops/pdf-0001-handwritten-name.png",
+            },
+        }
+    )
+
+    assert record.ocr.name_crop == "custom-crops/pdf-0001-handwritten-name.png"
+
+
+def test_batch_json_round_trip_keeps_backend_name_crop_without_null_pollution(tmp_path: Path) -> None:
+    batch = Batch(
+        source_batch=SourceBatch(
+            created_at="2026-05-26T09:00:00+08:00",
+            source_type="prepare_records",
+            template_name="service_record.v1",
+        ),
+        records=[make_record("scan-0001"), make_record("scan-0002")],
+    )
+    batch.records[0].ocr.backend = "plugin"
+    batch.records[0].ocr.name_crop = "custom-crops/pdf-0001-handwritten-name.png"
+    path = tmp_path / "prepared.json"
+
+    dump_batch(batch, path)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    loaded = load_batch(path)
+
+    assert payload["records"][0]["ocr"]["name_crop"] == "custom-crops/pdf-0001-handwritten-name.png"
+    assert "name_crop" not in payload["records"][1]["ocr"]
+    assert loaded.records[0].ocr.name_crop == "custom-crops/pdf-0001-handwritten-name.png"
+    assert loaded.records[1].ocr.name_crop is None
 
 
 def test_load_batch_accepts_integral_float_page_number(tmp_path: Path) -> None:

@@ -38,7 +38,7 @@ def main() -> int:
     print(f"copying venv {SRC_VENV} -> {OUT / 'python'} (large, please wait)")
     shutil.copytree(SRC_VENV, OUT / "python", dirs_exist_ok=True)
     _copy_models(OUT / "models" / "official_models")
-    for name in ["main.py", "field_extract.py", "mark_detect.py", "plugin.json"]:
+    for name in ["main.py", "field_extract.py", "mark_detect.py", "name_crop.py", "plugin.json"]:
         shutil.copy2(SRC_PLUGIN / name, OUT / name)
     print(f"bundle ready: {OUT}")
     return 0

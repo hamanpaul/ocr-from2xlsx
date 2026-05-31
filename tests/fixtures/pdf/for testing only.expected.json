@@ -48,7 +48,9 @@
         "model": "manual-gold",
         "confidence": 0.98,
         "raw_text": "AI test, training only",
-        "warnings": [],
+        "warnings": [
+          "name.unconfirmed"
+        ],
         "field_confidences": {
           "name": 0.99,
           "service_date": 0.97

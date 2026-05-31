@@ -8,19 +8,36 @@
 ## [Unreleased]
 
 ### Added
+- `import-json --allow-unconfirmed-name`（開發用）：允許在未經 GUI 確認下寫入機器建議的姓名，報告仍保留 `name.unconfirmed` 標記；正式部署預設仍要求 GUI 人工確認。
+- `prepare-records` 新增可選 `--name-agent-config`：以 TOML 啟用手寫姓名 agent；缺席、停用或不支援 provider 時維持 no-op。
+- 離線 OCR 外掛新增輸出個資最小化的姓名裁圖，路徑記於 `record.ocr.name_crop`。
+- 新增 `name_suggestion` / `confirm_name`：候選姓名會先標 `name.unconfirmed`，人工確認則寫回本地 correction store 並重建 roster。
+- 新增 `correction_store`（append-only JSONL）與 `name_roster`（difflib fuzzy match），供後續姓名匹配重用。
+- 手寫姓名 agent 只接收姓名裁圖；API key 由 config 指定的環境變數讀取（預設 `ANTHROPIC_API_KEY`）。
 - 新增 `plugins/paddleocr/mark_detect.py` 純函式打勾評分核心（灰階區域墨跡比例）。
 - PaddleOCR 外掛新增身分/性別打勾辨識（文字錨點 + 框內墨跡 + OCR 異常文字訊號）與手寫姓名/病歷號擷取。
 - `import-json --allow-incomplete`：辨識到的記錄即使缺病人限定欄位也可寫入（forced）以供核對。
 - 新增參考 PDF ground-truth fixture、可選的實機 PaddleOCR 驗證測試，與 `build/build_paddle_plugin.py` 的 bundle 內容回歸測試。
 
 ### Fixed
+- `prepare_records` 現在會把 OCR/backend 直接帶入的 `name` 一律標成 `name.unconfirmed`；`correction_store.load_corrections` 也會跳過損壞或不可用的 JSONL entries，避免 `prepare-records` 因單筆壞資料整體失敗。
+- `prepare-records --name-agent-config` 現在會拒絕解析後跳出輸出目錄的 backend `record.ocr.name_crop` 路徑，並改回同層 `*-name.png` fallback；`name_agent.load_config()` 也改為嚴格驗證 TOML 型別，錯誤型別會直接報 `ValueError`，不再以 `bool(...)` / `str(...)` 靜默轉型。
+- `name_suggestion` 現在只會把單行、姓名樣式的 OCR 字串當成 fallback 候選，並在 `confirm_name` 持久化前再次最小化 `ocr_raw`；多行整頁 OCR 內容與敏感欄位（如病歷號）不再寫進 `record.name` 或 correction store。`name_agent.load_config()` 缺省 prompt 也改用實際字串常數，避免 dataclass slots descriptor 混入設定。
+- `name_suggestion.suggest_name` 在沒有任何可提案姓名時不再強制加上 `name.unconfirmed`；有 roster match 或 agent/OCR 候選時仍維持未確認警告。
+- `correction_store.load_corrections` 現在會忽略 JSONL 中未認得的欄位，避免前向相容資料把 review flow 擋死。
+- `ImportSession.accept_scan(..., human_confirmed=True)` 現在統一在成功寫入時清除 `name.unconfirmed`；Tk 純姓名確認不再把該筆標成使用者編輯。
+- `ReviewApp` 現在只會在 `accept_scan()` 寫入成功（`written` / `forced`）後才把人工確認姓名寫進本地 correction store；被阻擋或寫入失敗時不再污染 learning loop。`prepare-records --name-agent-config` 對不支援或實際無法運作的 agent 設定也恢復 strict no-op，不再單靠 OCR fallback 填入姓名或追加 `name.unconfirmed`。
+- 補齊手寫姓名 learning loop：`prepare-records` 會自動載入輸出 JSON 同層 `name_corrections.jsonl` 建 roster；`ImportSession` 預設阻擋 `name.unconfirmed`；Tk 審核流程確認姓名後會寫入同層 correction store 並清除警告再寫入。
+- `prepare-records --name-agent-config` 現在會先使用 `record.ocr.name_crop`，缺席時才從 `source.preprocessed_image_path` 推導同層的 `*-name.png` 裁圖；只有裁圖存在時才進入建議流程，否則維持 strict no-op。
 - `plugins/paddleocr/mark_detect.py`：改為只接受獨立或單字元裝飾的選項標籤，避免把標題與「數量」類欄位誤判成可勾選標籤。
 - `plugins/paddleocr/mark_detect.py`：新增 OCR 文字異常的勾選推論（如 `中女性`、`V女性`、`病人6250712919`），讓實際被勾選的身份/性別可在未探到像素勾記時仍被辨識；純 `□標籤` 仍只作為 probe label，不視為文字已勾選。
 - `plugins/paddleocr/field_extract.py`：忽略單一中文字元的姓名雜訊，並保留姓名欄錨點上方鄰近行的病歷號回收。
 - 實機 PaddleOCR ground-truth 驗證目前仍會漏掉參考表單的手寫 `name`（`葉心安`）；README 已同步標示這是目前 mobile recognizer 的已知限制，建議搭配 `import-json --allow-incomplete` 進行人工核對。
 - `build/build_paddle_plugin.py`：可攜 bundle 現在會一併打包 `mark_detect.py`。
+- `build/build_paddle_plugin.py`：可攜 bundle 現在也會打包 `name_crop.py`，避免離線 PaddleOCR 外掛執行期缺模組。
 - `prepare_records`：當 OCR backend（如 PaddleOCR 外掛）未提供 `record_id` 時，依頁序自動指派穩定 id（`pdf-0001`…），讓真實 OCR 結果能流入 `import-json`；既有 backend 提供的 `record_id` 仍保留。
 - `build/package.py`：清理 `build/` 時保留 `build_paddle_plugin.py`，避免主程式打包誤刪可攜外掛建置腳本。
+- normalized JSON/domain round-trip 現在會保留 backend 提供的 `record.ocr.name_crop`，且缺席時不會把 `"name_crop": null` 寫進每筆記錄。
 
 ### Changed
 - `plugins/paddleocr/field_extract.py`：重構 `extract_name_and_mrn`，改用候選文字列表式擷取（`_name_from_candidates` / `_mrn_from_candidates`），支援手寫姓名與純數字病歷號（`_DIGIT_RUN \d{6,}`）分置兩格的版面；`_mrn_from_candidates` 同時嘗試 `_MRN_TOKEN`（含連字號）與 `_DIGIT_RUN`，保留既有含字母/連字號病歷號相容性。`extract_fields` 新增 `marked_labels=None` 參數（供後續任務使用），並補上 `identity`/`gender` 空字串欄位。

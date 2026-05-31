@@ -348,3 +348,266 @@ def test_option_codes_are_constants_legal():
     assert {o.code for f, o in layout.iter_options() if f.key == "identity"} <= constants.IDENTITIES
     assert {o.code for f, o in layout.iter_options() if f.key == "gender"} <= constants.GENDERS
     assert set(layout.options_by_code("cancer")) <= set(constants.CANCER_LABELS)
+
+
+# --- Issue 1: Generic record value normalization contract ---
+
+
+def test_field_selected_codes_for_boolean_field():
+    """Test generic value normalization for boolean fields like newly_diagnosed."""
+    layout = service_record_layout()
+    fld = layout.field_by_key("newly_diagnosed")
+    
+    # True maps to ("true",)
+    assert fld.selected_codes(True) == ("true",)
+    
+    # False and None map to empty tuple
+    assert fld.selected_codes(False) == ()
+    assert fld.selected_codes(None) == ()
+
+
+def test_field_selected_codes_for_string_single_choice():
+    """Test generic value normalization for string-coded single-choice fields."""
+    layout = service_record_layout()
+    gender = layout.field_by_key("gender")
+    
+    # String value maps to tuple containing that code
+    assert gender.selected_codes("female") == ("female",)
+    assert gender.selected_codes("male") == ("male",)
+    
+    # None maps to empty tuple
+    assert gender.selected_codes(None) == ()
+
+
+def test_field_selected_codes_for_string_multi_choice():
+    """Test generic value normalization for string-coded multi-choice fields."""
+    layout = service_record_layout()
+    cancer = layout.field_by_key("cancer")
+    
+    # List of strings maps to tuple of codes
+    assert cancer.selected_codes(["brain_cancer", "lung_cancer"]) == ("brain_cancer", "lung_cancer")
+    
+    # Empty list or None maps to empty tuple
+    assert cancer.selected_codes([]) == ()
+    assert cancer.selected_codes(None) == ()
+
+
+def test_field_selected_codes_for_text_field():
+    """Text fields should not support selected_codes (or return empty tuple)."""
+    layout = service_record_layout()
+    name = layout.field_by_key("name")
+    
+    # Text fields don't have options, should return empty tuple or raise
+    assert name.selected_codes("John Doe") == ()
+
+
+# --- Issue 2: Exact section and field order, canonical code backing ---
+
+
+def test_service_record_exact_section_order():
+    """Section order must be: top, A, B, C."""
+    layout = service_record_layout()
+    section_ids = [sec.id for sec in layout.sections]
+    assert section_ids == ["top", "A", "B", "C"]
+
+
+def test_service_record_section_top_field_order():
+    """Top section must contain exactly: service_date."""
+    layout = service_record_layout()
+    top = layout.sections[0]
+    assert top.id == "top"
+    field_keys = [f.key for f in top.fields]
+    assert field_keys == ["service_date"]
+
+
+def test_service_record_section_a_field_order():
+    """Section A must contain consultation.* fields, then supplies, internal/external referrals, referral_outcomes."""
+    layout = service_record_layout()
+    section_a = layout.sections[1]
+    assert section_a.id == "A"
+    field_keys = [f.key for f in section_a.fields]
+    assert field_keys == [
+        "consultation.health_medical",
+        "consultation.symptom_side_effect",
+        "consultation.nutrition_diet",
+        "consultation.psychosocial_emotion",
+        "consultation.financial_social",
+        "consultation.care_support",
+        "supplies",
+        "internal_referrals",
+        "external_referrals",
+        "referral_outcomes",
+    ]
+
+
+def test_service_record_section_b_field_order():
+    """Section B must contain identity, name, medical_record_no, diagnosis_date, gender, nationality, age."""
+    layout = service_record_layout()
+    section_b = layout.sections[2]
+    assert section_b.id == "B"
+    field_keys = [f.key for f in section_b.fields]
+    assert field_keys == [
+        "identity",
+        "name",
+        "medical_record_no",
+        "diagnosis_date",
+        "gender",
+        "nationality",
+        "age",
+    ]
+
+
+def test_service_record_section_c_field_order():
+    """Section C must contain channel, disease_status, source, cancer, newly_diagnosed."""
+    layout = service_record_layout()
+    section_c = layout.sections[3]
+    assert section_c.id == "C"
+    field_keys = [f.key for f in section_c.fields]
+    assert field_keys == [
+        "channel",
+        "disease_status",
+        "source",
+        "cancer",
+        "newly_diagnosed",
+    ]
+
+
+def _check_option_codes_match_constants(field, expected_codes, expected_labels=None):
+    """Helper to verify option codes match canonical constants."""
+    actual_codes = {opt.code for opt in field.options}
+    assert actual_codes == expected_codes, (
+        f"Field {field.key} option codes mismatch: expected {expected_codes}, got {actual_codes}"
+    )
+    # Also check that each code has corresponding label (if labels provided)
+    if expected_labels:
+        for opt in field.options:
+            assert opt.code in expected_labels, f"Option code {opt.code!r} missing from labels"
+
+
+def test_identity_options_match_constants():
+    """identity field options must match IDENTITIES and IDENTITY_LABELS."""
+    from ocr_from2xlsx import constants
+    layout = service_record_layout()
+    fld = layout.field_by_key("identity")
+    _check_option_codes_match_constants(fld, constants.IDENTITIES, constants.IDENTITY_LABELS)
+
+
+def test_gender_options_match_constants():
+    """gender field options must match GENDERS and GENDER_LABELS."""
+    from ocr_from2xlsx import constants
+    layout = service_record_layout()
+    fld = layout.field_by_key("gender")
+    _check_option_codes_match_constants(fld, constants.GENDERS, constants.GENDER_LABELS)
+
+
+def test_nationality_options_match_constants():
+    """nationality field options must match PATIENT_ENUMS['nationality'] and NATIONALITY_LABELS."""
+    from ocr_from2xlsx import constants
+    layout = service_record_layout()
+    fld = layout.field_by_key("nationality")
+    _check_option_codes_match_constants(
+        fld, constants.PATIENT_ENUMS["nationality"], constants.NATIONALITY_LABELS
+    )
+
+
+def test_age_options_match_constants():
+    """age field options must match PATIENT_ENUMS['age_group'] and AGE_GROUP_LABELS."""
+    from ocr_from2xlsx import constants
+    layout = service_record_layout()
+    fld = layout.field_by_key("age")
+    _check_option_codes_match_constants(
+        fld, constants.PATIENT_ENUMS["age_group"], constants.AGE_GROUP_LABELS
+    )
+
+
+def test_channel_options_match_constants():
+    """channel field options must match PATIENT_ENUMS['channel'] and CHANNEL_LABELS."""
+    from ocr_from2xlsx import constants
+    layout = service_record_layout()
+    fld = layout.field_by_key("channel")
+    _check_option_codes_match_constants(
+        fld, constants.PATIENT_ENUMS["channel"], constants.CHANNEL_LABELS
+    )
+
+
+def test_disease_status_options_match_constants():
+    """disease_status field options must match PATIENT_ENUMS['disease_status'] and DISEASE_STATUS_LABELS."""
+    from ocr_from2xlsx import constants
+    layout = service_record_layout()
+    fld = layout.field_by_key("disease_status")
+    _check_option_codes_match_constants(
+        fld, constants.PATIENT_ENUMS["disease_status"], constants.DISEASE_STATUS_LABELS
+    )
+
+
+def test_source_options_match_constants():
+    """source field options must match PATIENT_ENUMS['source'] and SOURCE_LABELS."""
+    from ocr_from2xlsx import constants
+    layout = service_record_layout()
+    fld = layout.field_by_key("source")
+    _check_option_codes_match_constants(
+        fld, constants.PATIENT_ENUMS["source"], constants.SOURCE_LABELS
+    )
+
+
+def test_cancer_options_match_constants():
+    """cancer field options must match CANCER_LABELS."""
+    from ocr_from2xlsx import constants
+    layout = service_record_layout()
+    fld = layout.field_by_key("cancer")
+    _check_option_codes_match_constants(fld, set(constants.CANCER_LABELS.keys()), constants.CANCER_LABELS)
+
+
+def test_consultation_fields_match_service_categories():
+    """All consultation.* fields must match SERVICE_CATEGORIES."""
+    from ocr_from2xlsx import constants
+    layout = service_record_layout()
+    
+    consultation_mapping = {
+        "consultation.health_medical": "health_medical",
+        "consultation.symptom_side_effect": "symptom_side_effect",
+        "consultation.nutrition_diet": "nutrition_diet",
+        "consultation.psychosocial_emotion": "psychosocial_emotion",
+        "consultation.financial_social": "financial_social",
+        "consultation.care_support": "care_support",
+    }
+    
+    for field_key, category_key in consultation_mapping.items():
+        fld = layout.field_by_key(field_key)
+        expected_codes = constants.SERVICE_CATEGORIES[category_key]
+        actual_codes = {opt.code for opt in fld.options}
+        assert actual_codes == expected_codes, (
+            f"Field {field_key} codes mismatch: expected {expected_codes}, got {actual_codes}"
+        )
+
+
+def test_supplies_options_match_constants():
+    """supplies field options must match SUPPLY_CODES."""
+    from ocr_from2xlsx import constants
+    layout = service_record_layout()
+    fld = layout.field_by_key("supplies")
+    _check_option_codes_match_constants(fld, constants.SUPPLY_CODES)
+
+
+def test_internal_referrals_options_match_constants():
+    """internal_referrals field options must match RESOURCE_CODES."""
+    from ocr_from2xlsx import constants
+    layout = service_record_layout()
+    fld = layout.field_by_key("internal_referrals")
+    _check_option_codes_match_constants(fld, constants.RESOURCE_CODES)
+
+
+def test_external_referrals_options_match_constants():
+    """external_referrals field options must match RESOURCE_CODES."""
+    from ocr_from2xlsx import constants
+    layout = service_record_layout()
+    fld = layout.field_by_key("external_referrals")
+    _check_option_codes_match_constants(fld, constants.RESOURCE_CODES)
+
+
+def test_referral_outcomes_options_match_constants():
+    """referral_outcomes field options must match OUTCOME_CODES."""
+    from ocr_from2xlsx import constants
+    layout = service_record_layout()
+    fld = layout.field_by_key("referral_outcomes")
+    _check_option_codes_match_constants(fld, constants.OUTCOME_CODES)

@@ -63,6 +63,40 @@ class Field:
                     raise ValueError(f"Duplicate option code: {code!r}")
                 seen.add(code)
 
+    def selected_codes(self, value: bool | str | list[str] | None) -> tuple[str, ...]:
+        """Return option codes selected by the given record value.
+        
+        This provides a generic contract for mapping record values to option codes:
+        - For text fields: always returns ()
+        - For single_choice fields with bool value: True -> first option code, False/None -> ()
+        - For single_choice fields with string value: value -> (value,), None -> ()
+        - For multi_choice fields with list value: values -> tuple(values), None/[] -> ()
+        """
+        if self.kind == "text":
+            return ()
+        
+        if value is None:
+            return ()
+        
+        if isinstance(value, bool):
+            # Boolean fields: True maps to the only option code
+            if value:
+                if self.options:
+                    return (self.options[0].code,)
+                return ()
+            else:
+                return ()
+        
+        if isinstance(value, str):
+            # Single choice string field
+            return (value,)
+        
+        if isinstance(value, list):
+            # Multi choice field
+            return tuple(value)
+        
+        return ()
+
 
 @dataclass(frozen=True, slots=True)
 class Section:

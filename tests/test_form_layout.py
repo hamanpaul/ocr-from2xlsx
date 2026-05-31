@@ -751,3 +751,169 @@ def test_referral_outcomes_options_match_constants():
     layout = service_record_layout()
     fld = layout.field_by_key("referral_outcomes")
     _check_option_codes_match_constants(fld, constants.OUTCOME_CODES)
+
+
+# --- Task 3: Openpyxl-backed validation against the real workbook ---
+
+
+# Workbook helpers
+from pathlib import Path
+
+try:
+    from openpyxl import load_workbook
+except ImportError:
+    load_workbook = None
+
+_XLSX = Path(__file__).resolve().parents[1] / "115年整年月報表統計_單案統計加總版(下拉式)(空白).xlsx"
+_SHEET = "服務紀錄表"
+
+# Aggregate count cells that contain checkboxes but are NOT option cells
+_NON_OPTION_CHECKBOX_CELLS = {
+    "C25",  # 女性數量
+    "D25",  # 女性數量
+    "C26",  # 男性數量
+    "D26",  # 男性數量
+    "C27",  # 其他數量
+    "D27",  # 其他數量
+}
+
+
+def _read_workbook_cells():
+    """Read all non-empty cell texts from the workbook sheet."""
+    if load_workbook is None:
+        import pytest
+        pytest.skip("openpyxl not available")
+    
+    if not _XLSX.exists():
+        import pytest
+        pytest.skip(f"Workbook not found: {_XLSX}")
+    
+    wb = load_workbook(_XLSX, data_only=True)
+    ws = wb[_SHEET]
+    
+    cells = {}
+    for row in ws.iter_rows():
+        for cell in row:
+            if cell.value:
+                text = str(cell.value).strip()
+                if text:
+                    cells[cell.coordinate] = text
+    
+    wb.close()
+    return cells
+
+
+def test_every_modeled_option_matches_sheet_cell():
+    """Every modeled option must correspond to a real checkbox cell in the workbook."""
+    layout = service_record_layout()
+    cells = _read_workbook_cells()
+    
+    for field, option in layout.iter_options():
+        cell_coord = option.cell
+        assert cell_coord in cells, (
+            f"Field {field.key!r} option {option.code!r} references missing cell {cell_coord}"
+        )
+        
+        cell_text = cells[cell_coord]
+        normalized_cell = cell_text.replace(" ", "").replace("\n", "")
+        normalized_label = option.label.replace(" ", "").replace("\n", "")
+        
+        # Check that the label appears in the cell text
+        # Handle special cases:
+        # - Most cells: □<label>
+        # - A48: label comes before checkbox
+        # - B23: contains both identity label and extra text
+        assert normalized_label in normalized_cell, (
+            f"Field {field.key!r} option {option.code!r} at {cell_coord}: "
+            f"label {option.label!r} not found in cell text {cell_text!r}"
+        )
+        
+        # Verify checkbox character is present
+        assert "□" in cell_text, (
+            f"Field {field.key!r} option {option.code!r} at {cell_coord}: "
+            f"cell does not contain checkbox character '□'"
+        )
+
+
+def test_every_sheet_checkbox_option_is_modeled():
+    """Every checkbox cell in the workbook (except aggregate counts) must be modeled."""
+    layout = service_record_layout()
+    cells = _read_workbook_cells()
+    
+    # Collect all checkbox cells from the workbook
+    checkbox_cells = {coord for coord, text in cells.items() if "□" in text}
+    
+    # Remove non-option aggregate count cells
+    checkbox_cells = checkbox_cells - _NON_OPTION_CHECKBOX_CELLS
+    
+    # Collect all modeled option cells
+    modeled_cells = {opt.cell for _, opt in layout.iter_options()}
+    
+    # Check for any missing cells
+    missing = checkbox_cells - modeled_cells
+    assert not missing, (
+        f"Workbook has {len(missing)} checkbox cells not in model: {sorted(missing)}"
+    )
+    
+    # Also check that we're not modeling cells that don't exist
+    extra = modeled_cells - checkbox_cells
+    assert not extra, (
+        f"Model has {len(extra)} option cells not in workbook checkbox cells: {sorted(extra)}"
+    )
+
+
+def test_every_record_path_is_legal():
+    """Every non-None Field.record_path must be a legal path into domain.Record."""
+    import dataclasses
+    from ocr_from2xlsx import constants, domain
+    
+    layout = service_record_layout()
+    
+    # Get field names for each domain dataclass
+    record_fields = {f.name for f in dataclasses.fields(domain.Record)}
+    patient_fields = {f.name for f in dataclasses.fields(domain.PatientFields)}
+    services_fields = {f.name for f in dataclasses.fields(domain.Services)}
+    
+    for field in layout.iter_fields():
+        path = field.record_path
+        if path is None:
+            # diagnosis_date has record_path=None and should be excluded
+            continue
+        
+        parts = path.split(".")
+        
+        # Top-level Record field
+        if len(parts) == 1:
+            assert parts[0] in record_fields, (
+                f"Field {field.key!r} record_path {path!r}: "
+                f"unknown Record field {parts[0]!r}"
+            )
+        
+        # patient_fields.* paths
+        elif len(parts) == 2 and parts[0] == "patient_fields":
+            assert parts[1] in patient_fields, (
+                f"Field {field.key!r} record_path {path!r}: "
+                f"unknown PatientFields field {parts[1]!r}"
+            )
+        
+        # services.* paths (not consultation subcategories)
+        elif len(parts) == 2 and parts[0] == "services":
+            assert parts[1] in services_fields, (
+                f"Field {field.key!r} record_path {path!r}: "
+                f"unknown Services field {parts[1]!r}"
+            )
+        
+        # services.consultation.<category> paths
+        elif len(parts) == 3 and parts[0] == "services" and parts[1] == "consultation":
+            category = parts[2]
+            assert category in constants.SERVICE_CATEGORIES, (
+                f"Field {field.key!r} record_path {path!r}: "
+                f"unknown consultation category {category!r}"
+            )
+        
+        else:
+            raise AssertionError(
+                f"Field {field.key!r} record_path {path!r}: "
+                f"unexpected path shape (expected Record.field, patient_fields.field, "
+                f"services.field, or services.consultation.category)"
+            )

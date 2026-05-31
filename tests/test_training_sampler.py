@@ -56,12 +56,7 @@ def test_generate_until_coverage_marks_every_option_at_least_min() -> None:
     rng = random.Random(1)
 
     selections = generate_until_coverage(fields, rng, min_per_option=5)
-    coverage = {code: 0 for code in _option_codes(fields)}
-
-    for selection in selections:
-        for codes in selection.values():
-            for code in codes:
-                coverage[code] += 1
+    coverage = _per_field_coverage(fields, selections)
 
     assert all(count >= 5 for count in coverage.values())
     assert len(selections) < 1000

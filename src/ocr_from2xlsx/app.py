@@ -6,7 +6,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 from ocr_from2xlsx.capture import JsonRecordSource
-from ocr_from2xlsx.confirm_form import record_to_form_state
+from ocr_from2xlsx.confirm_form import apply_form_state, record_to_form_state
 from ocr_from2xlsx.correction_store import default_correction_store_path
 from ocr_from2xlsx.domain import Record
 from ocr_from2xlsx.form_layout import FormLayout, service_record_layout
@@ -316,11 +316,7 @@ class ReviewApp(tk.Tk):
 
     def _apply_form_to_record(self, record: Record) -> None:
         record.record_id = self.fields["record_id"].get()
-        record.service_date = self.fields["service_date"].get()
-        record.identity = self.fields["identity"].get()
-        record.name = self.fields["name"].get()
-        record.medical_record_no = self.fields["medical_record_no"].get()
-        record.gender = self.fields["gender"].get()
+        apply_form_state(self.layout, record, self.confirm_form.collect())
         record.review.edited_by_user = True
 
     def _needs_name_confirmation(self, record: Record) -> bool:

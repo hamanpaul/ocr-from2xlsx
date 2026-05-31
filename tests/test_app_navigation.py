@@ -264,6 +264,28 @@ def test_force_write_does_not_advance(app: ReviewApp) -> None:
     assert app.fields["record_id"].get() == records[0].record_id
 
 
+def test_force_write_persists_non_legacy_confirm_form_fields(app: ReviewApp) -> None:
+    record = make_record("scan-0005")
+    app.records = [record]
+    app.current_index = 0
+    app._show_record(record)
+    app.editing = True
+    app.confirm_form.state["cancer"] = {"lung_cancer"}
+    result = AcceptResult(
+        record_id=record.record_id,
+        status="forced",
+        row_number=2,
+        blockers=[],
+        warnings=[],
+    )
+    app.session = StubSession(result)
+
+    app._force_write()
+
+    assert record.patient_fields.cancers == ["lung_cancer"]
+    assert record.review.edited_by_user is True
+
+
 def test_force_write_skips_when_already_written(
     app: ReviewApp, monkeypatch: pytest.MonkeyPatch
 ) -> None:

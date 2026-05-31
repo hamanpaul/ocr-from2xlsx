@@ -2,7 +2,7 @@
 
 **Change ID:** `add-form-layout-model`
 **Created:** 2026-05-31
-**Status:** Draft
+**Status:** Archived
 
 ---
 
@@ -14,16 +14,18 @@ form (sections, fields, options, codes, cell references). Without a shared model
 form structure and they would drift apart and from the real form. There is currently no single source that
 maps every form option to a canonical code and to its position in the workflow `service_record.v1` Record.
 
-## Proposed Solution
+## Archived Outcome
 
-Add a render-agnostic, hand-curated **form-layout model** (`src/ocr_from2xlsx/form_layout.py`) derived from
-the repo's blank `服務紀錄表` sheet. It exposes Python dataclasses — `Option(label, code, cell)`,
-`Field(key, title, kind, record_path, anchor_cell, options)`, `Section(id, title, fields)`,
-`FormLayout(template_id, sections)` — and a `service_record_layout()` builder that reuses `constants.py`
-codes. Each field carries a `record_path` mapping it to the workflow Record (e.g. `patient_fields.age_group`,
-`services.consultation.health_medical`), making the model the bridge between the form and the normalized
-JSON so downstream consumers (B's answer key, evaluation) align field-by-field. A test validates the model
-against the real sheet (two-way coverage).
+This change was implemented as:
+
+- a new pure-stdlib `src/ocr_from2xlsx/form_layout.py` module with immutable `Option`, `Field`, `Section`,
+  and `FormLayout` dataclasses plus accessor helpers and invariant checks;
+- a hand-curated `service_record_layout()` covering the whole `服務紀錄表` form with canonical codes reused
+  from `constants.py` and `record_path` mappings into the workflow `service_record.v1` Record;
+- workbook-backed tests that validate exact section/field order, canonical labels/codes, selected-code
+  normalization, two-way sheet coverage against the real blank workbook, and `record_path` legality.
+
+The accepted behavior is captured in the base `openspec/specs/form-layout/spec.md`.
 
 ## Scope
 
@@ -56,11 +58,11 @@ the answer key (workflow-format JSON + `training` + `source_image`) against OCR 
 
 ## Success Criteria
 
-- [ ] `form_layout.py` provides the dataclasses and `service_record_layout()`, reusing constants codes.
-- [ ] Every field has a `record_path` (or `null`) matching the `service_record.v1` Record.
-- [ ] The model↔sheet two-way coverage test passes (consistent labels, no missing `□` options).
-- [ ] A and B can import the model instead of hard-coding the form.
-- [ ] Existing tests and policy stay green.
+- [x] `form_layout.py` provides the dataclasses and `service_record_layout()`, reusing constants codes.
+- [x] Every field has a `record_path` (or `null`) matching the `service_record.v1` Record.
+- [x] The model↔sheet two-way coverage test passes (consistent labels, no missing `□` options).
+- [x] A and B can import the model instead of hard-coding the form.
+- [x] Existing tests and policy stay green.
 
 ## Risks & Mitigations
 

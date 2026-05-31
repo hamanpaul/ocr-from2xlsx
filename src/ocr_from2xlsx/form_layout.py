@@ -349,6 +349,7 @@ def service_record_layout() -> FormLayout:
                 record_path="services.external_referrals",
                 anchor_cell="A19",
                 options=_opts(
+                    # The source workbook omits the period here, unlike the parallel internal-referral row.
                     ("1假髮/頭巾/毛帽用品", "wig_hat", "B19"),
                     ("2.其他照護用品", "other_care_supplies", "C19"),
                     ("3.社福資源", "social_welfare", "D19"),

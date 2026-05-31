@@ -6,19 +6,31 @@ from ocr_from2xlsx.form_layout import Field, FormLayout, Option, Section, servic
 def _tiny_layout() -> FormLayout:
     """Minimal layout for testing accessors."""
     return FormLayout(
+        template_id="t",
         sections=(
             Section(
-                key="personal",
+                id="B",
+                title="綜合身份統計",
                 fields=(
                     Field(
                         key="gender",
+                        title="性別",
                         kind="single_choice",
+                        record_path="gender",
+                        anchor_cell="A25",
                         options=(
-                            Option(code="female", label="女", cell="B25"),
-                            Option(code="male", label="男", cell="C25"),
+                            Option(label="女性", code="female", cell="B25"),
+                            Option(label="男性", code="male", cell="B26"),
                         ),
                     ),
-                    Field(key="name", kind="text", options=()),
+                    Field(
+                        key="name",
+                        title="姓名",
+                        kind="text",
+                        record_path="name",
+                        anchor_cell="B23",
+                        options=(),
+                    ),
                 ),
             ),
         ),
@@ -33,16 +45,16 @@ def test_field_by_key_and_iter() -> None:
     assert layout.field_by_key("name").options == ()
     assert layout.field_by_key("missing") is None
     
-    # iter field keys
-    field_keys = list(layout.iter_fields())
+    # iter_fields yields Field objects
+    field_keys = [f.key for f in layout.iter_fields()]
     assert field_keys == ["gender", "name"]
 
 
 def test_iter_options_and_options_by_code() -> None:
     layout = _tiny_layout()
     
-    # iter_options returns (field_key, option_code) pairs
-    option_pairs = list(layout.iter_options())
+    # iter_options returns (Field, Option) pairs
+    option_pairs = [(f.key, o.code) for f, o in layout.iter_options()]
     assert option_pairs == [("gender", "female"), ("gender", "male")]
     
     # options_by_code returns dict[code, Option] for a field

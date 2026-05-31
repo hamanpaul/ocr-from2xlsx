@@ -68,9 +68,11 @@ class Field:
         
         This provides a generic contract for mapping record values to option codes:
         - For text fields: always returns ()
-        - For single_choice fields with bool value: True -> first option code, False/None -> ()
-        - For single_choice fields with string value: value -> (value,), None -> ()
-        - For multi_choice fields with list value: values -> tuple(values), None/[] -> ()
+        - For single_choice fields:
+          - Bool value only accepted if field is bool-backed (codes ⊆ {"true", "false"})
+          - String value accepted for non-bool-backed fields
+        - For multi_choice fields: list of strings only
+        - None always maps to ()
         """
         if self.kind == "text":
             return ()
@@ -79,7 +81,20 @@ class Field:
             return ()
         
         if isinstance(value, bool):
-            # Boolean fields: True maps to the only option code
+            # Bool values only valid for bool-backed single_choice fields
+            if self.kind != "single_choice":
+                raise TypeError(
+                    f"bool value not supported for {self.kind} field "
+                    f"(field is not bool-backed single_choice)"
+                )
+            # Check if this is a bool-backed field (codes subset of {true, false})
+            option_codes = {opt.code for opt in self.options}
+            if not option_codes.issubset({"true", "false"}):
+                raise TypeError(
+                    f"bool value not supported for field {self.key!r}: "
+                    f"field is not bool-backed (codes: {option_codes})"
+                )
+            # For bool-backed fields: True -> first code, False -> ()
             if value:
                 if self.options:
                     return (self.options[0].code,)
@@ -88,11 +103,21 @@ class Field:
                 return ()
         
         if isinstance(value, str):
-            # Single choice string field
+            # String value only valid for single_choice fields
+            if self.kind != "single_choice":
+                raise TypeError(
+                    f"str value not supported for {self.kind} field "
+                    f"(expected list for multi_choice)"
+                )
             return (value,)
         
         if isinstance(value, list):
-            # Multi choice field
+            # List value only valid for multi_choice fields
+            if self.kind != "multi_choice":
+                raise TypeError(
+                    f"list value not supported for {self.kind} field "
+                    f"(field is single_choice, not multi_choice)"
+                )
             return tuple(value)
         
         return ()

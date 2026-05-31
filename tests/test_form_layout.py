@@ -401,6 +401,68 @@ def test_field_selected_codes_for_text_field():
     assert name.selected_codes("John Doe") == ()
 
 
+def test_field_selected_codes_bool_only_for_bool_backed_single_choice():
+    """Bool values should only work for bool-backed single-choice fields (codes subset of {true, false})."""
+    import pytest
+    layout = service_record_layout()
+    
+    # newly_diagnosed is bool-backed (only has "true" option)
+    newly_diagnosed = layout.field_by_key("newly_diagnosed")
+    assert newly_diagnosed.selected_codes(True) == ("true",)
+    assert newly_diagnosed.selected_codes(False) == ()
+    assert newly_diagnosed.selected_codes(None) == ()
+    
+    # gender is NOT bool-backed (has "female", "male", "other")
+    gender = layout.field_by_key("gender")
+    with pytest.raises(TypeError, match=r"bool.*not.*bool-backed"):
+        gender.selected_codes(True)
+    
+    # cancer is multi_choice, should also reject bool
+    cancer = layout.field_by_key("cancer")
+    with pytest.raises(TypeError, match=r"bool.*not.*bool-backed"):
+        cancer.selected_codes(True)
+
+
+def test_field_selected_codes_list_only_for_multi_choice():
+    """List values should only work for multi_choice fields, not single_choice."""
+    import pytest
+    layout = service_record_layout()
+    
+    # cancer is multi_choice, accepts lists
+    cancer = layout.field_by_key("cancer")
+    assert cancer.selected_codes(["brain_cancer"]) == ("brain_cancer",)
+    
+    # gender is single_choice, should reject lists
+    gender = layout.field_by_key("gender")
+    with pytest.raises(TypeError, match=r"list.*single_choice"):
+        gender.selected_codes(["female", "male"])
+
+
+def test_check_option_codes_match_constants_verifies_exact_labels():
+    """Verify _check_option_codes_match_constants checks exact label equality when expected_labels provided."""
+    import pytest
+    
+    # Create a field with correct codes but WRONG label for one option
+    wrong_label_field = Field(
+        key="test_field",
+        title="Test",
+        kind="single_choice",
+        record_path="test",
+        anchor_cell="A1",
+        options=(
+            Option(label="正確標籤", code="code1", cell="A1"),
+            Option(label="錯誤標籤", code="code2", cell="A2"),  # Wrong label!
+        ),
+    )
+    
+    expected_codes = {"code1", "code2"}
+    expected_labels = {"code1": "正確標籤", "code2": "應該的標籤"}  # code2 should be "應該的標籤"
+    
+    # Should raise AssertionError because code2 has wrong label
+    with pytest.raises(AssertionError, match=r"code2.*label"):
+        _check_option_codes_match_constants(wrong_label_field, expected_codes, expected_labels)
+
+
 # --- Issue 2: Exact section and field order, canonical code backing ---
 
 
@@ -482,6 +544,11 @@ def _check_option_codes_match_constants(field, expected_codes, expected_labels=N
     if expected_labels:
         for opt in field.options:
             assert opt.code in expected_labels, f"Option code {opt.code!r} missing from labels"
+            # Verify exact label equality
+            assert opt.label == expected_labels[opt.code], (
+                f"Field {field.key} option {opt.code!r}: "
+                f"label mismatch: expected {expected_labels[opt.code]!r}, got {opt.label!r}"
+            )
 
 
 def test_identity_options_match_constants():

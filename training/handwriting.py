@@ -51,17 +51,20 @@ def draw_text(
         text_box = draw.textbbox((0, 0), text, font=font)
         text_width = text_box[2] - text_box[0]
         text_height = text_box[3] - text_box[1]
-        if text_width <= max(1, width - 2) or size <= 8:
+        if (text_width <= width and text_height <= height) or size <= 8:
             break
         size -= 1
 
-    max_x = max(left, right - text_width - 1)
-    max_y = max(top, bottom - text_height - 1)
-    base_y = top + max(0, (height - text_height) // 2)
+    min_x = left - text_box[0]
+    max_x = right - text_box[2]
+    min_y = top - text_box[1]
+    max_y = bottom - text_box[3]
+    base_x = left + 1 - text_box[0]
+    base_y = top + max(0, (height - text_height) // 2) - text_box[1]
     x_jitter = rng.randint(-max(1, width // 10), max(1, width // 10))
     y_jitter = rng.randint(-max(1, height // 10), max(1, height // 10))
-    text_x = min(max(left, left + 1 + x_jitter), max_x)
-    text_y = min(max(top, base_y + y_jitter), max_y)
+    text_x = min(max(min_x, base_x + x_jitter), max_x)
+    text_y = min(max(min_y, base_y + y_jitter), max_y)
     draw.text((text_x, text_y), text, fill=0, font=font)
 
 

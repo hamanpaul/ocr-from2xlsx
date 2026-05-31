@@ -601,6 +601,37 @@ def test_confirm_and_force_write_tolerate_end_of_record_list(
     assert infos
 
 
+def test_previous_record_recovers_from_end_of_record_sentinel(
+    app: ReviewApp, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    record = make_record("scan-0001")
+    app.records = [record]
+    app.current_index = 0
+    app._show_record(record)
+    app.session = StubSession(
+        AcceptResult(
+            record_id=record.record_id,
+            status="written",
+            row_number=2,
+            blockers=[],
+            warnings=[],
+        )
+    )
+    infos: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        "ocr_from2xlsx.app.messagebox.showinfo",
+        lambda title, message: infos.append((title, message)),
+    )
+
+    ReviewApp._confirm_current(app)
+    ReviewApp._next_record(app)
+    ReviewApp._previous_record(app)
+
+    assert app.current_index == 0
+    assert app.fields["record_id"].get() == record.record_id
+    assert infos
+
+
 def test_choose_template_clears_written_indices(
     app: ReviewApp, monkeypatch: pytest.MonkeyPatch
 ) -> None:

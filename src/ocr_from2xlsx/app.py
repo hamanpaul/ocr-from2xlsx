@@ -260,7 +260,7 @@ class ReviewApp(tk.Tk):
         if self.current_index < 0:
             self.current_index = 0
         else:
-            self.current_index += 1
+            self.current_index = min(self.current_index + 1, len(self.records))
         if self.current_index >= len(self.records):
             messagebox.showinfo("完成", "沒有更多資料。")
             return
@@ -273,7 +273,9 @@ class ReviewApp(tk.Tk):
         if self.editing:
             messagebox.showerror("尚未保存", "目前資料已修改，請先使用「確認並寫入」或「強制寫入」。")
             return
-        if self.current_index <= 0:
+        if self.current_index >= len(self.records):
+            self.current_index = len(self.records) - 1
+        elif self.current_index <= 0:
             self.current_index = 0
         else:
             self.current_index -= 1

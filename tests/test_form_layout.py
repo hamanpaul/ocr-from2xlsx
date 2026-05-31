@@ -314,3 +314,37 @@ def test_field_with_invalid_kind_raises_error() -> None:
         assert False, "Expected ValueError for invalid kind='bogus'"
     except ValueError as e:
         assert "kind" in str(e).lower() or "bogus" in str(e).lower()
+
+
+# --- Task 2: service_record_layout() tests ---
+
+
+def test_layout_covers_expected_fields():
+    layout = service_record_layout()
+    keys = {f.key for f in layout.iter_fields()}
+    assert {
+        "service_date", "identity", "name", "medical_record_no", "gender",
+        "nationality", "age", "channel", "disease_status", "source", "cancer",
+        "newly_diagnosed", "supplies", "internal_referrals", "external_referrals",
+        "referral_outcomes",
+    } <= keys
+    assert "consultation.health_medical" in keys
+
+
+def test_choice_option_counts_and_record_paths():
+    layout = service_record_layout()
+    assert len(layout.field_by_key("cancer").options) == 25
+    assert len(layout.field_by_key("age").options) == 7
+    assert layout.field_by_key("age").record_path == "patient_fields.age_group"
+    assert layout.field_by_key("identity").record_path == "identity"
+    assert layout.field_by_key("cancer").record_path == "patient_fields.cancers"
+    assert layout.field_by_key("consultation.health_medical").record_path == "services.consultation.health_medical"
+    assert layout.field_by_key("diagnosis_date").record_path is None
+
+
+def test_option_codes_are_constants_legal():
+    from ocr_from2xlsx import constants
+    layout = service_record_layout()
+    assert {o.code for f, o in layout.iter_options() if f.key == "identity"} <= constants.IDENTITIES
+    assert {o.code for f, o in layout.iter_options() if f.key == "gender"} <= constants.GENDERS
+    assert set(layout.options_by_code("cancer")) <= set(constants.CANCER_LABELS)

@@ -8,10 +8,27 @@ from ocr_from2xlsx.record_access import get_by_path, set_by_path
 
 _BOOL_TRUE_CODE = "true"
 _NEWLY_DIAGNOSED_PATH = "patient_fields.newly_diagnosed_within_year"
+_OPTIONAL_PATIENT_SINGLE_CHOICE_PATHS = {
+    "patient_fields.nationality",
+    "patient_fields.age_group",
+    "patient_fields.channel",
+    "patient_fields.disease_status",
+    "patient_fields.source",
+}
 
 
 def _is_bool_field(record_path: str | None) -> bool:
     return record_path == _NEWLY_DIAGNOSED_PATH
+
+
+def _single_choice_write_value(record_path: str | None, value: Any) -> Any:
+    if _is_bool_field(record_path):
+        return value == _BOOL_TRUE_CODE
+
+    normalized = "" if value is None else str(value)
+    if normalized == "" and record_path in _OPTIONAL_PATIENT_SINGLE_CHOICE_PATHS:
+        return None
+    return normalized
 
 
 def record_to_form_state(layout: FormLayout, record: Any) -> dict[str, Any]:
@@ -45,9 +62,6 @@ def apply_form_state(layout: FormLayout, record: Any, state: dict[str, Any]) -> 
                 raise TypeError(f"multi_choice field {field.key!r} must be set[str]")
             set_by_path(record, field.record_path, sorted(value))
         elif field.kind == "single_choice":
-            if _is_bool_field(field.record_path):
-                set_by_path(record, field.record_path, value == _BOOL_TRUE_CODE)
-            else:
-                set_by_path(record, field.record_path, "" if value is None else str(value))
+            set_by_path(record, field.record_path, _single_choice_write_value(field.record_path, value))
         else:
             raise TypeError(f"Unsupported field kind: {field.kind!r}")

@@ -3,6 +3,7 @@ from __future__ import annotations
 from ocr_from2xlsx.confirm_form import apply_form_state, record_to_form_state
 from ocr_from2xlsx.domain import Record
 from ocr_from2xlsx.form_layout import service_record_layout
+from ocr_from2xlsx.validation import validate_record
 
 
 def _record() -> Record:
@@ -24,6 +25,25 @@ def _record() -> Record:
                 "consultation": {
                     "health_medical": ["screening_prevention"],
                 },
+            },
+        }
+    )
+
+
+def _sparse_patient_record() -> Record:
+    return Record.from_dict(
+        {
+            "record_id": "r2",
+            "service_date": "2026-05-26",
+            "identity": "patient",
+            "name": "王小明",
+            "medical_record_no": "A2",
+            "gender": "female",
+            "patient_fields": {
+                "cancers": ["breast_cancer"],
+            },
+            "services": {
+                "consultation": {},
             },
         }
     )
@@ -73,3 +93,18 @@ def test_round_trip_is_stable():
     assert again["identity"] == "patient"
     assert again["cancer"] == {"breast_cancer", "lung_cancer"}
     assert again["newly_diagnosed"] == "true"
+
+
+def test_round_trip_preserves_missing_optional_single_choice_fields():
+    layout = service_record_layout()
+    record = _sparse_patient_record()
+    blockers_before = validate_record(record).blockers
+
+    apply_form_state(layout, record, record_to_form_state(layout, record))
+
+    assert record.patient_fields.nationality is None
+    assert record.patient_fields.age_group is None
+    assert record.patient_fields.channel is None
+    assert record.patient_fields.disease_status is None
+    assert record.patient_fields.source is None
+    assert validate_record(record).blockers == blockers_before

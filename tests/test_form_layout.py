@@ -250,3 +250,51 @@ def test_field_options_has_default_in_constructor_and_dataclass_metadata() -> No
     assert has_default, (
         "Field.options dataclass field should have a default or default_factory"
     )
+
+
+def test_text_field_with_options_raises_error() -> None:
+    """Verify that text fields with non-empty options raise ValueError."""
+    try:
+        Field(
+            key="name",
+            title="姓名",
+            kind="text",
+            record_path="name",
+            anchor_cell="B23",
+            options=(Option(label="N/A", code="na", cell="B24"),),
+        )
+        assert False, "Expected ValueError for text field with options"
+    except ValueError as e:
+        assert "text" in str(e).lower() or "options" in str(e).lower()
+
+
+def test_single_choice_field_without_options_raises_error() -> None:
+    """Verify that single_choice fields without options raise ValueError."""
+    try:
+        Field(
+            key="status",
+            title="狀態",
+            kind="single_choice",
+            record_path="status",
+            anchor_cell="A1",
+            options=(),
+        )
+        assert False, "Expected ValueError for single_choice field without options"
+    except ValueError as e:
+        assert "single_choice" in str(e).lower() or "options" in str(e).lower()
+
+
+def test_multi_choice_field_without_options_raises_error() -> None:
+    """Verify that multi_choice fields without options raise ValueError."""
+    try:
+        Field(
+            key="interests",
+            title="興趣",
+            kind="multi_choice",
+            record_path="interests",
+            anchor_cell="A10",
+            options=(),
+        )
+        assert False, "Expected ValueError for multi_choice field without options"
+    except ValueError as e:
+        assert "multi_choice" in str(e).lower() or "options" in str(e).lower()

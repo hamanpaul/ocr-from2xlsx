@@ -46,6 +46,11 @@ class Field:
         object.__setattr__(self, "record_path", record_path)
         object.__setattr__(self, "anchor_cell", anchor_cell)
         object.__setattr__(self, "options", tuple(options))
+        # Validate kind-options invariants
+        if kind == "text" and self.options:
+            raise ValueError(f"text field must have empty options, got {len(self.options)}")
+        if kind in ("single_choice", "multi_choice") and not self.options:
+            raise ValueError(f"{kind} field requires at least one option")
         # Reject duplicate option codes
         codes = [opt.code for opt in self.options]
         if len(codes) != len(set(codes)):

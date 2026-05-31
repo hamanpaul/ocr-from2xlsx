@@ -92,3 +92,92 @@ def test_options_by_code_fails_on_missing_field() -> None:
         assert False, "Expected KeyError but call succeeded"
     except KeyError as e:
         assert "missing" in str(e)
+
+
+def test_dataclass_sequences_are_coerced_to_tuples() -> None:
+    """Verify that passing lists to options/fields/sections doesn't allow mutation."""
+    # Build layout with Python lists
+    options_list = [
+        Option(label="女性", code="female", cell="B25"),
+        Option(label="男性", code="male", cell="B26"),
+    ]
+    fields_list = [
+        Field(
+            key="gender",
+            title="性別",
+            kind="single_choice",
+            record_path="gender",
+            anchor_cell="A25",
+            options=options_list,
+        ),
+    ]
+    sections_list = [
+        Section(id="B", title="綜合身份統計", fields=fields_list),
+    ]
+    layout = FormLayout(template_id="t", sections=sections_list)
+    
+    # Stored attributes must be tuples, not lists
+    assert isinstance(layout.sections, tuple)
+    assert isinstance(layout.sections[0].fields, tuple)
+    assert isinstance(layout.sections[0].fields[0].options, tuple)
+    
+    # Mutating original lists should not affect stored model
+    original_gender_field = layout.sections[0].fields[0]
+    original_options_count = len(original_gender_field.options)
+    
+    options_list.append(Option(label="其他", code="other", cell="B27"))
+    fields_list.append(
+        Field(key="name", title="姓名", kind="text", record_path="name", anchor_cell="B23")
+    )
+    sections_list.append(Section(id="C", title="另一節", fields=()))
+    
+    # Stored model should not change
+    assert len(layout.sections) == 1
+    assert len(layout.sections[0].fields) == 1
+    assert len(layout.sections[0].fields[0].options) == original_options_count
+
+
+def test_duplicate_option_code_raises_error() -> None:
+    """Verify that duplicate Option.code values within a field raise ValueError."""
+    try:
+        Field(
+            key="status",
+            title="狀態",
+            kind="single_choice",
+            record_path="status",
+            anchor_cell="A1",
+            options=(
+                Option(label="Active", code="active", cell="B1"),
+                Option(label="Active (other)", code="active", cell="B2"),
+            ),
+        )
+        assert False, "Expected ValueError for duplicate option code"
+    except ValueError as e:
+        assert "active" in str(e).lower() or "duplicate" in str(e).lower()
+
+
+def test_duplicate_field_key_raises_error() -> None:
+    """Verify that duplicate Field.key values across the layout raise ValueError."""
+    try:
+        FormLayout(
+            template_id="t",
+            sections=(
+                Section(
+                    id="A",
+                    title="Section A",
+                    fields=(
+                        Field(key="id", title="ID", kind="text", record_path="id", anchor_cell="A1"),
+                    ),
+                ),
+                Section(
+                    id="B",
+                    title="Section B",
+                    fields=(
+                        Field(key="id", title="ID (copy)", kind="text", record_path="id2", anchor_cell="A2"),
+                    ),
+                ),
+            ),
+        )
+        assert False, "Expected ValueError for duplicate field key"
+    except ValueError as e:
+        assert "id" in str(e).lower() or "duplicate" in str(e).lower()

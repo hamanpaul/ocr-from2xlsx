@@ -30,6 +30,19 @@ class Field:
     anchor_cell: str
     options: tuple[Option, ...] = ()
 
+    def __post_init__(self) -> None:
+        # Coerce options to tuple if needed
+        if not isinstance(self.options, tuple):
+            object.__setattr__(self, "options", tuple(self.options))
+        # Reject duplicate option codes
+        codes = [opt.code for opt in self.options]
+        if len(codes) != len(set(codes)):
+            seen = set()
+            for code in codes:
+                if code in seen:
+                    raise ValueError(f"Duplicate option code: {code!r}")
+                seen.add(code)
+
 
 @dataclass(frozen=True, slots=True)
 class Section:
@@ -37,11 +50,29 @@ class Section:
     title: str
     fields: tuple[Field, ...]
 
+    def __post_init__(self) -> None:
+        # Coerce fields to tuple if needed
+        if not isinstance(self.fields, tuple):
+            object.__setattr__(self, "fields", tuple(self.fields))
+
 
 @dataclass(frozen=True, slots=True)
 class FormLayout:
     template_id: str
     sections: tuple[Section, ...]
+
+    def __post_init__(self) -> None:
+        # Coerce sections to tuple if needed
+        if not isinstance(self.sections, tuple):
+            object.__setattr__(self, "sections", tuple(self.sections))
+        # Reject duplicate field keys
+        keys = [fld.key for sec in self.sections for fld in sec.fields]
+        if len(keys) != len(set(keys)):
+            seen = set()
+            for key in keys:
+                if key in seen:
+                    raise ValueError(f"Duplicate field key: {key!r}")
+                seen.add(key)
 
     def iter_fields(self) -> Iterator[Field]:
         for section in self.sections:

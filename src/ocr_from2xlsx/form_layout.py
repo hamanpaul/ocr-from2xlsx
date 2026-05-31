@@ -40,6 +40,9 @@ class Field:
         anchor_cell: str,
         options: Sequence[Option] = (),
     ) -> None:
+        # Validate kind is one of the allowed values
+        if kind not in ("text", "single_choice", "multi_choice"):
+            raise ValueError(f"Invalid kind: {kind!r}, must be one of 'text', 'single_choice', 'multi_choice'")
         object.__setattr__(self, "key", key)
         object.__setattr__(self, "title", title)
         object.__setattr__(self, "kind", kind)

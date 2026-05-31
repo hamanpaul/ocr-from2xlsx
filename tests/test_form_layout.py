@@ -298,3 +298,19 @@ def test_multi_choice_field_without_options_raises_error() -> None:
         assert False, "Expected ValueError for multi_choice field without options"
     except ValueError as e:
         assert "multi_choice" in str(e).lower() or "options" in str(e).lower()
+
+
+def test_field_with_invalid_kind_raises_error() -> None:
+    """Verify that Field rejects invalid kind values at runtime."""
+    try:
+        Field(
+            key="test",
+            title="測試",
+            kind="bogus",
+            record_path="test",
+            anchor_cell="A1",
+            options=(),
+        )
+        assert False, "Expected ValueError for invalid kind='bogus'"
+    except ValueError as e:
+        assert "kind" in str(e).lower() or "bogus" in str(e).lower()

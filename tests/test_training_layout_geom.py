@@ -5,7 +5,7 @@ from ocr_from2xlsx.form_layout import service_record_layout
 from training.layout_render import cell_box, sheet_geometry
 
 
-_XLSX = Path(r"C:\Users\haman\auto-xlsx-tranlator\115年整年月報表統計_單案統計加總版(下拉式)(空白).xlsx")
+_XLSX = Path(__file__).resolve().parents[1] / "115年整年月報表統計_單案統計加總版(下拉式)(空白).xlsx"
 
 
 def test_cell_boxes_are_ordered_and_in_bounds():

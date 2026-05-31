@@ -181,3 +181,44 @@ def test_duplicate_field_key_raises_error() -> None:
         assert False, "Expected ValueError for duplicate field key"
     except ValueError as e:
         assert "id" in str(e).lower() or "duplicate" in str(e).lower()
+
+
+def test_constructor_annotations_accept_sequences() -> None:
+    """Verify that constructor signatures advertise support for list/sequence inputs.
+    
+    This is a regression test for the API contract: the implementation accepts
+    lists/sequences and coerces them to tuples internally, so the public
+    constructor signature should reflect that callers can pass lists.
+    """
+    import inspect
+    from collections.abc import Sequence
+    
+    # Field(options=...) should accept Sequence, not just tuple
+    field_sig = inspect.signature(Field)
+    options_param = field_sig.parameters["options"]
+    options_annotation = options_param.annotation
+    
+    # The annotation should allow Sequence[Option] (or similar), not just tuple[Option, ...]
+    # We check that it's not strictly tuple by looking at the annotation string representation
+    # or by checking if it's a Sequence type hint
+    assert options_annotation != "tuple[Option, ...]", (
+        f"Field.options annotation should accept sequences, not tuple-only: {options_annotation}"
+    )
+    
+    # Section(fields=...) should accept Sequence, not just tuple
+    section_sig = inspect.signature(Section)
+    fields_param = section_sig.parameters["fields"]
+    fields_annotation = fields_param.annotation
+    
+    assert fields_annotation != "tuple[Field, ...]", (
+        f"Section.fields annotation should accept sequences, not tuple-only: {fields_annotation}"
+    )
+    
+    # FormLayout(sections=...) should accept Sequence, not just tuple
+    layout_sig = inspect.signature(FormLayout)
+    sections_param = layout_sig.parameters["sections"]
+    sections_annotation = sections_param.annotation
+    
+    assert sections_annotation != "tuple[Section, ...]", (
+        f"FormLayout.sections annotation should accept sequences, not tuple-only: {sections_annotation}"
+    )

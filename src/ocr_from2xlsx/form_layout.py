@@ -8,6 +8,7 @@ form templates and their metadata.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Iterator, Literal
 
@@ -28,12 +29,23 @@ class Field:
     kind: Kind
     record_path: str | None
     anchor_cell: str
-    options: tuple[Option, ...] = ()
+    options: tuple[Option, ...]
 
-    def __post_init__(self) -> None:
-        # Coerce options to tuple if needed
-        if not isinstance(self.options, tuple):
-            object.__setattr__(self, "options", tuple(self.options))
+    def __init__(
+        self,
+        key: str,
+        title: str,
+        kind: Kind,
+        record_path: str | None,
+        anchor_cell: str,
+        options: Sequence[Option] = (),
+    ) -> None:
+        object.__setattr__(self, "key", key)
+        object.__setattr__(self, "title", title)
+        object.__setattr__(self, "kind", kind)
+        object.__setattr__(self, "record_path", record_path)
+        object.__setattr__(self, "anchor_cell", anchor_cell)
+        object.__setattr__(self, "options", tuple(options))
         # Reject duplicate option codes
         codes = [opt.code for opt in self.options]
         if len(codes) != len(set(codes)):
@@ -50,10 +62,10 @@ class Section:
     title: str
     fields: tuple[Field, ...]
 
-    def __post_init__(self) -> None:
-        # Coerce fields to tuple if needed
-        if not isinstance(self.fields, tuple):
-            object.__setattr__(self, "fields", tuple(self.fields))
+    def __init__(self, id: str, title: str, fields: Sequence[Field]) -> None:
+        object.__setattr__(self, "id", id)
+        object.__setattr__(self, "title", title)
+        object.__setattr__(self, "fields", tuple(fields))
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,10 +73,9 @@ class FormLayout:
     template_id: str
     sections: tuple[Section, ...]
 
-    def __post_init__(self) -> None:
-        # Coerce sections to tuple if needed
-        if not isinstance(self.sections, tuple):
-            object.__setattr__(self, "sections", tuple(self.sections))
+    def __init__(self, template_id: str, sections: Sequence[Section]) -> None:
+        object.__setattr__(self, "template_id", template_id)
+        object.__setattr__(self, "sections", tuple(sections))
         # Reject duplicate field keys
         keys = [fld.key for sec in self.sections for fld in sec.fields]
         if len(keys) != len(set(keys)):

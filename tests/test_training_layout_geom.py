@@ -1,11 +1,16 @@
 from pathlib import Path
 
+import pytest
+
 from ocr_from2xlsx.form_layout import service_record_layout
 
 from training.layout_render import cell_box, option_mark_box, render_sheet_template, sheet_geometry, text_entry_box
 
-
 _XLSX = Path(__file__).resolve().parents[1] / "115年整年月報表統計_單案統計加總版(下拉式)(空白).xlsx"
+
+
+def _require_pillow() -> None:
+    pytest.importorskip("PIL")
 
 
 def test_cell_boxes_are_ordered_and_in_bounds():
@@ -40,6 +45,7 @@ def test_every_layout_option_cell_has_a_box():
 
 
 def test_text_entry_boxes_follow_workbook_line_layout():
+    _require_pillow()
     layout = service_record_layout()
     geom = sheet_geometry(_XLSX)
 
@@ -64,6 +70,7 @@ def test_text_entry_boxes_follow_workbook_line_layout():
 
 
 def test_option_mark_box_is_checkbox_subbox_not_full_cell():
+    _require_pillow()
     layout = service_record_layout()
     geom = sheet_geometry(_XLSX)
 
@@ -78,6 +85,7 @@ def test_option_mark_box_is_checkbox_subbox_not_full_cell():
 
 
 def test_option_mark_box_tracks_checkbox_position_within_line():
+    _require_pillow()
     layout = service_record_layout()
     geom = sheet_geometry(_XLSX)
     rendered = render_sheet_template(geom)
@@ -87,4 +95,26 @@ def test_option_mark_box_tracks_checkbox_position_within_line():
     cell = cell_box("A48", geom)
 
     assert mark_box[0] > line_box[0]
-    assert mark_box[0] > cell[0] + (cell[2] - cell[0]) / 2
+    assert mark_box[0] > line_box[0] + (line_box[2] - line_box[0]) * 0.7
+    assert mark_box[2] <= cell[2]
+
+
+def test_render_sheet_template_uses_workbook_font_metrics():
+    _require_pillow()
+    Image = pytest.importorskip("PIL.Image")
+    ImageDraw = pytest.importorskip("PIL.ImageDraw")
+    ImageFont = pytest.importorskip("PIL.ImageFont")
+    times = Path(r"C:\Windows\Fonts\times.ttf")
+    if not times.is_file():
+        pytest.skip("requires Times New Roman font file")
+
+    geom = sheet_geometry(_XLSX)
+    rendered = render_sheet_template(geom)
+    actual_width = rendered.line_boxes[("A48", 0)].box[2] - rendered.line_boxes[("A48", 0)].box[0]
+
+    image = Image.new("L", (256, 64), 255)
+    draw = ImageDraw.Draw(image)
+    expected_bbox = draw.textbbox((0, 0), "5.一年內新診斷個案 □", font=ImageFont.truetype(str(times), size=10))
+    expected_width = expected_bbox[2] - expected_bbox[0]
+
+    assert abs(actual_width - expected_width) <= 2.0

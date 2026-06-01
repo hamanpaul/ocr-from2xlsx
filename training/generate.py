@@ -80,16 +80,8 @@ def _font_supports_cjk_text(font_path: Path, text: str, *, size: int = 24) -> bo
     if len(unique_cjk_chars) < 2:
         return True
 
-    first_mask: tuple[tuple[int, int], bytes] | None = None
-    for char in unique_cjk_chars:
-        mask = font.getmask(char)
-        mask_signature = (mask.size, bytes(mask))
-        if first_mask is None:
-            first_mask = mask_signature
-            continue
-        if mask_signature != first_mask:
-            return True
-    return False
+    fingerprints = {(mask.size, bytes(mask)) for mask in (font.getmask(char) for char in unique_cjk_chars)}
+    return len(fingerprints) == len(unique_cjk_chars)
 
 
 def _select_text_font(text: str = "", font_paths: Iterable[Path] | None = None) -> str:
@@ -98,7 +90,7 @@ def _select_text_font(text: str = "", font_paths: Iterable[Path] | None = None) 
     fonts_dir = Path(__file__).resolve().parent / "fonts"
     handwriting_fonts = tuple(font_paths or list_handwriting_fonts(fonts_dir))
     system_fonts = tuple(_system_font_candidates())
-    candidates = (*system_fonts, *handwriting_fonts) if _contains_cjk(text) else (*handwriting_fonts, *system_fonts)
+    candidates = (*handwriting_fonts, *system_fonts) if _contains_cjk(text) else (*handwriting_fonts, *system_fonts)
     for font_path in candidates:
         if _contains_cjk(text):
             if _font_supports_cjk_text(font_path, text):
@@ -180,11 +172,10 @@ def generate(
     rng = random.Random(seed)
     fonts_dir = Path(__file__).resolve().parent / "fonts"
     handwriting_fonts = tuple(list_handwriting_fonts(fonts_dir))
-    base_font = _select_text_font(_NAMES[0], handwriting_fonts)
     out = Path(out_dir)
     images_dir = out / "images"
     images_dir.mkdir(parents=True, exist_ok=True)
-    template = render_sheet_template(geom, font_path=base_font)
+    template = render_sheet_template(geom)
 
     selections = generate_until_coverage(choice_fields(layout), rng, min_per_option=min_per_option)
     records_with_images: list[tuple[Any, str, dict[str, Any] | None]] = []

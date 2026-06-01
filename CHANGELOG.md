@@ -10,6 +10,7 @@
 ### Added
 - 新增單頁、`form_layout` 驅動的確認 UI：完整顯示並可編輯整筆服務紀錄，支援 adaptive source image、整頁「確認並寫入」/「強制寫入」，以及純函式 `record_access`、`confirm_form` 供 record-path 與 form-state round-trip。
 - 新增共用表單版面模型 `form_layout`（區塊/欄位/選項 + 代碼 + record_path），供確認 UI 與訓練資料產生器共用；附對照「服務紀錄表」分頁的雙向涵蓋驗證測試。
+- 新增 `training/` 手寫訓練資料產生器：以 `form_layout` 與空白 `服務紀錄表` 合成文字/勾選影像，輸出 `training/out/images/*.png` 與 workflow 相容答案卷 `training/out/answers.json`（`service_record.v1` + `training` + `source_image`）；取樣維持每選項涵蓋率、單多選約束，支援離線 OFL 字型下載、可選輕量 augmentation 與系統字型 fallback。
 - `import-json --allow-unconfirmed-name`（開發用）：允許在未經 GUI 確認下寫入機器建議的姓名，報告仍保留 `name.unconfirmed` 標記；正式部署預設仍要求 GUI 人工確認。
 - `prepare-records` 新增可選 `--name-agent-config`：以 TOML 啟用手寫姓名 agent；缺席、停用或不支援 provider 時維持 no-op。
 - 離線 OCR 外掛新增輸出個資最小化的姓名裁圖，路徑記於 `record.ocr.name_crop`。

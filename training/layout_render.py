@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from openpyxl import load_workbook
 from openpyxl.utils.cell import get_column_letter
-from PIL import Image, ImageDraw, ImageFont
 
 if TYPE_CHECKING:
     from ocr_from2xlsx.form_layout import FormLayout
+    from PIL import Image as PILImage
 
 Box = tuple[float, float, float, float]
 
@@ -17,7 +17,20 @@ _TEXT_INSET_X = 2.0
 _TEXT_INSET_Y = 1.0
 _ENTRY_PAD_X = 6.0
 _ENTRY_PAD_Y = 0.0
-_PREFERRED_TEMPLATE_FONTS = ("kaiu.ttf", "msjh.ttc", "mingliu.ttc", "DFKai-SB.ttf", "Arial Unicode MS.ttf")
+_FONT_FILES_BY_FAMILY = {
+    "times new roman": {
+        (False, False): "times.ttf",
+        (True, False): "timesbd.ttf",
+        (False, True): "timesi.ttf",
+        (True, True): "timesbi.ttf",
+    },
+    "標楷體": {(False, False): "kaiu.ttf"},
+    "dfkai-sb": {(False, False): "kaiu.ttf"},
+    "新細明體": {(False, False): "mingliu.ttc"},
+    "pmingliu": {(False, False): "mingliu.ttc"},
+    "微軟正黑體": {(False, False): "msjh.ttc"},
+    "microsoft jhenghei": {(False, False): "msjh.ttc"},
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,8 +40,19 @@ class SheetGeometry:
     width: int
     height: int
     cell_text: dict[str, str]
+    cell_style: dict[str, "CellStyle"]
     span_ref_by_cell: dict[str, str]
     span_anchor_by_ref: dict[str, str]
+
+
+@dataclass(frozen=True, slots=True)
+class CellStyle:
+    font_name: str | None
+    font_size: float | None
+    bold: bool
+    italic: bool
+    horizontal: str | None
+    vertical: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,7 +67,7 @@ class RenderedLine:
 
 @dataclass(frozen=True, slots=True)
 class TemplateRender:
-    image: Image.Image
+    image: "PILImage.Image"
     span_boxes: dict[str, Box]
     line_boxes: dict[tuple[str, int], RenderedLine]
 
@@ -63,17 +87,25 @@ _TEXT_ENTRY_SPECS: dict[str, _EntrySpec] = {
 }
 
 
-def _load_font(font_path: str | None, size: int = 12) -> ImageFont.ImageFont | ImageFont.FreeTypeFont:
-    if font_path is None:
-        fonts_dir = Path(r"C:\Windows\Fonts")
-        for name in _PREFERRED_TEMPLATE_FONTS:
-            candidate = fonts_dir / name
-            if candidate.is_file():
-                font_path = str(candidate)
-                break
+def _load_font(font_path: str | None, size: int = 12) -> Any:
+    from PIL import ImageFont
+
     if font_path:
         return ImageFont.truetype(font_path, size=size)
     return ImageFont.load_default()
+
+
+def _resolve_font_path(style: CellStyle, fallback_path: str | None) -> str | None:
+    fonts_dir = Path(r"C:\Windows\Fonts")
+    family = (style.font_name or "").strip().lower()
+    family_files = _FONT_FILES_BY_FAMILY.get(family)
+    if family_files:
+        candidate_name = family_files.get((style.bold, style.italic)) or family_files.get((False, False))
+        if candidate_name:
+            candidate = fonts_dir / candidate_name
+            if candidate.is_file():
+                return str(candidate)
+    return fallback_path
 
 
 def _split_cell(ref: str) -> tuple[int, int]:
@@ -105,20 +137,20 @@ def _span_box(ref: str, geom: SheetGeometry) -> Box:
     return (x0, y0, x1, y1)
 
 
-def _line_height(draw: ImageDraw.ImageDraw, font: ImageFont.ImageFont | ImageFont.FreeTypeFont) -> float:
+def _line_height(draw: Any, font: Any) -> float:
     _, y0, _, y1 = draw.textbbox((0, 0), "中", font=font)
     return float(y1 - y0)
 
 
 def _render_line(
-    draw: ImageDraw.ImageDraw,
+    draw: Any,
     *,
     cell: str,
     span_ref: str,
     line_index: int,
     text: str,
     origin: tuple[float, float],
-    font: ImageFont.ImageFont | ImageFont.FreeTypeFont,
+    font: Any,
 ) -> RenderedLine:
     x, y = origin
     draw.text((x, y), text, fill=0, font=font)
@@ -140,10 +172,10 @@ def _render_line(
 
 
 def render_sheet_template(geom: SheetGeometry, font_path: str | None = None) -> TemplateRender:
+    from PIL import Image, ImageDraw
+
     image = Image.new("L", (geom.width, geom.height), color=255)
     draw = ImageDraw.Draw(image)
-    font = _load_font(font_path, size=12)
-    line_step = _line_height(draw, font) + 1.0
 
     span_boxes: dict[str, Box] = {}
     line_boxes: dict[tuple[str, int], RenderedLine] = {}
@@ -152,10 +184,31 @@ def render_sheet_template(geom: SheetGeometry, font_path: str | None = None) -> 
         span_box = span_boxes.setdefault(span_ref, _span_box(span_ref, geom))
         draw.rectangle(span_box, outline=0, width=1)
 
-        x0, y0, _, _ = span_box
-        base_x = x0 + _TEXT_INSET_X
-        base_y = y0 + _TEXT_INSET_Y
-        for line_index, line_text in enumerate(text.splitlines() or [text]):
+        style = geom.cell_style.get(
+            cell_ref,
+            CellStyle(font_name=None, font_size=12.0, bold=False, italic=False, horizontal="left", vertical="top"),
+        )
+        size = max(8, int(round(style.font_size or 12.0)))
+        font = _load_font(_resolve_font_path(style, font_path), size=size)
+        line_step = _line_height(draw, font) + 1.0
+        line_texts = text.splitlines() or [text]
+        line_widths = [float(draw.textbbox((0, 0), line_text, font=font)[2]) for line_text in line_texts]
+        total_height = max(0.0, line_step * len(line_texts) - 1.0)
+
+        x0, y0, x1, y1 = span_box
+        if style.vertical == "center":
+            base_y = max(y0 + _TEXT_INSET_Y, y0 + ((y1 - y0) - total_height) / 2.0)
+        else:
+            base_y = y0 + _TEXT_INSET_Y
+
+        for line_index, line_text in enumerate(line_texts):
+            line_width = line_widths[line_index]
+            if style.horizontal == "center":
+                base_x = max(x0 + _TEXT_INSET_X, x0 + ((x1 - x0) - line_width) / 2.0)
+            elif style.horizontal == "right":
+                base_x = max(x0 + _TEXT_INSET_X, x1 - line_width - _TEXT_INSET_X)
+            else:
+                base_x = x0 + _TEXT_INSET_X
             line = _render_line(
                 draw,
                 cell=cell_ref,
@@ -170,7 +223,7 @@ def render_sheet_template(geom: SheetGeometry, font_path: str | None = None) -> 
     return TemplateRender(image=image, span_boxes=span_boxes, line_boxes=line_boxes)
 
 
-def draw_base_form(layout: "FormLayout", geom: SheetGeometry, font_path: str | None = None) -> Image.Image:
+def draw_base_form(layout: "FormLayout", geom: SheetGeometry, font_path: str | None = None) -> Any:
     return render_sheet_template(geom, font_path=font_path).image
 
 
@@ -251,6 +304,7 @@ def sheet_geometry(xlsx_path: str | Path, sheet_name: str = "服務紀錄表") -
                 span_ref_by_cell[ws.cell(row, col).coordinate] = span_ref
 
     cell_text: dict[str, str] = {}
+    cell_style: dict[str, CellStyle] = {}
     for row in range(1, ws.max_row + 1):
         for col in range(1, ws.max_column + 1):
             cell = ws.cell(row, col)
@@ -262,6 +316,14 @@ def sheet_geometry(xlsx_path: str | Path, sheet_name: str = "服務紀錄表") -
             if span_ref and span_anchor_by_ref[span_ref] != ref:
                 continue
             cell_text[ref] = str(value)
+            cell_style[ref] = CellStyle(
+                font_name=cell.font.name,
+                font_size=cell.font.size,
+                bold=bool(cell.font.bold),
+                italic=bool(cell.font.italic),
+                horizontal=cell.alignment.horizontal,
+                vertical=cell.alignment.vertical,
+            )
             span_ref_by_cell.setdefault(ref, ref)
             span_anchor_by_ref.setdefault(ref, ref)
 
@@ -271,6 +333,7 @@ def sheet_geometry(xlsx_path: str | Path, sheet_name: str = "服務紀錄表") -
         width=int(col_x[-1]),
         height=int(row_y[-1]),
         cell_text=cell_text,
+        cell_style=cell_style,
         span_ref_by_cell=span_ref_by_cell,
         span_anchor_by_ref=span_anchor_by_ref,
     )

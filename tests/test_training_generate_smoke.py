@@ -44,9 +44,8 @@ def _first_selected_option(batch_path: Path) -> tuple[str, str]:
 def _ink_delta_in_box(image_path: Path, box: tuple[float, float, float, float]) -> int:
     layout = service_record_layout()
     geom = sheet_geometry(_XLSX)
-    from training.generate import _NAMES, _select_text_font
 
-    base = draw_base_form(layout, geom, font_path=_select_text_font(_NAMES[0]))
+    base = draw_base_form(layout, geom)
     generated = Image.open(image_path).convert("L")
 
     x0, y0, x1, y1 = box
@@ -77,6 +76,47 @@ def test_select_text_font_skips_latin_font_when_cjk_system_font_can_render_text(
     selected = Path(generate._select_text_font("王小明", [cjk_font]))
 
     assert selected == cjk_font
+
+
+def test_font_supports_cjk_text_requires_unique_glyphs(monkeypatch: pytest.MonkeyPatch) -> None:
+    from PIL import ImageFont
+    from training import generate
+
+    class _FakeMask:
+        def __init__(self, token: bytes) -> None:
+            self.size = (1, 1)
+            self._token = token
+
+        def __bytes__(self) -> bytes:
+            return self._token
+
+    class _FakeFont:
+        _tokens = {"王": b"a", "小": b"b", "明": b"a"}
+
+        def getmask(self, char: str) -> _FakeMask:
+            return _FakeMask(self._tokens[char])
+
+    monkeypatch.setattr(ImageFont, "truetype", lambda *args, **kwargs: _FakeFont())
+
+    assert not generate._font_supports_cjk_text(Path("fake.ttf"), "王小明")
+
+
+def test_select_text_font_prefers_local_handwriting_font_for_cjk_when_supported(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from training import generate
+
+    cjk_fonts = _available_windows_cjk_fonts()
+    if len(cjk_fonts) < 2:
+        pytest.skip("requires at least two Windows CJK fonts")
+
+    handwriting_font = cjk_fonts[0]
+    system_font = cjk_fonts[1]
+    monkeypatch.setattr(generate, "_system_font_candidates", lambda: iter((system_font,)))
+
+    selected = Path(generate._select_text_font("王小明", [handwriting_font]))
+
+    assert selected == handwriting_font
 
 
 def test_generate_tiny_batch(tmp_path: Path) -> None:

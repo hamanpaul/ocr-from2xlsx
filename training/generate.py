@@ -52,11 +52,36 @@ def _system_font_candidates() -> Iterable[Path]:
         yield candidate
 
 
+def _is_cjk_character(char: str) -> bool:
+    return 0x3400 <= ord(char) <= 0x4DBF or 0x4E00 <= ord(char) <= 0x9FFF or 0xF900 <= ord(char) <= 0xFAFF
+
+
 def _contains_cjk(text: str) -> bool:
-    return any(
-        0x3400 <= ord(char) <= 0x4DBF or 0x4E00 <= ord(char) <= 0x9FFF or 0xF900 <= ord(char) <= 0xFAFF
-        for char in text
-    )
+    return any(_is_cjk_character(char) for char in text)
+
+
+def _font_supports_cjk_text(font_path: Path, text: str, *, size: int = 24) -> bool:
+    from PIL import ImageFont
+
+    try:
+        font = ImageFont.truetype(str(font_path), size=size)
+    except OSError:
+        return False
+
+    unique_cjk_chars = tuple(dict.fromkeys(char for char in text if _is_cjk_character(char)))
+    if len(unique_cjk_chars) < 2:
+        return True
+
+    first_mask: tuple[tuple[int, int], bytes] | None = None
+    for char in unique_cjk_chars:
+        mask = font.getmask(char)
+        mask_signature = (mask.size, bytes(mask))
+        if first_mask is None:
+            first_mask = mask_signature
+            continue
+        if mask_signature != first_mask:
+            return True
+    return False
 
 
 def _select_text_font(text: str = "", font_paths: Iterable[Path] | None = None) -> str:
@@ -67,6 +92,10 @@ def _select_text_font(text: str = "", font_paths: Iterable[Path] | None = None) 
     system_fonts = tuple(_system_font_candidates())
     candidates = (*system_fonts, *handwriting_fonts) if _contains_cjk(text) else (*handwriting_fonts, *system_fonts)
     for font_path in candidates:
+        if _contains_cjk(text):
+            if _font_supports_cjk_text(font_path, text):
+                return str(font_path)
+            continue
         try:
             ImageFont.truetype(str(font_path), size=24)
         except OSError:

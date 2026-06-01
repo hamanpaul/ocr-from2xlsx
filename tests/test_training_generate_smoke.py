@@ -64,17 +64,20 @@ def _ink_delta_in_cell(image_path: Path, cell: str) -> int:
     )
 
 
-def test_select_text_font_prefers_system_cjk_font_for_chinese_text() -> None:
-    from training.generate import _select_text_font
+def test_select_text_font_skips_latin_font_when_cjk_system_font_can_render_text(monkeypatch: pytest.MonkeyPatch) -> None:
+    from training import generate
 
     latin_font = Path(r"C:\Windows\Fonts\arial.ttf")
     cjk_fonts = _available_windows_cjk_fonts()
     if not latin_font.is_file() or not cjk_fonts:
         pytest.skip("requires arial.ttf and at least one Windows CJK font")
 
-    selected = Path(_select_text_font("王小明", [latin_font]))
+    cjk_font = cjk_fonts[0]
+    monkeypatch.setattr(generate, "_system_font_candidates", lambda: iter((latin_font, cjk_font)))
 
-    assert selected.name.lower() in {font.name.lower() for font in cjk_fonts}
+    selected = Path(generate._select_text_font("王小明", [cjk_font]))
+
+    assert selected == cjk_font
 
 
 def test_generate_tiny_batch(tmp_path: Path) -> None:

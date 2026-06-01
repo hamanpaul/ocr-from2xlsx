@@ -101,3 +101,20 @@ def test_build_answer_batch_is_loadable_and_tagged(tmp_path: Path):
     assert loaded_record.medical_record_no == "A123456"
     assert loaded_record.patient_fields.cancers == ["breast_cancer"]
     assert loaded_record.services.consultation["health_medical"] == ["screening_prevention"]
+
+
+def test_build_answer_batch_accepts_legacy_record_image_pairs() -> None:
+    record = selection_to_record(
+        service_record_layout(),
+        record_id="train-legacy",
+        selection={"identity": ["patient"]},
+        text_values={"service_date": "2026-05-31", "name": "王小明", "medical_record_no": "A123456"},
+    )
+
+    payload = build_answer_batch(
+        [(record, "images/train-legacy.png")],
+        created_at="2026-05-31T00:00:00+08:00",
+    )
+
+    assert payload["records"][0]["record_id"] == "train-legacy"
+    assert payload["records"][0]["source_image"] == "images/train-legacy.png"

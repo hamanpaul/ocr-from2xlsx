@@ -12,7 +12,13 @@ from typing import Any, Iterable
 from ocr_from2xlsx.form_layout import FormLayout, service_record_layout
 from training.answer_key import build_answer_batch, selection_to_record
 from training.handwriting import draw_mark, draw_text, list_handwriting_fonts
-from training.layout_render import cell_box, draw_base_form, sheet_geometry
+from training.layout_render import (
+    TemplateRender,
+    option_mark_box,
+    render_sheet_template,
+    sheet_geometry,
+    text_entry_box,
+)
 from training.sampler import choice_fields, generate_until_coverage
 
 _NAMES = ("王小明", "陳美玲", "林志偉", "張雅婷", "李國華", "黃淑芬", "葉心安")
@@ -27,10 +33,12 @@ _PREFERRED_SYSTEM_FONT_NAMES = (
 
 def _text_values(rng: random.Random) -> dict[str, str]:
     roc_year = rng.randint(110, 115)
+    diagnosis_year = roc_year + 1911
     return {
         "name": rng.choice(_NAMES),
         "medical_record_no": str(rng.randint(1_000_000_000, 9_999_999_999)),
         "service_date": f"{roc_year + 1911:04d}-{rng.randint(1, 12):02d}-{rng.randint(1, 28):02d}",
+        "diagnosis_date": f"{diagnosis_year:04d}-{rng.randint(1, 12):02d}-{rng.randint(1, 28):02d}",
     }
 
 
@@ -125,17 +133,24 @@ def _apply_augmentation(image, rng: random.Random):
     return blurred
 
 
-def _mark_selected_options(image, layout: FormLayout, geom, selection: dict[str, list[str]], rng: random.Random) -> None:
+def _mark_selected_options(
+    image,
+    layout: FormLayout,
+    geom,
+    rendered: TemplateRender,
+    selection: dict[str, list[str]],
+    rng: random.Random,
+) -> None:
     for field_key, codes in selection.items():
-        options_by_code = layout.options_by_code(field_key)
         for code in codes:
-            draw_mark(image, cell_box(options_by_code[code].cell, geom), rng)
+            draw_mark(image, option_mark_box(layout, geom, field_key, code, rendered=rendered), rng)
 
 
 def _draw_text_fields(
     image,
     layout: FormLayout,
     geom,
+    rendered: TemplateRender,
     text_values: dict[str, str],
     handwriting_fonts: Iterable[Path],
     rng: random.Random,
@@ -143,7 +158,13 @@ def _draw_text_fields(
     for field in layout.iter_fields():
         if field.kind == "text" and field.key in text_values:
             text = text_values[field.key]
-            draw_text(image, cell_box(field.anchor_cell, geom), text, _select_text_font(text, handwriting_fonts), rng)
+            draw_text(
+                image,
+                text_entry_box(layout, geom, field.key, rendered=rendered),
+                text,
+                _select_text_font(text, handwriting_fonts),
+                rng,
+            )
 
 
 def generate(
@@ -163,23 +184,30 @@ def generate(
     out = Path(out_dir)
     images_dir = out / "images"
     images_dir.mkdir(parents=True, exist_ok=True)
+    template = render_sheet_template(geom, font_path=base_font)
 
     selections = generate_until_coverage(choice_fields(layout), rng, min_per_option=min_per_option)
-    records_with_images: list[tuple[Any, str]] = []
+    records_with_images: list[tuple[Any, str, dict[str, Any] | None]] = []
 
     for index, selection in enumerate(selections, start=1):
-        image = draw_base_form(layout, geom, font_path=base_font)
-        _mark_selected_options(image, layout, geom, selection, rng)
+        image = template.image.copy()
+        _mark_selected_options(image, layout, geom, template, selection, rng)
 
         text_values = _text_values(rng)
-        _draw_text_fields(image, layout, geom, text_values, handwriting_fonts, rng)
+        _draw_text_fields(image, layout, geom, template, text_values, handwriting_fonts, rng)
         if augment:
             image = _apply_augmentation(image, rng)
 
         record_id = f"train-{index:04d}"
         relative_image = f"images/{record_id}.png"
         image.save(out / relative_image)
-        records_with_images.append((selection_to_record(layout, record_id, selection, text_values), relative_image))
+        records_with_images.append(
+            (
+                selection_to_record(layout, record_id, selection, text_values),
+                relative_image,
+                {"diagnosis_date": text_values["diagnosis_date"]},
+            )
+        )
 
     batch = build_answer_batch(
         records_with_images,

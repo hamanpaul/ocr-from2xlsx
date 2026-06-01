@@ -15,7 +15,7 @@ from PIL import Image
 from ocr_from2xlsx.confirm_form import record_to_form_state
 from ocr_from2xlsx.form_layout import service_record_layout
 from ocr_from2xlsx.json_io import load_batch
-from training.layout_render import cell_box, draw_base_form, sheet_geometry
+from training.layout_render import draw_base_form, option_mark_box, sheet_geometry, text_entry_box
 
 _XLSX = Path(__file__).resolve().parents[1] / "115年整年月報表統計_單案統計加總版(下拉式)(空白).xlsx"
 _WINDOWS_CJK_FONT_NAMES = ("kaiu.ttf", "msjh.ttc", "mingliu.ttc")
@@ -26,7 +26,7 @@ def _available_windows_cjk_fonts() -> list[Path]:
     return [fonts_dir / name for name in _WINDOWS_CJK_FONT_NAMES if (fonts_dir / name).is_file()]
 
 
-def _first_selected_cell(batch_path: Path) -> str:
+def _first_selected_option(batch_path: Path) -> tuple[str, str]:
     layout = service_record_layout()
     batch = load_batch(batch_path)
     record = batch.records[0]
@@ -35,14 +35,13 @@ def _first_selected_cell(batch_path: Path) -> str:
     for field in layout.iter_fields():
         value = state[field.key]
         if field.kind == "single_choice" and value:
-            return layout.options_by_code(field.key)[value].cell
+            return field.key, value
         if field.kind == "multi_choice" and value:
-            code = sorted(value)[0]
-            return layout.options_by_code(field.key)[code].cell
+            return field.key, sorted(value)[0]
     raise AssertionError("expected at least one selected option in generated record")
 
 
-def _ink_delta_in_cell(image_path: Path, cell: str) -> int:
+def _ink_delta_in_box(image_path: Path, box: tuple[float, float, float, float]) -> int:
     layout = service_record_layout()
     geom = sheet_geometry(_XLSX)
     from training.generate import _NAMES, _select_text_font
@@ -50,7 +49,7 @@ def _ink_delta_in_cell(image_path: Path, cell: str) -> int:
     base = draw_base_form(layout, geom, font_path=_select_text_font(_NAMES[0]))
     generated = Image.open(image_path).convert("L")
 
-    x0, y0, x1, y1 = cell_box(cell, geom)
+    x0, y0, x1, y1 = box
     left, top, right, bottom = map(int, (x0, y0, x1, y1))
     base_crop = base.crop((left, top, right, bottom))
     generated_crop = generated.crop((left, top, right, bottom))
@@ -96,9 +95,19 @@ def test_generate_tiny_batch(tmp_path: Path) -> None:
     first = answers["records"][0]
     assert first["training"] is True
     assert first["source_image"].startswith("images/")
+    assert first["diagnosis_date"]
 
     image_path = tmp_path / first["source_image"]
     assert image_path.is_file()
 
-    selected_cell = _first_selected_cell(answers_path)
-    assert _ink_delta_in_cell(image_path, selected_cell) > 0
+    selected_field, selected_code = _first_selected_option(answers_path)
+    assert _ink_delta_in_box(
+        image_path,
+        option_mark_box(service_record_layout(), sheet_geometry(_XLSX), selected_field, selected_code),
+    ) > 0
+
+    for field_key in ("service_date", "medical_record_no", "name", "diagnosis_date"):
+        assert _ink_delta_in_box(
+            image_path,
+            text_entry_box(service_record_layout(), sheet_geometry(_XLSX), field_key),
+        ) > 0, field_key

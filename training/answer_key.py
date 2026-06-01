@@ -32,13 +32,24 @@ def selection_to_record(
 
 
 def build_answer_batch(
-    records_with_images: Iterable[tuple[Record, str]],
+    records_with_images: Iterable[tuple[Record, str, dict[str, Any] | None]],
     created_at: str,
     template_name: str = "service_record.v1",
 ) -> dict[str, Any]:
     records: list[dict[str, Any]] = []
-    for record, source_image in records_with_images:
+    for item in records_with_images:
+        if len(item) == 2:
+            record, source_image = item
+            extra_values = None
+        elif len(item) == 3:
+            record, source_image, extra_values = item
+        else:
+            raise ValueError("records_with_images items must be (record, source_image) or (record, source_image, extra_values)")
         payload = record.to_dict()
+        if extra_values:
+            for key, value in extra_values.items():
+                if key not in payload and value not in (None, ""):
+                    payload[key] = value
         payload["training"] = True
         payload["source_image"] = source_image
         records.append(payload)

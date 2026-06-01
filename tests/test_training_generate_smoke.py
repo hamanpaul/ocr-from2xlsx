@@ -18,6 +18,12 @@ from ocr_from2xlsx.json_io import load_batch
 from training.layout_render import cell_box, draw_base_form, sheet_geometry
 
 _XLSX = Path(__file__).resolve().parents[1] / "115年整年月報表統計_單案統計加總版(下拉式)(空白).xlsx"
+_WINDOWS_CJK_FONT_NAMES = ("kaiu.ttf", "msjh.ttc", "mingliu.ttc")
+
+
+def _available_windows_cjk_fonts() -> list[Path]:
+    fonts_dir = Path(r"C:\Windows\Fonts")
+    return [fonts_dir / name for name in _WINDOWS_CJK_FONT_NAMES if (fonts_dir / name).is_file()]
 
 
 def _first_selected_cell(batch_path: Path) -> str:
@@ -39,9 +45,9 @@ def _first_selected_cell(batch_path: Path) -> str:
 def _ink_delta_in_cell(image_path: Path, cell: str) -> int:
     layout = service_record_layout()
     geom = sheet_geometry(_XLSX)
-    from training.generate import _select_text_font
+    from training.generate import _NAMES, _select_text_font
 
-    base = draw_base_form(layout, geom, font_path=_select_text_font())
+    base = draw_base_form(layout, geom, font_path=_select_text_font(_NAMES[0]))
     generated = Image.open(image_path).convert("L")
 
     x0, y0, x1, y1 = cell_box(cell, geom)
@@ -56,6 +62,19 @@ def _ink_delta_in_cell(image_path: Path, cell: str) -> int:
         for x in range(base_crop.width)
         if generated_pixels[x, y] < base_pixels[x, y]
     )
+
+
+def test_select_text_font_prefers_system_cjk_font_for_chinese_text() -> None:
+    from training.generate import _select_text_font
+
+    latin_font = Path(r"C:\Windows\Fonts\arial.ttf")
+    cjk_fonts = _available_windows_cjk_fonts()
+    if not latin_font.is_file() or not cjk_fonts:
+        pytest.skip("requires arial.ttf and at least one Windows CJK font")
+
+    selected = Path(_select_text_font("王小明", [latin_font]))
+
+    assert selected.name.lower() in {font.name.lower() for font in cjk_fonts}
 
 
 def test_generate_tiny_batch(tmp_path: Path) -> None:

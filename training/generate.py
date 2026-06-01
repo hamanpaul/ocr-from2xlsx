@@ -10,7 +10,6 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from ocr_from2xlsx.form_layout import FormLayout, service_record_layout
-
 from training.answer_key import build_answer_batch, selection_to_record
 from training.handwriting import draw_mark, draw_text, list_handwriting_fonts
 from training.layout_render import cell_box, draw_base_form, sheet_geometry
@@ -38,7 +37,6 @@ def _text_values(rng: random.Random) -> dict[str, str]:
 def _system_font_candidates() -> Iterable[Path]:
     fonts_dir = Path(r"C:\Windows\Fonts")
     seen: set[Path] = set()
-
     for name in _PREFERRED_SYSTEM_FONT_NAMES:
         candidate = fonts_dir / name
         if candidate.is_file():
@@ -54,11 +52,21 @@ def _system_font_candidates() -> Iterable[Path]:
         yield candidate
 
 
-def _select_text_font() -> str:
+def _contains_cjk(text: str) -> bool:
+    return any(
+        0x3400 <= ord(char) <= 0x4DBF or 0x4E00 <= ord(char) <= 0x9FFF or 0xF900 <= ord(char) <= 0xFAFF
+        for char in text
+    )
+
+
+def _select_text_font(text: str = "", font_paths: Iterable[Path] | None = None) -> str:
     from PIL import ImageFont
 
     fonts_dir = Path(__file__).resolve().parent / "fonts"
-    for font_path in (*list_handwriting_fonts(fonts_dir), *_system_font_candidates()):
+    handwriting_fonts = tuple(font_paths or list_handwriting_fonts(fonts_dir))
+    system_fonts = tuple(_system_font_candidates())
+    candidates = (*system_fonts, *handwriting_fonts) if _contains_cjk(text) else (*handwriting_fonts, *system_fonts)
+    for font_path in candidates:
         try:
             ImageFont.truetype(str(font_path), size=24)
         except OSError:
@@ -100,12 +108,13 @@ def _draw_text_fields(
     layout: FormLayout,
     geom,
     text_values: dict[str, str],
-    text_font: str,
+    handwriting_fonts: Iterable[Path],
     rng: random.Random,
 ) -> None:
     for field in layout.iter_fields():
         if field.kind == "text" and field.key in text_values:
-            draw_text(image, cell_box(field.anchor_cell, geom), text_values[field.key], text_font, rng)
+            text = text_values[field.key]
+            draw_text(image, cell_box(field.anchor_cell, geom), text, _select_text_font(text, handwriting_fonts), rng)
 
 
 def generate(
@@ -119,7 +128,9 @@ def generate(
     layout = service_record_layout()
     geom = sheet_geometry(xlsx_path)
     rng = random.Random(seed)
-    text_font = _select_text_font()
+    fonts_dir = Path(__file__).resolve().parent / "fonts"
+    handwriting_fonts = tuple(list_handwriting_fonts(fonts_dir))
+    base_font = _select_text_font(_NAMES[0], handwriting_fonts)
     out = Path(out_dir)
     images_dir = out / "images"
     images_dir.mkdir(parents=True, exist_ok=True)
@@ -128,11 +139,11 @@ def generate(
     records_with_images: list[tuple[Any, str]] = []
 
     for index, selection in enumerate(selections, start=1):
-        image = draw_base_form(layout, geom, font_path=text_font)
+        image = draw_base_form(layout, geom, font_path=base_font)
         _mark_selected_options(image, layout, geom, selection, rng)
 
         text_values = _text_values(rng)
-        _draw_text_fields(image, layout, geom, text_values, text_font, rng)
+        _draw_text_fields(image, layout, geom, text_values, handwriting_fonts, rng)
         if augment:
             image = _apply_augmentation(image, rng)
 

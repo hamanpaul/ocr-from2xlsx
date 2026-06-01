@@ -8,6 +8,9 @@
 ## [Unreleased]
 
 ### Added
+- 新增合成資料評測工具：`training.eval_metrics` 純度量、`python -m training.eval_marks`
+  mark-blinded 勾選框評測，以及 `python -m training.eval_pipeline` OCR pipeline diagnostic
+  評測，皆輸出 `report.json` / `report.md`。
 - 新增單頁、`form_layout` 驅動的確認 UI：完整顯示並可編輯整筆服務紀錄，支援 adaptive source image、整頁「確認並寫入」/「強制寫入」，以及純函式 `record_access`、`confirm_form` 供 record-path 與 form-state round-trip。
 - 新增共用表單版面模型 `form_layout`（區塊/欄位/選項 + 代碼 + record_path），供確認 UI 與訓練資料產生器共用；附對照「服務紀錄表」分頁的雙向涵蓋驗證測試。
 - 新增 `training/` 手寫訓練資料產生器：以 `form_layout` 與空白 `服務紀錄表` 合成文字/勾選影像，輸出 `training/out/images/*.png` 與 workflow 相容答案卷 `training/out/answers.json`（`service_record.v1` + `training` + `source_image`）；取樣維持每選項涵蓋率、單多選約束，支援離線 OFL 字型下載、可選輕量 augmentation 與系統字型 fallback。

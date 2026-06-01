@@ -157,6 +157,26 @@ Generation stays offline. If `training\fonts\` is empty, or a downloaded font ca
 Chinese text, the generator falls back to Windows system fonts. Add `--augment` for light
 rotation/blur/speckle augmentation.
 
+Evaluate synthetic outputs in two stages:
+
+```powershell
+# mark-blinded checkbox evaluation: uses known workbook geometry and answers.json, no OCR plugin
+.venv-paddle\Scripts\python -m training.eval_marks `
+  training\out\answers.json `
+  --workbook "115年整年月報表統計_單案統計加總版(下拉式)(空白).xlsx" `
+  --output-dir training\out\eval-marks
+
+# diagnostic end-to-end evaluation: runs the OCR plugin, then compares records to answers.json
+.venv\Scripts\python -m training.eval_pipeline `
+  training\out\answers.json `
+  --ocr-plugin-dir plugins\paddleocr `
+  --output-dir training\out\eval-pipeline
+```
+
+Both evaluators write `report.json` and `report.md`. Mark-blinded evaluation isolates checkbox mark
+detection from OCR text recognition; pipeline evaluation is diagnostic because it runs the full OCR
+plugin and reports field-level record mismatches.
+
 ## Packaging
 
 Build a portable executable:

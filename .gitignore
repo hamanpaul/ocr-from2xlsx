@@ -19,5 +19,8 @@ build/
 .venv/
 .venv-paddle/
 .venv*/
+training/fonts/
+training/out/
+training_smoke.png
 name_agent.local.toml
 *-name.png

@@ -130,6 +130,33 @@ CLI. That confirmation is written to the local correction store and roster, whic
 reuse to improve hits and reduce cloud calls. If you are importing without the app, review the record
 manually before import.
 
+## Training data generator
+
+Use the synthetic training generator to create form images plus workflow-aligned answer keys from the
+blank workbook template.
+
+```powershell
+# one-time: download OFL fonts into training/fonts/
+.venv-paddle\Scripts\python training/fetch_fonts.py
+
+# generate images and answers.json
+.venv-paddle\Scripts\python -m training.generate `
+  --xlsx "115年整年月報表統計_單案統計加總版(下拉式)(空白).xlsx" `
+  --out training\out `
+  --min-per-option 5 `
+  --seed 0
+```
+
+Outputs:
+
+- `training\out\images\train-*.png`
+- `training\out\answers.json`
+
+`answers.json` uses `service_record.v1` and stores `training: true` plus `source_image` on each record.
+Generation stays offline. If `training\fonts\` is empty, or a downloaded font cannot render the needed
+Chinese text, the generator falls back to Windows system fonts. Add `--augment` for light
+rotation/blur/speckle augmentation.
+
 ## Packaging
 
 Build a portable executable:

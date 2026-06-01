@@ -10,6 +10,7 @@
 ### Added
 - 新增單頁、`form_layout` 驅動的確認 UI：完整顯示並可編輯整筆服務紀錄，支援 adaptive source image、整頁「確認並寫入」/「強制寫入」，以及純函式 `record_access`、`confirm_form` 供 record-path 與 form-state round-trip。
 - 新增共用表單版面模型 `form_layout`（區塊/欄位/選項 + 代碼 + record_path），供確認 UI 與訓練資料產生器共用；附對照「服務紀錄表」分頁的雙向涵蓋驗證測試。
+- 新增 `training/` 手寫訓練資料產生器：以 `form_layout` 與空白 `服務紀錄表` 合成文字/勾選影像，輸出 `training/out/images/*.png` 與 workflow 相容答案卷 `training/out/answers.json`（`service_record.v1` + `training` + `source_image`）；取樣維持每選項涵蓋率、單多選約束，支援離線 OFL 字型下載、可選輕量 augmentation 與系統字型 fallback。
 - `import-json --allow-unconfirmed-name`（開發用）：允許在未經 GUI 確認下寫入機器建議的姓名，報告仍保留 `name.unconfirmed` 標記；正式部署預設仍要求 GUI 人工確認。
 - `prepare-records` 新增可選 `--name-agent-config`：以 TOML 啟用手寫姓名 agent；缺席、停用或不支援 provider 時維持 no-op。
 - 離線 OCR 外掛新增輸出個資最小化的姓名裁圖，路徑記於 `record.ocr.name_crop`。
@@ -22,6 +23,7 @@
 - 新增參考 PDF ground-truth fixture、可選的實機 PaddleOCR 驗證測試，與 `build/build_paddle_plugin.py` 的 bundle 內容回歸測試。
 
 ### Fixed
+- `training.handwriting.draw_text()` 現在會以 `textbbox()` 的完整偏移/邊界做縮放與定位，確保實際墨跡留在目標框內；新增對應 regression test 覆蓋 Windows 字型的垂直溢出案例。
 - `prepare_records` 現在會把 OCR/backend 直接帶入的 `name` 一律標成 `name.unconfirmed`；`correction_store.load_corrections` 也會跳過損壞或不可用的 JSONL entries，避免 `prepare-records` 因單筆壞資料整體失敗。
 - `prepare-records --name-agent-config` 現在會拒絕解析後跳出輸出目錄的 backend `record.ocr.name_crop` 路徑，並改回同層 `*-name.png` fallback；`name_agent.load_config()` 也改為嚴格驗證 TOML 型別，錯誤型別會直接報 `ValueError`，不再以 `bool(...)` / `str(...)` 靜默轉型。
 - `name_suggestion` 現在只會把單行、姓名樣式的 OCR 字串當成 fallback 候選，並在 `confirm_name` 持久化前再次最小化 `ocr_raw`；多行整頁 OCR 內容與敏感欄位（如病歷號）不再寫進 `record.name` 或 correction store。`name_agent.load_config()` 缺省 prompt 也改用實際字串常數，避免 dataclass slots descriptor 混入設定。

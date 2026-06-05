@@ -15,6 +15,11 @@ def test_build_bundle_includes_runtime_modules(tmp_path: Path, monkeypatch) -> N
     (src_plugin / "field_extract.py").write_text("field", encoding="utf-8")
     (src_plugin / "mark_detect.py").write_text("mark", encoding="utf-8")
     (src_plugin / "name_crop.py").write_text("crop", encoding="utf-8")
+    (src_plugin / "mark_features.py").write_text("features", encoding="utf-8")
+    (src_plugin / "mark_model.py").write_text("model", encoding="utf-8")
+    (src_plugin / "crop_provider.py").write_text("provider", encoding="utf-8")
+    (src_plugin / "template_boxes.json").write_text("{}", encoding="utf-8")
+    (src_plugin / "mark_model.json").write_text("{}", encoding="utf-8")
     (src_plugin / "plugin.json").write_text("{}", encoding="utf-8")
 
     src_venv = repo / ".venv-paddle"
@@ -34,3 +39,8 @@ def test_build_bundle_includes_runtime_modules(tmp_path: Path, monkeypatch) -> N
     assert build_paddle_plugin.main() == 0
     assert (out / "mark_detect.py").exists()
     assert (out / "name_crop.py").exists()
+    assert (out / "mark_features.py").exists()
+    assert (out / "mark_model.py").exists()
+    assert (out / "crop_provider.py").exists()
+    assert (out / "template_boxes.json").exists()
+    assert (out / "mark_model.json").exists()

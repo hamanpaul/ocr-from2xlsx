@@ -27,7 +27,33 @@ _MD_SPEC = _importlib_util.spec_from_file_location(
 )
 mark_detect = _importlib_util.module_from_spec(_MD_SPEC)
 assert _MD_SPEC and _MD_SPEC.loader
+sys.modules.setdefault(_MD_SPEC.name, mark_detect)
 _MD_SPEC.loader.exec_module(mark_detect)
+sys.modules.setdefault("mark_detect", mark_detect)
+
+_MF_SPEC = _importlib_util.spec_from_file_location(
+    "paddleocr_plugin_mark_features", _HERE / "mark_features.py"
+)
+mark_features = _importlib_util.module_from_spec(_MF_SPEC)
+assert _MF_SPEC and _MF_SPEC.loader
+sys.modules.setdefault("mark_features", mark_features)
+_MF_SPEC.loader.exec_module(mark_features)
+
+_MM_SPEC = _importlib_util.spec_from_file_location(
+    "paddleocr_plugin_mark_model", _HERE / "mark_model.py"
+)
+mark_model = _importlib_util.module_from_spec(_MM_SPEC)
+assert _MM_SPEC and _MM_SPEC.loader
+sys.modules.setdefault(_MM_SPEC.name, mark_model)
+_MM_SPEC.loader.exec_module(mark_model)
+
+_CP_SPEC = _importlib_util.spec_from_file_location(
+    "paddleocr_plugin_crop_provider", _HERE / "crop_provider.py"
+)
+crop_provider = _importlib_util.module_from_spec(_CP_SPEC)
+assert _CP_SPEC and _CP_SPEC.loader
+sys.modules.setdefault(_CP_SPEC.name, crop_provider)
+_CP_SPEC.loader.exec_module(crop_provider)
 
 _NC_SPEC = _importlib_util.spec_from_file_location(
     "paddleocr_plugin_name_crop", _HERE / "name_crop.py"
@@ -40,6 +66,14 @@ CONTRACT_VERSION = "ocr_plugin.v1"
 
 OcrFn = Callable[[str], list[dict[str, Any]]]
 MarkFn = Callable[[str, list[dict[str, Any]]], set[str]]
+
+_CLASSIFIER_LABELS = {
+    ("identity", "patient"): "病人",
+    ("identity", "family_caregiver"): "親友及照顧者",
+    ("identity", "public_other"): "一般民眾及其他",
+    ("gender", "female"): "女性",
+    ("gender", "male"): "男性",
+}
 
 
 def run(request: dict[str, Any], ocr_fn: OcrFn, mark_fn: MarkFn) -> dict[str, Any]:
@@ -68,6 +102,48 @@ def run(request: dict[str, Any], ocr_fn: OcrFn, mark_fn: MarkFn) -> dict[str, An
         },
     }
     return {"contract_version": CONTRACT_VERSION, "record": record}
+
+
+def _existing_path(value: str | os.PathLike[str] | None) -> Path | None:
+    if not value:
+        return None
+    path = Path(value)
+    return path if path.is_file() else None
+
+
+def classifier_mark_fn(
+    image_path: str,
+    template_boxes_path: str | os.PathLike[str] | None = None,
+    model_path: str | os.PathLike[str] | None = None,
+) -> set[str]:
+    template_path = Path(template_boxes_path) if template_boxes_path is not None else _HERE / "template_boxes.json"
+    model = mark_model.load_model(model_path) if _existing_path(model_path) is not None else None
+    labels: set[str] = set()
+    for key, region in crop_provider.GeometryCropProvider(template_path).crop(image_path).items():
+        if mark_model.is_marked_by_model(region, model):
+            label = _CLASSIFIER_LABELS.get(key)
+            if label is not None:
+                labels.add(label)
+    return labels
+
+
+def _runtime_mark_fn() -> MarkFn:
+    template_path = _existing_path(os.environ.get("MARK_TEMPLATE_BOXES"))
+    if template_path is None:
+        template_path = _existing_path(_HERE / "template_boxes.json")
+    model_path = _existing_path(os.environ.get("MARK_MODEL_PATH"))
+    if model_path is None:
+        model_path = _existing_path(_HERE / "mark_model.json")
+    if template_path is None:
+        return mark_detect.detect_marked_labels
+
+    def _classify(image_path: str, _lines: list[dict[str, Any]]) -> set[str]:
+        try:
+            return classifier_mark_fn(image_path, template_path, model_path)
+        except ValueError:
+            return mark_detect.detect_marked_labels(image_path, _lines)
+
+    return _classify
 
 
 def _configure_offline_models() -> None:
@@ -108,7 +184,7 @@ def main() -> int:
     page = request.get("page") or {}
     image_path = str(page.get("image_path") or "")
     lines = _paddle_ocr_fn(image_path) if image_path else []
-    response = run(request, ocr_fn=lambda _path: lines, mark_fn=mark_detect.detect_marked_labels)
+    response = run(request, ocr_fn=lambda _path: lines, mark_fn=_runtime_mark_fn())
     if image_path:
         from pathlib import Path as _Path
         crop_out = _Path(image_path).with_name(_Path(image_path).stem + "-name.png")

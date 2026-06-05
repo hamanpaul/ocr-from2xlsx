@@ -177,6 +177,34 @@ Both evaluators write `report.json` and `report.md`. Mark-blinded evaluation iso
 detection from OCR text recognition; pipeline evaluation is diagnostic because it runs the full OCR
 plugin and reports field-level record mismatches.
 
+To bootstrap the lightweight mark classifier, export geometry boxes, harvest labeled crops, and train a
+JSON weight file:
+
+```powershell
+# export all known checkbox boxes for aligned images
+.venv\Scripts\python -m training.export_template_boxes `
+  "115年整年月報表統計_單案統計加總版(下拉式)(空白).xlsx" `
+  plugins\paddleocr\template_boxes.json
+
+# append confirmed record crops to a mark dataset
+.venv-paddle\Scripts\python -m training.harvest_corrections `
+  prepared-confirmed.json `
+  --image scan.png `
+  --template-boxes plugins\paddleocr\template_boxes.json `
+  --dataset-dir training\out\mark_dataset
+
+# train pure JSON weights with a precision-safe operating point
+.venv\Scripts\python -m training.train_mark_model `
+  training\out\mark_dataset\manifest.jsonl `
+  --output plugins\paddleocr\mark_model.json `
+  --min-precision 0.99
+```
+
+`plugins\paddleocr` uses `MARK_TEMPLATE_BOXES` / bundled `template_boxes.json` to enable geometry crops.
+`MARK_MODEL_PATH` / bundled `mark_model.json` is optional; without weights, geometry crops fall back to
+the legacy `is_marked` threshold. Without template boxes, the plugin keeps the existing OCR-label mark
+fallback.
+
 ## Packaging
 
 Build a portable executable:

@@ -8,6 +8,14 @@
 ## [Unreleased]
 
 ### Added
+- 新增 mark classifier self-training 閉環：plugin-safe `mark_features` / `mark_model` /
+  `crop_provider`、template box 匯出、勾選框裁圖 JSONL 語料、confirmed correction harvest、stdlib
+  線性模型訓練與 precision-safe operating point，並讓 PaddleOCR 外掛在提供 template boxes /
+  mark model assets 時可走幾何裁圖 classifier（無 assets 保留既有 fallback）。
+- PaddleOCR 外掛支援在明確提供 template boxes / mark model assets 時，改用幾何裁圖與輕量 classifier 判斷身分/性別勾選，並保留既有 OCR label fallback。
+- 新增 `training.train_mark_model`：以 stdlib 訓練輕量勾選框線性模型、選擇安全 operating point，並匯出 `mark_model.json`。
+- 新增勾選框裁圖資料集 JSONL 工具與 confirmed record correction harvest 流程，
+  可從 geometry template boxes 產生標註 PNG/manifest 供 mark classifier self-training。
 - 新增合成資料評測工具：`training.eval_metrics` 純度量、`python -m training.eval_marks`
   mark-blinded 勾選框評測，以及 `python -m training.eval_pipeline` OCR pipeline diagnostic
   評測，皆輸出 `report.json` / `report.md`。

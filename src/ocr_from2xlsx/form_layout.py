@@ -107,6 +107,9 @@ class Field:
                     f"str value not supported for {self.kind} field "
                     f"(expected list for multi_choice)"
                 )
+            if not value:
+                # Empty string means no selection, same as None.
+                return ()
             return (value,)
         
         if isinstance(value, list):

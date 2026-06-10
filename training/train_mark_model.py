@@ -105,8 +105,14 @@ def train_linear_model(
     learning_rate: float = 0.2,
     min_precision: float = 0.99,
     trained_at: str | None = None,
+    validation_examples: Sequence[Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Train a deterministic standardized logistic model and select a safe threshold."""
+    """Train a deterministic standardized logistic model and select a safe threshold.
+
+    When `validation_examples` is given, the operating point is chosen on that
+    slice instead of the training examples — use a clean validation set so the
+    threshold matches inference conditions rather than augmented training noise.
+    """
     if epochs < 0:
         raise ValueError("epochs must be non-negative")
     if not math.isfinite(float(learning_rate)) or learning_rate <= 0.0:
@@ -143,9 +149,13 @@ def train_linear_model(
         "trained_at": trained_at if trained_at is not None else DEFAULT_TRAINED_AT,
         "train_counts": _source_counts(examples),
     }
+    if validation_examples is None:
+        eval_matrix, eval_labels = matrix, labels
+    else:
+        eval_matrix, eval_labels = _feature_matrix(validation_examples)
     labels_scores = [
         (label, predict_proba(model, dict(zip(FEATURE_NAMES, row, strict=True))))
-        for label, row in zip(labels, matrix, strict=True)
+        for label, row in zip(eval_labels, eval_matrix, strict=True)
     ]
     operating_point = choose_operating_point(labels_scores, min_precision=min_precision)
     threshold = float(operating_point["threshold"])

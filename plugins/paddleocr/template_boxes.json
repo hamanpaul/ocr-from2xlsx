@@ -1,0 +1,1255 @@
+{
+  "template_id": "service_record.v1",
+  "boxes": [
+    {
+      "field": "consultation.health_medical",
+      "code": "screening_prevention",
+      "box": [
+        317.0,
+        96.125,
+        323.0,
+        101.125
+      ]
+    },
+    {
+      "field": "consultation.health_medical",
+      "code": "disease_treatment_knowledge",
+      "box": [
+        444.75,
+        96.125,
+        450.75,
+        101.125
+      ]
+    },
+    {
+      "field": "consultation.health_medical",
+      "code": "doctor_patient_communication",
+      "box": [
+        535.75,
+        96.125,
+        541.75,
+        101.125
+      ]
+    },
+    {
+      "field": "consultation.health_medical",
+      "code": "healthy_lifestyle",
+      "box": [
+        669.625,
+        96.125,
+        675.625,
+        101.125
+      ]
+    },
+    {
+      "field": "consultation.health_medical",
+      "code": "second_opinion",
+      "box": [
+        317.0,
+        112.25,
+        323.0,
+        117.25
+      ]
+    },
+    {
+      "field": "consultation.health_medical",
+      "code": "transfer_registration",
+      "box": [
+        444.75,
+        112.25,
+        450.75,
+        117.25
+      ]
+    },
+    {
+      "field": "consultation.health_medical",
+      "code": "palliative_patient_rights",
+      "box": [
+        535.75,
+        112.25,
+        541.75,
+        117.25
+      ]
+    },
+    {
+      "field": "consultation.health_medical",
+      "code": "other",
+      "box": [
+        669.625,
+        112.25,
+        675.625,
+        117.25
+      ]
+    },
+    {
+      "field": "consultation.symptom_side_effect",
+      "code": "treatment_side_effect",
+      "box": [
+        317.0,
+        127.25,
+        323.0,
+        132.25
+      ]
+    },
+    {
+      "field": "consultation.symptom_side_effect",
+      "code": "wound_care",
+      "box": [
+        444.75,
+        127.25,
+        450.75,
+        132.25
+      ]
+    },
+    {
+      "field": "consultation.symptom_side_effect",
+      "code": "pain_management",
+      "box": [
+        535.75,
+        127.25,
+        541.75,
+        132.25
+      ]
+    },
+    {
+      "field": "consultation.symptom_side_effect",
+      "code": "fatigue_strength",
+      "box": [
+        669.625,
+        127.25,
+        675.625,
+        132.25
+      ]
+    },
+    {
+      "field": "consultation.symptom_side_effect",
+      "code": "integrated_care",
+      "box": [
+        317.0,
+        142.25,
+        323.0,
+        147.25
+      ]
+    },
+    {
+      "field": "consultation.symptom_side_effect",
+      "code": "sexuality_fertility",
+      "box": [
+        444.75,
+        142.25,
+        450.75,
+        147.25
+      ]
+    },
+    {
+      "field": "consultation.symptom_side_effect",
+      "code": "other",
+      "box": [
+        535.75,
+        142.25,
+        541.75,
+        147.25
+      ]
+    },
+    {
+      "field": "consultation.nutrition_diet",
+      "code": "diet_conditioning",
+      "box": [
+        317.0,
+        164.75,
+        323.0,
+        169.75
+      ]
+    },
+    {
+      "field": "consultation.nutrition_diet",
+      "code": "nutrition_products",
+      "box": [
+        444.75,
+        164.75,
+        450.75,
+        169.75
+      ]
+    },
+    {
+      "field": "consultation.nutrition_diet",
+      "code": "health_food",
+      "box": [
+        535.75,
+        164.75,
+        541.75,
+        169.75
+      ]
+    },
+    {
+      "field": "consultation.nutrition_diet",
+      "code": "other",
+      "box": [
+        669.625,
+        164.75,
+        675.625,
+        169.75
+      ]
+    },
+    {
+      "field": "consultation.psychosocial_emotion",
+      "code": "emotional_support",
+      "box": [
+        317.0,
+        187.25,
+        323.0,
+        192.25
+      ]
+    },
+    {
+      "field": "consultation.psychosocial_emotion",
+      "code": "disease_adaptation",
+      "box": [
+        444.75,
+        187.25,
+        450.75,
+        192.25
+      ]
+    },
+    {
+      "field": "consultation.psychosocial_emotion",
+      "code": "family_communication",
+      "box": [
+        535.75,
+        187.25,
+        541.75,
+        192.25
+      ]
+    },
+    {
+      "field": "consultation.psychosocial_emotion",
+      "code": "loss_grief",
+      "box": [
+        669.625,
+        187.25,
+        675.625,
+        192.25
+      ]
+    },
+    {
+      "field": "consultation.psychosocial_emotion",
+      "code": "spiritual_care",
+      "box": [
+        317.0,
+        202.25,
+        323.0,
+        207.25
+      ]
+    },
+    {
+      "field": "consultation.psychosocial_emotion",
+      "code": "other",
+      "box": [
+        444.75,
+        202.25,
+        450.75,
+        207.25
+      ]
+    },
+    {
+      "field": "consultation.financial_social",
+      "code": "financial_welfare",
+      "box": [
+        317.0,
+        217.25,
+        323.0,
+        222.25
+      ]
+    },
+    {
+      "field": "consultation.financial_social",
+      "code": "nutrition_subsidy",
+      "box": [
+        444.75,
+        217.25,
+        450.75,
+        222.25
+      ]
+    },
+    {
+      "field": "consultation.financial_social",
+      "code": "transportation_subsidy",
+      "box": [
+        535.75,
+        217.25,
+        541.75,
+        222.25
+      ]
+    },
+    {
+      "field": "consultation.financial_social",
+      "code": "housing_subsidy",
+      "box": [
+        669.625,
+        217.25,
+        675.625,
+        222.25
+      ]
+    },
+    {
+      "field": "consultation.financial_social",
+      "code": "insurance",
+      "box": [
+        317.0,
+        232.25,
+        323.0,
+        237.25
+      ]
+    },
+    {
+      "field": "consultation.financial_social",
+      "code": "school_work",
+      "box": [
+        444.75,
+        232.25,
+        450.75,
+        237.25
+      ]
+    },
+    {
+      "field": "consultation.financial_social",
+      "code": "rehab_supplies_aids",
+      "box": [
+        535.75,
+        232.25,
+        541.75,
+        237.25
+      ]
+    },
+    {
+      "field": "consultation.financial_social",
+      "code": "other",
+      "box": [
+        669.625,
+        232.25,
+        675.625,
+        237.25
+      ]
+    },
+    {
+      "field": "consultation.care_support",
+      "code": "peer_experience",
+      "box": [
+        317.0,
+        247.25,
+        323.0,
+        252.25
+      ]
+    },
+    {
+      "field": "consultation.care_support",
+      "code": "long_term_care",
+      "box": [
+        444.75,
+        247.25,
+        450.75,
+        252.25
+      ]
+    },
+    {
+      "field": "consultation.care_support",
+      "code": "caregiver_support",
+      "box": [
+        535.75,
+        247.25,
+        541.75,
+        252.25
+      ]
+    },
+    {
+      "field": "consultation.care_support",
+      "code": "relationship_social",
+      "box": [
+        669.625,
+        247.25,
+        675.625,
+        252.25
+      ]
+    },
+    {
+      "field": "consultation.care_support",
+      "code": "discharge_planning",
+      "box": [
+        317.0,
+        262.25,
+        323.0,
+        267.25
+      ]
+    },
+    {
+      "field": "consultation.care_support",
+      "code": "other",
+      "box": [
+        444.75,
+        262.25,
+        450.75,
+        267.25
+      ]
+    },
+    {
+      "field": "supplies",
+      "code": "wig_hat",
+      "box": [
+        157.75,
+        277.25,
+        163.75,
+        282.25
+      ]
+    },
+    {
+      "field": "supplies",
+      "code": "other_care_supplies",
+      "box": [
+        317.0,
+        277.25,
+        323.0,
+        282.25
+      ]
+    },
+    {
+      "field": "supplies",
+      "code": "nutrition_products",
+      "box": [
+        444.75,
+        277.25,
+        450.75,
+        282.25
+      ]
+    },
+    {
+      "field": "supplies",
+      "code": "other_equipment",
+      "box": [
+        535.75,
+        277.25,
+        541.75,
+        282.25
+      ]
+    },
+    {
+      "field": "internal_referrals",
+      "code": "wig_hat",
+      "box": [
+        157.75,
+        292.25,
+        163.75,
+        297.25
+      ]
+    },
+    {
+      "field": "internal_referrals",
+      "code": "other_care_supplies",
+      "box": [
+        317.0,
+        292.25,
+        323.0,
+        297.25
+      ]
+    },
+    {
+      "field": "internal_referrals",
+      "code": "social_welfare",
+      "box": [
+        444.75,
+        292.25,
+        450.75,
+        297.25
+      ]
+    },
+    {
+      "field": "internal_referrals",
+      "code": "peer_volunteer_group",
+      "box": [
+        535.75,
+        292.25,
+        541.75,
+        297.25
+      ]
+    },
+    {
+      "field": "internal_referrals",
+      "code": "psychology",
+      "box": [
+        669.625,
+        292.25,
+        675.625,
+        297.25
+      ]
+    },
+    {
+      "field": "internal_referrals",
+      "code": "nutrition",
+      "box": [
+        157.75,
+        307.25,
+        163.75,
+        312.25
+      ]
+    },
+    {
+      "field": "internal_referrals",
+      "code": "long_term_care",
+      "box": [
+        317.0,
+        307.25,
+        323.0,
+        312.25
+      ]
+    },
+    {
+      "field": "internal_referrals",
+      "code": "rehabilitation",
+      "box": [
+        444.75,
+        307.25,
+        450.75,
+        312.25
+      ]
+    },
+    {
+      "field": "internal_referrals",
+      "code": "care_information",
+      "box": [
+        535.75,
+        307.25,
+        541.75,
+        312.25
+      ]
+    },
+    {
+      "field": "internal_referrals",
+      "code": "other_activity",
+      "box": [
+        669.625,
+        307.25,
+        675.625,
+        312.25
+      ]
+    },
+    {
+      "field": "external_referrals",
+      "code": "wig_hat",
+      "box": [
+        157.75,
+        323.0,
+        163.75,
+        328.0
+      ]
+    },
+    {
+      "field": "external_referrals",
+      "code": "other_care_supplies",
+      "box": [
+        317.0,
+        323.0,
+        323.0,
+        328.0
+      ]
+    },
+    {
+      "field": "external_referrals",
+      "code": "social_welfare",
+      "box": [
+        444.75,
+        323.0,
+        450.75,
+        328.0
+      ]
+    },
+    {
+      "field": "external_referrals",
+      "code": "peer_volunteer_group",
+      "box": [
+        535.75,
+        323.0,
+        541.75,
+        328.0
+      ]
+    },
+    {
+      "field": "external_referrals",
+      "code": "psychology",
+      "box": [
+        669.625,
+        323.0,
+        675.625,
+        328.0
+      ]
+    },
+    {
+      "field": "external_referrals",
+      "code": "nutrition",
+      "box": [
+        157.75,
+        338.75,
+        163.75,
+        343.75
+      ]
+    },
+    {
+      "field": "external_referrals",
+      "code": "long_term_care",
+      "box": [
+        317.0,
+        338.75,
+        323.0,
+        343.75
+      ]
+    },
+    {
+      "field": "external_referrals",
+      "code": "rehabilitation",
+      "box": [
+        444.75,
+        338.75,
+        450.75,
+        343.75
+      ]
+    },
+    {
+      "field": "external_referrals",
+      "code": "care_information",
+      "box": [
+        535.75,
+        338.75,
+        541.75,
+        343.75
+      ]
+    },
+    {
+      "field": "external_referrals",
+      "code": "other_activity",
+      "box": [
+        669.625,
+        338.75,
+        675.625,
+        343.75
+      ]
+    },
+    {
+      "field": "referral_outcomes",
+      "code": "received_wig_hat",
+      "box": [
+        157.75,
+        360.125,
+        163.75,
+        365.125
+      ]
+    },
+    {
+      "field": "referral_outcomes",
+      "code": "received_other_supplies",
+      "box": [
+        317.0,
+        360.125,
+        323.0,
+        365.125
+      ]
+    },
+    {
+      "field": "referral_outcomes",
+      "code": "received_financial_aid",
+      "box": [
+        444.75,
+        360.125,
+        450.75,
+        365.125
+      ]
+    },
+    {
+      "field": "referral_outcomes",
+      "code": "received_service_help",
+      "box": [
+        535.75,
+        360.125,
+        541.75,
+        365.125
+      ]
+    },
+    {
+      "field": "identity",
+      "code": "patient",
+      "box": [
+        157.75,
+        396.5,
+        163.75,
+        401.5
+      ]
+    },
+    {
+      "field": "identity",
+      "code": "family_caregiver",
+      "box": [
+        317.0,
+        408.125,
+        323.0,
+        413.125
+      ]
+    },
+    {
+      "field": "identity",
+      "code": "public_other",
+      "box": [
+        444.75,
+        408.125,
+        450.75,
+        413.125
+      ]
+    },
+    {
+      "field": "gender",
+      "code": "female",
+      "box": [
+        157.75,
+        446.75,
+        163.75,
+        451.75
+      ]
+    },
+    {
+      "field": "gender",
+      "code": "male",
+      "box": [
+        157.75,
+        461.75,
+        163.75,
+        466.75
+      ]
+    },
+    {
+      "field": "gender",
+      "code": "other",
+      "box": [
+        157.75,
+        476.75,
+        163.75,
+        481.75
+      ]
+    },
+    {
+      "field": "nationality",
+      "code": "local",
+      "box": [
+        157.75,
+        491.75,
+        163.75,
+        496.75
+      ]
+    },
+    {
+      "field": "nationality",
+      "code": "foreign",
+      "box": [
+        157.75,
+        506.75,
+        163.75,
+        511.75
+      ]
+    },
+    {
+      "field": "age",
+      "code": "20_under",
+      "box": [
+        157.75,
+        521.75,
+        163.75,
+        526.75
+      ]
+    },
+    {
+      "field": "age",
+      "code": "21_30",
+      "box": [
+        157.75,
+        536.75,
+        163.75,
+        541.75
+      ]
+    },
+    {
+      "field": "age",
+      "code": "31_40",
+      "box": [
+        157.75,
+        551.75,
+        163.75,
+        556.75
+      ]
+    },
+    {
+      "field": "age",
+      "code": "41_50",
+      "box": [
+        157.75,
+        566.75,
+        163.75,
+        571.75
+      ]
+    },
+    {
+      "field": "age",
+      "code": "51_60",
+      "box": [
+        157.75,
+        581.75,
+        163.75,
+        586.75
+      ]
+    },
+    {
+      "field": "age",
+      "code": "61_70",
+      "box": [
+        157.75,
+        596.75,
+        163.75,
+        601.75
+      ]
+    },
+    {
+      "field": "age",
+      "code": "71_over",
+      "box": [
+        157.75,
+        612.875,
+        163.75,
+        617.875
+      ]
+    },
+    {
+      "field": "channel",
+      "code": "self_known",
+      "box": [
+        157.75,
+        648.125,
+        163.75,
+        653.125
+      ]
+    },
+    {
+      "field": "channel",
+      "code": "introduced",
+      "box": [
+        317.0,
+        648.125,
+        323.0,
+        653.125
+      ]
+    },
+    {
+      "field": "channel",
+      "code": "active_followup",
+      "box": [
+        444.75,
+        648.125,
+        450.75,
+        653.125
+      ]
+    },
+    {
+      "field": "channel",
+      "code": "internal_referral",
+      "box": [
+        538.75,
+        648.125,
+        544.75,
+        653.125
+      ]
+    },
+    {
+      "field": "channel",
+      "code": "external_referral",
+      "box": [
+        669.625,
+        648.125,
+        675.625,
+        653.125
+      ]
+    },
+    {
+      "field": "channel",
+      "code": "activity",
+      "box": [
+        157.75,
+        664.25,
+        163.75,
+        669.25
+      ]
+    },
+    {
+      "field": "channel",
+      "code": "other",
+      "box": [
+        317.0,
+        664.25,
+        323.0,
+        669.25
+      ]
+    },
+    {
+      "field": "disease_status",
+      "code": "undiagnosed",
+      "box": [
+        157.75,
+        679.25,
+        163.75,
+        684.25
+      ]
+    },
+    {
+      "field": "disease_status",
+      "code": "diagnosed_not_treated",
+      "box": [
+        317.0,
+        679.25,
+        323.0,
+        684.25
+      ]
+    },
+    {
+      "field": "disease_status",
+      "code": "diagnosed_refused",
+      "box": [
+        444.75,
+        679.25,
+        450.75,
+        684.25
+      ]
+    },
+    {
+      "field": "disease_status",
+      "code": "treating",
+      "box": [
+        538.75,
+        679.25,
+        544.75,
+        684.25
+      ]
+    },
+    {
+      "field": "disease_status",
+      "code": "recurrence_treating",
+      "box": [
+        669.625,
+        679.25,
+        675.625,
+        684.25
+      ]
+    },
+    {
+      "field": "disease_status",
+      "code": "followup",
+      "box": [
+        157.75,
+        694.25,
+        163.75,
+        699.25
+      ]
+    },
+    {
+      "field": "disease_status",
+      "code": "palliative",
+      "box": [
+        317.0,
+        694.25,
+        323.0,
+        699.25
+      ]
+    },
+    {
+      "field": "source",
+      "code": "outpatient",
+      "box": [
+        157.75,
+        709.25,
+        163.75,
+        714.25
+      ]
+    },
+    {
+      "field": "source",
+      "code": "inpatient",
+      "box": [
+        317.0,
+        709.25,
+        323.0,
+        714.25
+      ]
+    },
+    {
+      "field": "source",
+      "code": "emergency",
+      "box": [
+        444.75,
+        709.25,
+        450.75,
+        714.25
+      ]
+    },
+    {
+      "field": "cancer",
+      "code": "brain_cancer",
+      "box": [
+        157.75,
+        724.25,
+        163.75,
+        729.25
+      ]
+    },
+    {
+      "field": "cancer",
+      "code": "nasopharyngeal_cancer",
+      "box": [
+        317.0,
+        724.25,
+        323.0,
+        729.25
+      ]
+    },
+    {
+      "field": "cancer",
+      "code": "oral_cancer",
+      "box": [
+        444.75,
+        724.25,
+        450.75,
+        729.25
+      ]
+    },
+    {
+      "field": "cancer",
+      "code": "hypopharyngeal_cancer",
+      "box": [
+        535.75,
+        724.25,
+        541.75,
+        729.25
+      ]
+    },
+    {
+      "field": "cancer",
+      "code": "laryngeal_cancer",
+      "box": [
+        669.625,
+        724.25,
+        675.625,
+        729.25
+      ]
+    },
+    {
+      "field": "cancer",
+      "code": "thyroid_cancer",
+      "box": [
+        157.75,
+        739.25,
+        163.75,
+        744.25
+      ]
+    },
+    {
+      "field": "cancer",
+      "code": "esophageal_cancer",
+      "box": [
+        317.0,
+        739.25,
+        323.0,
+        744.25
+      ]
+    },
+    {
+      "field": "cancer",
+      "code": "breast_cancer",
+      "box": [
+        444.75,
+        739.25,
+        450.75,
+        744.25
+      ]
+    },
+    {
+      "field": "cancer",
+      "code": "lung_cancer",
+      "box": [
+        535.75,
+        739.25,
+        541.75,
+        744.25
+      ]
+    },
+    {
+      "field": "cancer",
+      "code": "liver_cancer",
+      "box": [
+        669.625,
+        739.25,
+        675.625,
+        744.25
+      ]
+    },
+    {
+      "field": "cancer",
+      "code": "colorectal_cancer",
+      "box": [
+        157.75,
+        754.25,
+        163.75,
+        759.25
+      ]
+    },
+    {
+      "field": "cancer",
+      "code": "stomach_cancer",
+      "box": [
+        317.0,
+        754.25,
+        323.0,
+        759.25
+      ]
+    },
+    {
+      "field": "cancer",
+      "code": "pancreatic_cancer",
+      "box": [
+        444.75,
+        754.25,
+        450.75,
+        759.25
+      ]
+    },
+    {
+      "field": "cancer",
+      "code": "kidney_cancer",
+      "box": [
+        535.75,
+        754.25,
+        541.75,
+        759.25
+      ]
+    },
+    {
+      "field": "cancer",
+      "code": "bladder_cancer",
+      "box": [
+        669.625,
+        754.25,
+        675.625,
+        759.25
+      ]
+    },
+    {
+      "field": "cancer",
+      "code": "ovarian_cancer",
+      "box": [
+        157.75,
+        769.25,
+        163.75,
+        774.25
+      ]
+    },
+    {
+      "field": "cancer",
+      "code": "endometrial_cancer",
+      "box": [
+        317.0,
+        769.25,
+        323.0,
+        774.25
+      ]
+    },
+    {
+      "field": "cancer",
+      "code": "cervical_cancer",
+      "box": [
+        444.75,
+        769.25,
+        450.75,
+        774.25
+      ]
+    },
+    {
+      "field": "cancer",
+      "code": "prostate_cancer",
+      "box": [
+        535.75,
+        769.25,
+        541.75,
+        774.25
+      ]
+    },
+    {
+      "field": "cancer",
+      "code": "lymphoma",
+      "box": [
+        669.625,
+        769.25,
+        675.625,
+        774.25
+      ]
+    },
+    {
+      "field": "cancer",
+      "code": "leukemia",
+      "box": [
+        157.75,
+        784.25,
+        163.75,
+        789.25
+      ]
+    },
+    {
+      "field": "cancer",
+      "code": "skin_cancer",
+      "box": [
+        317.0,
+        784.25,
+        323.0,
+        789.25
+      ]
+    },
+    {
+      "field": "cancer",
+      "code": "multiple_myeloma",
+      "box": [
+        444.75,
+        784.25,
+        450.75,
+        789.25
+      ]
+    },
+    {
+      "field": "cancer",
+      "code": "sarcoma",
+      "box": [
+        535.75,
+        784.25,
+        541.75,
+        789.25
+      ]
+    },
+    {
+      "field": "cancer",
+      "code": "other",
+      "box": [
+        669.625,
+        784.25,
+        675.625,
+        789.25
+      ]
+    },
+    {
+      "field": "newly_diagnosed",
+      "code": "true",
+      "box": [
+        77.0,
+        800.375,
+        83.0,
+        805.375
+      ]
+    }
+  ]
+}

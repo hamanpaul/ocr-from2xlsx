@@ -38,6 +38,14 @@ def _metrics_at_threshold(
     }
 
 
+def metrics_at_threshold(
+    labels_scores: Sequence[tuple[int, float]],
+    threshold: float,
+) -> dict[str, float | int]:
+    """Public precision/recall metrics for labeled scores at a fixed threshold."""
+    return _metrics_at_threshold(labels_scores, threshold)
+
+
 def choose_operating_point(
     labels_scores: Sequence[tuple[int, float]],
     min_precision: float = 0.99,
@@ -81,6 +89,9 @@ def decide_candidate(
     candidate_precision, error = _finite_metric(candidate_metrics.get("precision", 0.0), "candidate precision")
     if error is not None:
         return {"adopt": False, "reason": error}
+    current_precision, error = _finite_metric(current_metrics.get("precision", 0.0), "current precision")
+    if error is not None:
+        return {"adopt": False, "reason": error}
     current_recall, error = _finite_metric(current_metrics.get("recall", 0.0), "current recall")
     if error is not None:
         return {"adopt": False, "reason": error}
@@ -92,6 +103,13 @@ def decide_candidate(
         return {
             "adopt": False,
             "reason": "candidate precision is below the minimum precision threshold",
+        }
+    if current_precision < min_precision:
+        # A precision-unsafe current model must not entrench itself through
+        # recall comparisons; any precision-safe candidate replaces it.
+        return {
+            "adopt": True,
+            "reason": "current weights are unsafe (precision below the minimum); adopting precision-safe candidate",
         }
     if candidate_recall <= current_recall:
         return {

@@ -89,6 +89,29 @@ def test_train_linear_model_threshold_matches_eval_gate_selection() -> None:
     assert 0.0 <= model["threshold"] <= 1.0
 
 
+def test_train_linear_model_selects_threshold_on_validation_examples() -> None:
+    train = _separable_examples() + [_example(0, 0.88)]
+    validation = [_example(0, 0.05), _example(0, 0.10), _example(1, 0.85), _example(1, 0.95)]
+
+    base = train_linear_model(train, epochs=120, learning_rate=0.5, min_precision=1.0)
+    calibrated = train_linear_model(
+        train,
+        epochs=120,
+        learning_rate=0.5,
+        min_precision=1.0,
+        validation_examples=validation,
+    )
+
+    assert calibrated["coef"] == base["coef"]
+    labels_scores = [
+        (int(example["label"]), predict_proba(calibrated, example["features"]))
+        for example in validation
+    ]
+    expected = choose_operating_point(labels_scores, min_precision=1.0)
+    assert calibrated["threshold"] == pytest.approx(float(expected["threshold"]))
+    assert calibrated["threshold"] < base["threshold"]
+
+
 def test_train_linear_model_uses_reject_all_threshold_when_no_safe_threshold_exists() -> None:
     examples = [_example(0, 0.5), _example(1, 0.5)]
 

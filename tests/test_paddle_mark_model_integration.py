@@ -104,9 +104,11 @@ def test_run_remains_injectable_and_consumes_mark_labels() -> None:
     assert response["record"]["gender"] == "male"
 
 
-def test_runtime_mark_fn_falls_back_to_ocr_label_detector_when_env_assets_absent(monkeypatch) -> None:
+def test_runtime_mark_fn_falls_back_to_ocr_label_detector_when_env_assets_absent(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.delenv("MARK_TEMPLATE_BOXES", raising=False)
     monkeypatch.delenv("MARK_MODEL_PATH", raising=False)
+    monkeypatch.setenv("OCR_FROM2XLSX_HOME", str(tmp_path / "empty-home"))
+    monkeypatch.setattr(plugin_main, "_HERE", tmp_path / "no-bundle")
     calls: list[tuple[str, list[dict[str, object]]]] = []
 
     def fake_detect(image_path: str, lines: list[dict[str, object]]) -> set[str]:
@@ -120,6 +122,86 @@ def test_runtime_mark_fn_falls_back_to_ocr_label_detector_when_env_assets_absent
 
     assert mark_fn("scan.png", lines) == {"fallback-label"}
     assert calls == [("scan.png", lines)]
+
+
+def test_runtime_mark_fn_skips_geometry_when_no_model_weights_exist(tmp_path: Path, monkeypatch) -> None:
+    # Without trained weights the per-crop is_marked fallback fires on printed
+    # checkbox glyphs, so the geometry path must be skipped entirely.
+    image_path = tmp_path / "marks.png"
+    Image.new("L", (6, 4), color=0).save(image_path)
+    template_path = tmp_path / "template_boxes.json"
+    _write_template(template_path)
+    monkeypatch.setenv("MARK_TEMPLATE_BOXES", str(template_path))
+    monkeypatch.delenv("MARK_MODEL_PATH", raising=False)
+    monkeypatch.setenv("OCR_FROM2XLSX_HOME", str(tmp_path / "empty-home"))
+    monkeypatch.setattr(plugin_main, "_HERE", tmp_path / "no-bundle")
+
+    def fake_detect(_image_path: str, _lines: list[dict[str, object]]) -> set[str]:
+        return {"fallback-label"}
+
+    monkeypatch.setattr(plugin_main.mark_detect, "detect_marked_labels", fake_detect)
+
+    assert plugin_main._runtime_mark_fn()(str(image_path), []) == {"fallback-label"}
+
+
+def test_runtime_mark_fn_falls_back_when_image_is_missing(tmp_path: Path, monkeypatch) -> None:
+    template_path = tmp_path / "template_boxes.json"
+    _write_template(template_path)
+    monkeypatch.setenv("MARK_TEMPLATE_BOXES", str(template_path))
+    monkeypatch.delenv("MARK_MODEL_PATH", raising=False)
+    monkeypatch.setenv("OCR_FROM2XLSX_HOME", str(tmp_path / "empty-home"))
+    calls: list[str] = []
+
+    def fake_detect(image_path_arg: str, _lines: list[dict[str, object]]) -> set[str]:
+        calls.append(image_path_arg)
+        return {"fallback-label"}
+
+    monkeypatch.setattr(plugin_main.mark_detect, "detect_marked_labels", fake_detect)
+
+    missing = str(tmp_path / "missing-scan.png")
+    assert plugin_main._runtime_mark_fn()(missing, []) == {"fallback-label"}
+    assert calls == [missing]
+
+
+def test_resolve_mark_model_path_prefers_env_then_user_runtime_then_bundle(tmp_path: Path, monkeypatch) -> None:
+    env_model = tmp_path / "env-model.json"
+    env_model.write_text("{}", encoding="utf-8")
+    home_dir = tmp_path / "home"
+    home_dir.mkdir()
+    runtime_model = home_dir / "mark_model.json"
+    runtime_model.write_text("{}", encoding="utf-8")
+
+    monkeypatch.setenv("MARK_MODEL_PATH", str(env_model))
+    monkeypatch.setenv("OCR_FROM2XLSX_HOME", str(home_dir))
+    assert plugin_main._resolve_mark_model_path() == env_model
+
+    monkeypatch.delenv("MARK_MODEL_PATH")
+    assert plugin_main._resolve_mark_model_path() == runtime_model
+
+    runtime_model.unlink()
+    assert plugin_main._resolve_mark_model_path() is None or plugin_main._resolve_mark_model_path().name == "mark_model.json"
+
+
+def test_runtime_mark_fn_uses_user_runtime_weights_when_model_env_unset(tmp_path: Path, monkeypatch) -> None:
+    image_path = tmp_path / "marks.png"
+    image = Image.new("L", (6, 4), color=255)
+    for x in range(0, 2):
+        for y in range(0, 2):
+            image.putpixel((x, y), 0)
+    image.save(image_path)
+    template_path = tmp_path / "template_boxes.json"
+    _write_template(template_path)
+    home_dir = tmp_path / "home"
+    home_dir.mkdir()
+    _write_dark_ratio_model(home_dir / "mark_model.json")
+
+    monkeypatch.setenv("MARK_TEMPLATE_BOXES", str(template_path))
+    monkeypatch.delenv("MARK_MODEL_PATH", raising=False)
+    monkeypatch.setenv("OCR_FROM2XLSX_HOME", str(home_dir))
+
+    labels = plugin_main._runtime_mark_fn()(str(image_path), [])
+
+    assert labels == {"病人"}
 
 
 def test_runtime_mark_fn_falls_back_when_geometry_crop_is_incompatible(tmp_path: Path, monkeypatch) -> None:

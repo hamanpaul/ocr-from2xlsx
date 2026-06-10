@@ -8,6 +8,19 @@
 ## [Unreleased]
 
 ### Added
+- 新增 `training.retrain`：手動修正重訓指令——在指定語料（合成 ∪ 修正 manifest）上重訓候選權重，
+  以固定留出集對「現行權重（無則 `is_marked` baseline）」過 eval-gate（recall 上升且 precision ≥ 門檻
+  才採用），採用時原子寫入使用者 runtime 權重（`OCR_FROM2XLSX_HOME` 或 `~/.ocr_from2xlsx/`），
+  每次決策 append 稽核 `mark_audit.jsonl`；支援 `--validation` 以獨立乾淨驗證批校準 operating point
+  （`train_mark_model.train_linear_model` 亦新增 `validation_examples` 參數）。
+- `eval_gate.decide_candidate` 新增不安全現行權重規則：現行 precision 低於安全門檻（如 degenerate
+  全判正 baseline）且候選 precision 達標時直接採用，不再被現行的虛高 recall 擋下。
+- `training.harvest_corrections` 新增 `--answers` 批次模式：一次收割整份合成 `answers.json`
+  （bootstrap 語料），`source` 預設 `synthetic`；單筆 confirmed record 模式維持不變。
+- PaddleOCR 外掛 mark model 權重解析新增使用者 runtime 層：`MARK_MODEL_PATH` env →
+  `OCR_FROM2XLSX_HOME`/`~/.ocr_from2xlsx/mark_model.json`（`training.retrain` 寫此）→ bundle 內
+  baseline → 退回 `is_marked`。
+- 隨 plugin 出貨合成 bootstrap 訓練的 v1 baseline `mark_model.json` 與 `template_boxes.json`。
 - 新增 mark classifier self-training 閉環：plugin-safe `mark_features` / `mark_model` /
   `crop_provider`、template box 匯出、勾選框裁圖 JSONL 語料、confirmed correction harvest、stdlib
   線性模型訓練與 precision-safe operating point，並讓 PaddleOCR 外掛在提供 template boxes /
@@ -34,6 +47,14 @@
 - 新增參考 PDF ground-truth fixture、可選的實機 PaddleOCR 驗證測試，與 `build/build_paddle_plugin.py` 的 bundle 內容回歸測試。
 
 ### Fixed
+- `training.generate --augment` 修正 `Image.Resampling` 誤用 instance 屬性導致的 `AttributeError`，
+  augmentation 路徑現在可用。
+- `form_layout.Field.selected_codes` 現在把空字串視為未選（同 `None`），收割含未勾 single_choice
+  的記錄不再誤報 unknown selected code。
+- PaddleOCR 外掛 geometry classifier 路徑在影像缺失/不可讀（`OSError`）時退回既有
+  `detect_marked_labels`，不再讓 plugin 失敗。
+- PaddleOCR 外掛在「有 template boxes 但無 mark model 權重」時不再走逐框 `is_marked` 幾何路徑
+  （實測該 fallback 會把印刷「□」全判為有勾），改為整體退回 `detect_marked_labels`。
 - `training.handwriting.draw_text()` 現在會以 `textbbox()` 的完整偏移/邊界做縮放與定位，確保實際墨跡留在目標框內；新增對應 regression test 覆蓋 Windows 字型的垂直溢出案例。
 - `prepare_records` 現在會把 OCR/backend 直接帶入的 `name` 一律標成 `name.unconfirmed`；`correction_store.load_corrections` 也會跳過損壞或不可用的 JSONL entries，避免 `prepare-records` 因單筆壞資料整體失敗。
 - `prepare-records --name-agent-config` 現在會拒絕解析後跳出輸出目錄的 backend `record.ocr.name_crop` 路徑，並改回同層 `*-name.png` fallback；`name_agent.load_config()` 也改為嚴格驗證 TOML 型別，錯誤型別會直接報 `ValueError`，不再以 `bool(...)` / `str(...)` 靜默轉型。

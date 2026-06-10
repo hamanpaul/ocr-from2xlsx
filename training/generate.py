@@ -106,11 +106,11 @@ def _select_text_font(text: str = "", font_paths: Iterable[Path] | None = None) 
 
 
 def _apply_augmentation(image, rng: random.Random):
-    from PIL import ImageFilter
+    from PIL import Image, ImageFilter
 
     rotated = image.rotate(
         rng.uniform(-1.2, 1.2),
-        resample=image.Resampling.BICUBIC,
+        resample=Image.Resampling.BICUBIC,
         expand=False,
         fillcolor=255,
     )

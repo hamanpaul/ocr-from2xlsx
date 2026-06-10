@@ -186,7 +186,13 @@ JSON weight file:
   "115年整年月報表統計_單案統計加總版(下拉式)(空白).xlsx" `
   plugins\paddleocr\template_boxes.json
 
-# append confirmed record crops to a mark dataset
+# harvest a whole synthetic answers.json batch (bootstrap corpus)
+.venv\Scripts\python -m training.harvest_corrections `
+  --answers training\out\answers.json `
+  --template-boxes plugins\paddleocr\template_boxes.json `
+  --dataset-dir training\out\mark_dataset
+
+# or append confirmed record crops one at a time (manual correction loop)
 .venv-paddle\Scripts\python -m training.harvest_corrections `
   prepared-confirmed.json `
   --image scan.png `
@@ -200,10 +206,29 @@ JSON weight file:
   --min-precision 0.99
 ```
 
+After deployment, strengthen the model with confirmed corrections through the gated retrain command.
+It trains on every manifest you pass, evaluates the candidate against the currently deployed weights on
+a fixed holdout manifest, and only replaces the runtime weights when recall improves without dropping
+precision below the gate. Every decision is appended to an audit JSONL:
+
+```powershell
+.venv\Scripts\python -m training.retrain `
+  training\out\mark_dataset\manifest.jsonl `
+  training\out\corrections\manifest.jsonl `
+  --holdout training\out\holdout_dataset\manifest.jsonl `
+  --min-precision 0.99
+```
+
+Adopted weights land in `%USERPROFILE%\.ocr_from2xlsx\mark_model.json` (override the directory with
+`OCR_FROM2XLSX_HOME`; pick another target with `--runtime-dir`). The exit code is `0` when the candidate
+is adopted and `2` when the gate keeps the current weights. The audit log defaults to
+`mark_audit.jsonl` next to the runtime weights.
+
 `plugins\paddleocr` uses `MARK_TEMPLATE_BOXES` / bundled `template_boxes.json` to enable geometry crops.
-`MARK_MODEL_PATH` / bundled `mark_model.json` is optional; without weights, geometry crops fall back to
-the legacy `is_marked` threshold. Without template boxes, the plugin keeps the existing OCR-label mark
-fallback.
+Mark model weights resolve in order: `MARK_MODEL_PATH` env override, user runtime weights
+(`OCR_FROM2XLSX_HOME` or `~\.ocr_from2xlsx\mark_model.json`, written by `training.retrain`), then the
+bundled baseline `mark_model.json`. Without any weights, geometry crops fall back to the legacy
+`is_marked` threshold. Without template boxes, the plugin keeps the existing OCR-label mark fallback.
 
 ## Packaging
 

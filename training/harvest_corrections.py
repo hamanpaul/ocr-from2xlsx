@@ -120,19 +120,74 @@ def harvest_record_corrections(
     return rows
 
 
+def harvest_answer_batch(
+    answers_path: str | Path,
+    layout: FormLayout,
+    template_boxes_path: str | Path,
+    dataset_dir: str | Path,
+    *,
+    source: str = "synthetic",
+    provider: str = "geometry",
+    created_at: str | None = None,
+) -> int:
+    """Harvest every record in a synthetic answers.json batch; returns total manifest rows."""
+    from training.eval_answer_key import raw_records, resolve_source_image
+
+    answers = Path(answers_path)
+    total = 0
+    for payload in raw_records(answers):
+        source_image = payload.get("source_image")
+        if not isinstance(source_image, str) or not source_image:
+            record_id = payload.get("record_id", "<unknown>")
+            raise ValueError(f"answers record {record_id} is missing source_image")
+        rows = harvest_record_corrections(
+            payload,
+            layout,
+            resolve_source_image(answers, source_image),
+            template_boxes_path,
+            dataset_dir,
+            source=source,
+            provider=provider,
+            created_at=created_at,
+        )
+        total += len(rows)
+    return total
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Harvest labeled checkbox crops from a confirmed record JSON.")
-    parser.add_argument("record_json", help="Path to a confirmed service-record JSON object")
-    parser.add_argument("--image", required=True, help="Aligned source image path")
+    parser.add_argument("record_json", nargs="?", help="Path to a confirmed service-record JSON object")
+    parser.add_argument("--answers", help="Synthetic answers.json batch to harvest instead of a single record")
+    parser.add_argument("--image", help="Aligned source image path (required with record_json)")
     parser.add_argument("--template-boxes", required=True, help="Geometry template_boxes.json path")
     parser.add_argument("--dataset-dir", required=True, help="Output mark dataset directory")
-    parser.add_argument("--source", default="correction", help="Manifest source value")
+    parser.add_argument("--source", help="Manifest source value (default: correction, or synthetic with --answers)")
     parser.add_argument("--provider", default="geometry", help="Manifest provider value")
     parser.add_argument("--created-at", help="Optional timestamp for manifest rows")
     args = parser.parse_args(argv)
 
-    from ocr_from2xlsx.domain import Record
+    if bool(args.record_json) == bool(args.answers):
+        parser.error("provide exactly one of record_json or --answers")
+
     from ocr_from2xlsx.form_layout import service_record_layout
+
+    if args.answers:
+        total = harvest_answer_batch(
+            args.answers,
+            service_record_layout(),
+            args.template_boxes,
+            args.dataset_dir,
+            source=args.source or "synthetic",
+            provider=args.provider,
+            created_at=args.created_at,
+        )
+        print(json.dumps({"rows": total}, ensure_ascii=False))
+        return 0
+
+    if not args.image:
+        parser.error("--image is required with record_json")
+
+    from ocr_from2xlsx.domain import Record
 
     payload = json.loads(Path(args.record_json).read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
@@ -143,7 +198,7 @@ def main(argv: list[str] | None = None) -> int:
         args.image,
         args.template_boxes,
         args.dataset_dir,
-        source=args.source,
+        source=args.source or "correction",
         provider=args.provider,
         created_at=args.created_at,
     )

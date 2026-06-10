@@ -127,20 +127,37 @@ def classifier_mark_fn(
     return labels
 
 
+def _user_runtime_dir() -> Path:
+    home = os.environ.get("OCR_FROM2XLSX_HOME")
+    return Path(home) if home else Path.home() / ".ocr_from2xlsx"
+
+
+def _resolve_mark_model_path() -> Path | None:
+    # Resolution order: env override, user runtime weights (retraining writes
+    # here), then the bundled baseline.
+    env_path = _existing_path(os.environ.get("MARK_MODEL_PATH"))
+    if env_path is not None:
+        return env_path
+    runtime_path = _existing_path(_user_runtime_dir() / "mark_model.json")
+    if runtime_path is not None:
+        return runtime_path
+    return _existing_path(_HERE / "mark_model.json")
+
+
 def _runtime_mark_fn() -> MarkFn:
     template_path = _existing_path(os.environ.get("MARK_TEMPLATE_BOXES"))
     if template_path is None:
         template_path = _existing_path(_HERE / "template_boxes.json")
-    model_path = _existing_path(os.environ.get("MARK_MODEL_PATH"))
-    if model_path is None:
-        model_path = _existing_path(_HERE / "mark_model.json")
-    if template_path is None:
+    model_path = _resolve_mark_model_path()
+    if template_path is None or model_path is None:
+        # Without trained weights the per-crop is_marked fallback flags every
+        # printed checkbox glyph as marked, so geometry needs weights.
         return mark_detect.detect_marked_labels
 
     def _classify(image_path: str, _lines: list[dict[str, Any]]) -> set[str]:
         try:
             return classifier_mark_fn(image_path, template_path, model_path)
-        except ValueError:
+        except (ValueError, OSError):
             return mark_detect.detect_marked_labels(image_path, _lines)
 
     return _classify

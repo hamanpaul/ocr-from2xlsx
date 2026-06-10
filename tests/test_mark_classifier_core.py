@@ -164,6 +164,18 @@ def test_decide_candidate_accepts_only_recall_gain_with_safe_precision() -> None
     assert "recall" in no_gain["reason"]
 
 
+def test_decide_candidate_adopts_safe_candidate_over_unsafe_current() -> None:
+    degenerate_current = {"precision": 0.31, "recall": 1.0}
+
+    adopted = decide_candidate(degenerate_current, {"precision": 1.0, "recall": 0.91})
+    still_unsafe = decide_candidate(degenerate_current, {"precision": 0.98, "recall": 1.0})
+
+    assert adopted["adopt"] is True
+    assert "unsafe" in str(adopted["reason"])
+    assert still_unsafe["adopt"] is False
+    assert "precision" in str(still_unsafe["reason"])
+
+
 def test_decide_candidate_rejects_non_finite_safety_metrics() -> None:
     current = {"precision": 1.0, "recall": 0.50}
 

@@ -9,7 +9,8 @@ from pathlib import Path
 DEFAULT_TAG = "v3.1.0"
 DEFAULT_REPO_URL = "https://github.com/PaddlePaddle/PaddleOCR.git"
 DEFAULT_WEIGHTS_URL = (
-    "https://paddleocr.bj.bcebos.com/PP-OCRv5/chinese/PP-OCRv5_mobile_rec_pretrained.pdparams"
+    "https://paddle-model-ecology.bj.bcebos.com/paddlex/official_pretrained_model/"
+    "PP-OCRv5_mobile_rec_pretrained.pdparams"
 )
 DEFAULT_CONFIG_RELPATH = "configs/rec/PP-OCRv5/PP-OCRv5_mobile_rec.yml"
 

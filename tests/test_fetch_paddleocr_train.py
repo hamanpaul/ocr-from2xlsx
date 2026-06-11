@@ -28,5 +28,9 @@ def test_build_clone_command_pins_tag_and_is_shallow() -> None:
 
 def test_default_constants_are_concrete() -> None:
     assert DEFAULT_TAG.startswith("v")
-    assert DEFAULT_WEIGHTS_URL.startswith("https://")
+    assert (
+        DEFAULT_WEIGHTS_URL
+        == "https://paddle-model-ecology.bj.bcebos.com/paddlex/official_pretrained_model/"
+        "PP-OCRv5_mobile_rec_pretrained.pdparams"
+    )
     assert DEFAULT_CONFIG_RELPATH.endswith(".yml")

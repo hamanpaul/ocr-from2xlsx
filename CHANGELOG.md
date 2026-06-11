@@ -47,6 +47,8 @@
 - 新增參考 PDF ground-truth fixture、可選的實機 PaddleOCR 驗證測試，與 `build/build_paddle_plugin.py` 的 bundle 內容回歸測試。
 
 ### Fixed
+- `training.fetch_paddleocr_train` now pins the PP-OCRv5 mobile rec pretrained weights URL to
+  PaddleX's official pretrained model host, matching the current PaddleOCR docs.
 - `training.generate --augment` 修正 `Image.Resampling` 誤用 instance 屬性導致的 `AttributeError`，
   augmentation 路徑現在可用。
 - `form_layout.Field.selected_codes` 現在把空字串視為未選（同 `None`），收割含未勾 single_choice

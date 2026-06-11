@@ -6,14 +6,24 @@ All implementation uses TDD with focused tests before production code.
 
 ## Phase 1: Engine smoke (risk gate — must pass before later phases)
 
-- [ ] Add `training/fetch_paddleocr_train.py`: clone/update the official PaddleOCR repo at a pinned
+- [x] Add `training/fetch_paddleocr_train.py`: clone/update the official PaddleOCR repo at a pinned
   tag into gitignored `training/vendor/PaddleOCR/` and download PP-OCRv5_mobile_rec pretrained
   weights; idempotent re-run.
-- [ ] Smoke-run on Windows CPU: ~50 synthetic name crops, 1-epoch finetune via the official trainer,
+- [x] Smoke-run on Windows CPU: ~50 synthetic name crops, 1-epoch finetune via the official trainer,
   export an inference model dir, reload it with pip `paddleocr` (`text_recognition_model_dir`) and
   recognize one crop. Record single-epoch wall time.
-- [ ] Decision checkpoint: pipeline works -> continue; otherwise evaluate PaddleX finetune API before
+- [x] Decision checkpoint: pipeline works -> continue; otherwise evaluate PaddleX finetune API before
   building later phases.
+
+Smoke notes:
+- Corrected `training/fetch_paddleocr_train.py` `DEFAULT_WEIGHTS_URL` to the PaddleX official
+  pretrained host: `https://paddle-model-ecology.bj.bcebos.com/paddlex/official_pretrained_model/PP-OCRv5_mobile_rec_pretrained.pdparams`
+  (tag and config relpath were already valid).
+- Installed missing `.venv-paddle` training deps as import errors surfaced: `scikit-image`,
+  `albumentations`, `lmdb`, `rapidfuzz`.
+- `training.gen_names` summary for `--total 50 --seed 99`: `{"train": 40, "validation": 5, "holdout": 5}`.
+- Single-epoch CPU wall time: `88.69s`.
+- Export and pip-side reload both succeeded.
 
 ## Phase 2: Name corpus generator
 

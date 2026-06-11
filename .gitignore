@@ -25,3 +25,4 @@ training/out/
 training_smoke.png
 name_agent.local.toml
 *-name.png
+training/vendor/

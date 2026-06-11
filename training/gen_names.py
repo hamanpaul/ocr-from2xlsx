@@ -169,9 +169,11 @@ def render_corpus(
     fonts = _handwriting_font_paths()
 
     def _emit(batch: list[str], label_name: str, *, batch_augment: bool) -> int:
+        from training.generate import _select_text_font
+
         rows: list[tuple[str, str]] = []
         for index, name in enumerate(batch, start=1):
-            font = rng.choice(fonts)
+            font = Path(_select_text_font(name, fonts))
             image = _render_name(name, font, rng, augment=batch_augment)
             image_rel = f"images/{label_name.split('.')[0]}-{index:05d}.png"
             image.save(out / image_rel)

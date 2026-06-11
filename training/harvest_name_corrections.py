@@ -28,9 +28,12 @@ def corrections_to_label_rows(corrections_path: str | Path) -> list[tuple[str, s
         if not isinstance(crop, str):
             continue
         crop_path = Path(crop)
+        # if relative, resolve it relative to the corrections file parent
+        if not crop_path.is_absolute():
+            crop_path = path.parent / crop_path
         if not crop_path.is_file():
             continue
-        # normalize to absolute path (resolved from current working directory)
+        # normalize to absolute path
         rows.append((str(crop_path.resolve()), value.strip()))
     return rows
 

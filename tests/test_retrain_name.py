@@ -70,8 +70,10 @@ def test_corrections_to_label_rows_normalizes_relative_crop_paths(tmp_path: Path
     crop.write_bytes(b"png")
     corrections = tmp_path / "name_corrections.jsonl"
 
-    # simulate running from the directory that contains the crop (cwd)
-    monkeypatch.chdir(tmp_path)
+    # simulate running from a different cwd than the directory that contains the crop
+    other = tmp_path / "other"
+    other.mkdir()
+    monkeypatch.chdir(other)
 
     rows = [
         {"field": "name", "final_value": "王小明", "crop_path": "rec-1-name.png"},
@@ -80,5 +82,5 @@ def test_corrections_to_label_rows_normalizes_relative_crop_paths(tmp_path: Path
 
     label_rows = corrections_to_label_rows(corrections)
 
-    # crop path should be absolute (resolved from current working directory)
+    # crop path should be absolute (resolved from the corrections file parent)
     assert label_rows == [(str(crop.resolve()), "王小明")]

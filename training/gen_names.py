@@ -67,15 +67,24 @@ def filter_names_to_dict(names: Iterable[str], dict_chars: set[str]) -> list[str
 def load_dict_chars(dict_path: str | Path) -> set[str]:
     chars: set[str] = set()
     for line in Path(dict_path).read_text(encoding="utf-8").splitlines():
-        if line:
-            chars.add(line.strip("\n"))
+        s = line.strip()
+        if s:
+            chars.add(s)
     return chars
 
 
 def _validate_relative(path_text: str) -> None:
     path = Path(path_text)
+    # Reject absolute paths and parent-directory traversals
     if path.is_absolute() or ".." in path.parts:
         raise ValueError(f"label image path must be relative without ..: {path_text}")
+    # Reject Windows drive-relative paths like 'C:foo' and anchored paths like '\\foo'
+    # Drive-relative have a drive letter but no root (e.g. 'C:foo'). Also reject paths
+    # that begin with a slash or backslash which anchor to the drive root.
+    if len(path_text) >= 2 and path_text[1] == ':' and (len(path_text) == 2 or path_text[2] not in ("\\", "/")):
+        raise ValueError(f"label image path must be relative without drive or anchor: {path_text}")
+    if path_text.startswith(("\\", "/")):
+        raise ValueError(f"label image path must be relative without drive or anchor: {path_text}")
 
 
 def write_label_file(label_path: str | Path, rows: Iterable[tuple[str, str]]) -> None:

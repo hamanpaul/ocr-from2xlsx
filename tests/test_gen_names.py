@@ -13,6 +13,7 @@ from training.gen_names import (
     split_batches,
     write_label_file,
     read_label_file,
+    load_dict_chars,
 )
 
 
@@ -59,3 +60,18 @@ def test_label_file_roundtrip_and_path_safety(tmp_path: Path) -> None:
     assert read_label_file(label_path) == rows
     with pytest.raises(ValueError, match="relative"):
         write_label_file(label_path, [("../escape.png", "王小明")])
+
+
+def test_label_file_rejects_windows_drive_relative_and_anchored_paths(tmp_path: Path) -> None:
+    label_path = tmp_path / "train.txt"
+    with pytest.raises(ValueError, match="relative"):
+        write_label_file(label_path, [("C:escape.png", "王小明")])
+    with pytest.raises(ValueError, match="relative"):
+        write_label_file(label_path, [("\\escape.png", "王小明")])
+
+
+def test_load_dict_chars_strips_whitespace(tmp_path: Path) -> None:
+    p = tmp_path / "dict.txt"
+    p.write_text("  A\nB \n \n\tC\t\n", encoding="utf-8")
+    chars = load_dict_chars(p)
+    assert chars == {"A", "B", "C"}

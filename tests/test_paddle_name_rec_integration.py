@@ -56,3 +56,38 @@ def test_name_rec_failure_returns_none(monkeypatch, tmp_path: Path) -> None:
 
     monkeypatch.setattr(plugin_main, "_paddle_name_rec", boom)
     assert plugin_main.recognize_name_safe(str(tmp_path / "crop.png"), str(model_dir)) is None
+
+
+def test_resolve_name_rec_dir_uses_bundled_name_rec_when_present(tmp_path: Path, monkeypatch) -> None:
+    # No env or runtime override; bundled _HERE/name_rec should be used when present
+    bundle = tmp_path / "bundle"
+    model_dir = _make_model_dir(bundle / "name_rec")
+
+    monkeypatch.delenv("NAME_REC_MODEL_DIR", raising=False)
+    monkeypatch.setenv("OCR_FROM2XLSX_HOME", str(tmp_path / "no-runtime"))
+    monkeypatch.setattr(plugin_main, "_HERE", bundle)
+
+    assert plugin_main._resolve_name_rec_dir() == model_dir
+
+
+def test_recognize_name_safe_returns_none_on_importerror(monkeypatch, tmp_path: Path) -> None:
+    model_dir = _make_model_dir(tmp_path / "model")
+
+    def boom(_crop: str, _model_dir: str) -> str:
+        raise ImportError("missing paddleocr")
+
+    monkeypatch.setattr(plugin_main, "_paddle_name_rec", boom)
+    assert plugin_main.recognize_name_safe(str(tmp_path / "crop.png"), str(model_dir)) is None
+
+
+def test_existing_dir_handles_permission_error(monkeypatch, tmp_path: Path) -> None:
+    d = tmp_path / "some-dir"
+    _make_model_dir(d)  # create as directory with contents
+
+    def raise_perm(self):
+        raise PermissionError("no access")
+
+    monkeypatch.setattr(plugin_main.Path, "iterdir", raise_perm)
+
+    # _existing_dir should catch permission errors and return None
+    assert plugin_main._existing_dir(str(d)) is None

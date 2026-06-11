@@ -148,7 +148,16 @@ def _existing_dir(value: str | os.PathLike[str] | None) -> Path | None:
     if not value:
         return None
     path = Path(value)
-    return path if path.is_dir() and any(path.iterdir()) else None
+    try:
+        if not path.is_dir():
+            return None
+    except (OSError, PermissionError):
+        return None
+    try:
+        has_any = any(path.iterdir())
+    except (OSError, PermissionError):
+        return None
+    return path if has_any else None
 
 
 def _resolve_name_rec_dir() -> Path | None:
@@ -180,7 +189,10 @@ def _paddle_name_rec(crop_path: str, model_dir: str) -> str:
 def recognize_name_safe(crop_path: str, model_dir: str) -> str | None:
     try:
         return _paddle_name_rec(crop_path, model_dir)
-    except (ValueError, OSError, RuntimeError):
+    except (ImportError, ModuleNotFoundError, ValueError, OSError, RuntimeError, IndexError, KeyError, TypeError):
+        # Treat missing optional PaddleOCR/name-rec dependencies and any
+        # unexpected output-shape errors from the optional recognition path as
+        # safe fallbacks — do not let them crash the whole plugin.
         return None
 
 

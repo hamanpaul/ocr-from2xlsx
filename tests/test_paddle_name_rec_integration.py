@@ -80,6 +80,20 @@ def test_recognize_name_safe_returns_none_on_importerror(monkeypatch, tmp_path: 
     assert plugin_main.recognize_name_safe(str(tmp_path / "crop.png"), str(model_dir)) is None
 
 
+def test_recognize_name_safe_returns_none_on_attributeerror(monkeypatch, tmp_path: Path) -> None:
+    """Optional PaddleOCR may sometimes return malformed outputs; attribute access
+    or shape assumptions can raise AttributeError. Ensure recognize_name_safe
+    treats AttributeError as a safe fallback and returns None.
+    """
+    model_dir = _make_model_dir(tmp_path / "model")
+
+    def boom(_crop: str, _model_dir: str) -> str:
+        raise AttributeError("malformed paddleocr output")
+
+    monkeypatch.setattr(plugin_main, "_paddle_name_rec", boom)
+    assert plugin_main.recognize_name_safe(str(tmp_path / "crop.png"), str(model_dir)) is None
+
+
 def test_existing_dir_handles_permission_error(monkeypatch, tmp_path: Path) -> None:
     d = tmp_path / "some-dir"
     _make_model_dir(d)  # create as directory with contents

@@ -230,6 +230,52 @@ Mark model weights resolve in order: `MARK_MODEL_PATH` env override, user runtim
 bundled baseline `mark_model.json`. Without any weights, geometry crops fall back to the legacy
 `is_marked` threshold. Without template boxes, the plugin keeps the existing OCR-label mark fallback.
 
+## Handwritten name model training
+
+Finetune a name-only PP-OCRv5_mobile_rec model on synthetic handwritten name crops (CPU, offline
+after the one-time fetch):
+
+```powershell
+# one-time: vendor the official PaddleOCR trainer (pinned tag) + pretrained rec weights
+.venv-paddle\Scripts\python training/fetch_paddleocr_train.py
+
+# generate a name corpus (disjoint train/validation/holdout; holdout never trains)
+.venv-paddle\Scripts\python -m training.gen_names `
+  --out training\out\namev1 --total 3000 --seed 20 `
+  --dict training\vendor\PaddleOCR\ppocr\utils\dict\ppocrv5_dict.txt
+
+# finetune and export an inference model dir
+.venv-paddle\Scripts\python -m training.train_name_model `
+  --corpus training\out\namev1 `
+  --save-dir training\out\namev1\model `
+  --inference-dir training\out\namev1\inference --epochs 20
+
+# evaluate any model (omit --model-dir for the pip baseline)
+.venv-paddle\Scripts\python -m training.eval_name_model `
+  training\out\namev1\holdout.txt --output-dir training\out\namev1\eval-baseline
+
+# gate against the current model on the fixed holdout and deploy atomically when better
+.venv-paddle\Scripts\python -m training.retrain_name `
+  training\out\namev1\inference --holdout training\out\namev1\holdout.txt
+
+# fold human-confirmed corrections into the next finetune corpus
+.venv-paddle\Scripts\python -m training.harvest_name_corrections `
+  output\name_corrections.jsonl --output training\out\namev1\corrections.txt
+```
+
+The gate adopts a candidate only when holdout exact-match improves and character accuracy does not
+regress; every decision is appended to `name_audit.jsonl` next to the deployed model. The plugin
+resolves the name model dir in order: `NAME_REC_MODEL_DIR` env override, user runtime dir
+(`OCR_FROM2XLSX_HOME` or `~\.ocr_from2xlsx\name_rec\`, written by `training.retrain_name`), then a
+bundled `name_rec\` directory. Without a model the name path is unchanged (full-page rec, optional
+agent, roster, human confirmation), and recognized names always stay `name.unconfirmed` until a
+human confirms them.
+
+Note: the v1 model is not committed to the repo — the exported inference dir is ~136 MB, far above
+the repo-size budget (official mobile rec inference models are ~16 MB; the oversized export is a
+known follow-up). Produce it locally with the commands above; `build/build_paddle_plugin.py` bundles
+`plugins\paddleocr\name_rec\` when present.
+
 ## Packaging
 
 Build a portable executable:

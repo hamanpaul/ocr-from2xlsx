@@ -108,3 +108,108 @@ def read_label_file(label_path: str | Path) -> list[tuple[str, str]]:
         _validate_relative(image_rel)
         rows.append((image_rel, label))
     return rows
+
+
+CANVAS_SIZE = (320, 64)  # width, height; matches rec input aspect comfortably
+
+
+def _handwriting_font_paths() -> list[Path]:
+    from training.handwriting import list_handwriting_fonts
+
+    fonts_dir = Path(__file__).resolve().parent / "fonts"
+    fonts = [Path(p) for p in list_handwriting_fonts(fonts_dir)]
+    if fonts:
+        return fonts
+    # System CJK fallback mirrors training.generate behaviour.
+    windir = Path("C:/Windows/Fonts")
+    for name in ("kaiu.ttf", "msjh.ttc", "mingliu.ttc"):
+        candidate = windir / name
+        if candidate.is_file():
+            return [candidate]
+    raise RuntimeError("no usable handwriting/CJK font found; run training/fetch_fonts.py")
+
+
+def _render_name(name: str, font_path: Path, rng: random.Random, *, augment: bool):
+    from PIL import Image, ImageDraw, ImageFont
+
+    image = Image.new("L", CANVAS_SIZE, color=255)
+    draw = ImageDraw.Draw(image)
+    size = rng.randint(34, 46)
+    font = ImageFont.truetype(str(font_path), size=size)
+    left, top, right, bottom = draw.textbbox((0, 0), name, font=font)
+    x = rng.randint(4, max(5, CANVAS_SIZE[0] - (right - left) - 8)) - left
+    y = (CANVAS_SIZE[1] - (bottom - top)) // 2 - top + rng.randint(-3, 3)
+    draw.text((x, y), name, font=font, fill=rng.randint(0, 60))
+    if augment:
+        from training.generate import _apply_augmentation
+
+        image = _apply_augmentation(image, rng)
+    return image
+
+
+def render_corpus(
+    out_dir: str | Path,
+    *,
+    rng: random.Random,
+    total: int,
+    validation_fraction: float = 0.1,
+    holdout_fraction: float = 0.1,
+    augment: bool = True,
+    dict_path: str | Path | None = None,
+) -> dict[str, int]:
+    out = Path(out_dir)
+    images_dir = out / "images"
+    images_dir.mkdir(parents=True, exist_ok=True)
+    names = sample_names(rng, total)
+    if dict_path is not None:
+        names = filter_names_to_dict(names, load_dict_chars(dict_path))
+    train, validation, holdout = split_batches(
+        names, validation_fraction=validation_fraction, holdout_fraction=holdout_fraction
+    )
+    fonts = _handwriting_font_paths()
+
+    def _emit(batch: list[str], label_name: str, *, batch_augment: bool) -> int:
+        rows: list[tuple[str, str]] = []
+        for index, name in enumerate(batch, start=1):
+            font = rng.choice(fonts)
+            image = _render_name(name, font, rng, augment=batch_augment)
+            image_rel = f"images/{label_name.split('.')[0]}-{index:05d}.png"
+            image.save(out / image_rel)
+            rows.append((image_rel, name))
+        write_label_file(out / label_name, rows)
+        return len(rows)
+
+    return {
+        "train": _emit(train, "train.txt", batch_augment=augment),
+        "validation": _emit(validation, "validation.txt", batch_augment=False),
+        "holdout": _emit(holdout, "holdout.txt", batch_augment=False),
+    }
+
+
+def main(argv: list[str] | None = None) -> int:
+    import json
+
+    parser = argparse.ArgumentParser(prog="training.gen_names")
+    parser.add_argument("--out", required=True)
+    parser.add_argument("--total", type=int, default=3000)
+    parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--validation-fraction", type=float, default=0.1)
+    parser.add_argument("--holdout-fraction", type=float, default=0.1)
+    parser.add_argument("--no-augment", action="store_true")
+    parser.add_argument("--dict", help="rec dictionary file; names with OOV chars are dropped")
+    args = parser.parse_args(argv)
+    summary = render_corpus(
+        args.out,
+        rng=random.Random(args.seed),
+        total=args.total,
+        validation_fraction=args.validation_fraction,
+        holdout_fraction=args.holdout_fraction,
+        augment=not args.no_augment,
+        dict_path=args.dict,
+    )
+    print(json.dumps(summary))
+    return 0
+
+
+if __name__ == "__main__":  # pragma: no cover
+    raise SystemExit(main())

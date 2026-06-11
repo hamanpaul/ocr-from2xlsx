@@ -60,7 +60,11 @@ def deploy_model_dir(candidate_dir: str | Path, target_dir: str | Path) -> None:
             old.rename(target)
         raise
     if old.exists():
-        shutil.rmtree(old)
+        try:
+            shutil.rmtree(old)
+        except (OSError, PermissionError):
+            # tolerate failure to remove the previous model dir; deployment already completed
+            pass
 
 
 def append_audit(audit_path: str | Path, entry: Mapping[str, Any]) -> None:

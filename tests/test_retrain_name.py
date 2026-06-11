@@ -33,6 +33,42 @@ def test_deploy_model_dir_replaces_atomically_and_keeps_old_on_failure(tmp_path:
     assert not (tmp_path / "runtime" / "name_rec.old").exists()
 
 
+def test_deploy_model_dir_tolerates_old_cleanup_error(tmp_path: Path, monkeypatch) -> None:
+    """If final cleanup of the .old dir fails, the swap should still succeed (no exception).
+
+    This reproduces the verified branch-review issue where an inability to remove
+    the previous model dir would abort deployment and prevent downstream audit writes.
+    """
+    import shutil as _shutil
+    from pathlib import Path as _Path
+
+    candidate = tmp_path / "candidate"
+    candidate.mkdir()
+    (candidate / "inference.pdmodel").write_text("v2", encoding="utf-8")
+    target = tmp_path / "runtime" / "name_rec"
+    target.mkdir(parents=True)
+    (target / "inference.pdmodel").write_text("v1", encoding="utf-8")
+
+    old = target.with_name(target.name + ".old")
+
+    orig_rmtree = _shutil.rmtree
+
+    def fake_rmtree(path, *args, **kwargs):
+        p = _Path(path)
+        if p == old:
+            raise PermissionError("simulated failure removing old")
+        return orig_rmtree(path, *args, **kwargs)
+
+    monkeypatch.setattr("shutil.rmtree", fake_rmtree)
+
+    # Should not raise despite the simulated failure during final cleanup
+    deploy_model_dir(candidate, target)
+
+    assert (target / "inference.pdmodel").read_text(encoding="utf-8") == "v2"
+    # old may still exist because cleanup failed
+    assert (tmp_path / "runtime" / "name_rec.old").exists()
+
+
 def test_append_audit_writes_jsonl(tmp_path: Path) -> None:
     audit = tmp_path / "name_audit.jsonl"
 

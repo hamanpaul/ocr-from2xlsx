@@ -11,14 +11,19 @@ from training.gen_names import read_label_file, render_corpus
 
 
 def test_render_corpus_writes_images_and_three_disjoint_label_files(tmp_path: Path) -> None:
-    summary = render_corpus(
-        tmp_path,
-        rng=random.Random(0),
-        total=12,
-        validation_fraction=0.25,
-        holdout_fraction=0.25,
-        augment=False,
-    )
+    try:
+        summary = render_corpus(
+            tmp_path,
+            rng=random.Random(0),
+            total=12,
+            validation_fraction=0.25,
+            holdout_fraction=0.25,
+            augment=False,
+        )
+    except RuntimeError as e:
+        if "no usable handwriting/CJK font" in str(e):
+            pytest.skip("no usable handwriting/CJK font found; skipping render tests")
+        raise
 
     train = read_label_file(tmp_path / "train.txt")
     validation = read_label_file(tmp_path / "validation.txt")
@@ -34,7 +39,12 @@ def test_render_corpus_writes_images_and_three_disjoint_label_files(tmp_path: Pa
 def test_render_corpus_image_is_grayscale_with_ink(tmp_path: Path) -> None:
     from PIL import Image
 
-    render_corpus(tmp_path, rng=random.Random(1), total=2, validation_fraction=0.0, holdout_fraction=0.5, augment=False)
+    try:
+        render_corpus(tmp_path, rng=random.Random(1), total=2, validation_fraction=0.0, holdout_fraction=0.5, augment=False)
+    except RuntimeError as e:
+        if "no usable handwriting/CJK font" in str(e):
+            pytest.skip("no usable handwriting/CJK font found; skipping render tests")
+        raise
     image_rel, _ = read_label_file(tmp_path / "train.txt")[0]
     with Image.open(tmp_path / image_rel) as image:
         assert image.mode == "L"

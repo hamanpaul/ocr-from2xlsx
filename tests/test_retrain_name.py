@@ -63,3 +63,22 @@ def test_corrections_to_label_rows_skips_missing_or_invalid_crops(tmp_path: Path
     label_rows = corrections_to_label_rows(corrections)
 
     assert label_rows == [(str(crop), "王小明")]
+
+
+def test_corrections_to_label_rows_normalizes_relative_crop_paths(tmp_path: Path, monkeypatch) -> None:
+    crop = tmp_path / "rec-1-name.png"
+    crop.write_bytes(b"png")
+    corrections = tmp_path / "name_corrections.jsonl"
+
+    # simulate running from the directory that contains the crop (cwd)
+    monkeypatch.chdir(tmp_path)
+
+    rows = [
+        {"field": "name", "final_value": "王小明", "crop_path": "rec-1-name.png"},
+    ]
+    corrections.write_text("\n".join(json.dumps(row, ensure_ascii=False) for row in rows), encoding="utf-8")
+
+    label_rows = corrections_to_label_rows(corrections)
+
+    # crop path should be absolute (resolved from current working directory)
+    assert label_rows == [(str(crop.resolve()), "王小明")]

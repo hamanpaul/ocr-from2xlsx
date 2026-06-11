@@ -25,9 +25,13 @@ def corrections_to_label_rows(corrections_path: str | Path) -> list[tuple[str, s
         crop = payload.get("crop_path")
         if not isinstance(value, str) or not value.strip():
             continue
-        if not isinstance(crop, str) or not Path(crop).is_file():
+        if not isinstance(crop, str):
             continue
-        rows.append((crop, value.strip()))
+        crop_path = Path(crop)
+        if not crop_path.is_file():
+            continue
+        # normalize to absolute path (resolved from current working directory)
+        rows.append((str(crop_path.resolve()), value.strip()))
     return rows
 
 

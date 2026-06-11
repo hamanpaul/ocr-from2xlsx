@@ -189,7 +189,7 @@ def _paddle_name_rec(crop_path: str, model_dir: str) -> str:
 def recognize_name_safe(crop_path: str, model_dir: str) -> str | None:
     try:
         return _paddle_name_rec(crop_path, model_dir)
-    except (ImportError, ModuleNotFoundError, ValueError, OSError, RuntimeError, IndexError, KeyError, TypeError, AttributeError):
+    except (ImportError, ModuleNotFoundError, AssertionError, ValueError, OSError, RuntimeError, IndexError, KeyError, TypeError, AttributeError):
         # Treat missing optional PaddleOCR/name-rec dependencies and any
         # unexpected output-shape or attribute-access errors from the optional
         # recognition path as safe fallbacks — do not let them crash the whole plugin.

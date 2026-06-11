@@ -94,6 +94,20 @@ def test_recognize_name_safe_returns_none_on_attributeerror(monkeypatch, tmp_pat
     assert plugin_main.recognize_name_safe(str(tmp_path / "crop.png"), str(model_dir)) is None
 
 
+def test_recognize_name_safe_returns_none_on_assertionerror(monkeypatch, tmp_path: Path) -> None:
+    """Optional PaddleOCR may sometimes raise AssertionError (e.g., internal
+    model assertions). Ensure recognize_name_safe treats AssertionError as a
+    safe fallback and returns None.
+    """
+    model_dir = _make_model_dir(tmp_path / "model")
+
+    def boom(_crop: str, _model_dir: str) -> str:
+        raise AssertionError("name model assertion")
+
+    monkeypatch.setattr(plugin_main, "_paddle_name_rec", boom)
+    assert plugin_main.recognize_name_safe(str(tmp_path / "crop.png"), str(model_dir)) is None
+
+
 def test_existing_dir_handles_permission_error(monkeypatch, tmp_path: Path) -> None:
     d = tmp_path / "some-dir"
     _make_model_dir(d)  # create as directory with contents

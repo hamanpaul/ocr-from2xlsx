@@ -20,6 +20,8 @@ def test_build_bundle_includes_runtime_modules(tmp_path: Path, monkeypatch) -> N
     (src_plugin / "crop_provider.py").write_text("provider", encoding="utf-8")
     (src_plugin / "template_boxes.json").write_text("{}", encoding="utf-8")
     (src_plugin / "mark_model.json").write_text("{}", encoding="utf-8")
+    (src_plugin / "name_rec").mkdir()
+    (src_plugin / "name_rec" / "inference.pdmodel").write_text("name-rec", encoding="utf-8")
     (src_plugin / "plugin.json").write_text("{}", encoding="utf-8")
 
     src_venv = repo / ".venv-paddle"
@@ -44,3 +46,4 @@ def test_build_bundle_includes_runtime_modules(tmp_path: Path, monkeypatch) -> N
     assert (out / "crop_provider.py").exists()
     assert (out / "template_boxes.json").exists()
     assert (out / "mark_model.json").exists()
+    assert (out / "name_rec" / "inference.pdmodel").exists()

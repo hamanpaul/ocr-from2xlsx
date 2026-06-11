@@ -53,6 +53,9 @@ def main() -> int:
         src = SRC_PLUGIN / name
         if src.exists():
             shutil.copy2(src, OUT / name)
+    name_rec_src = SRC_PLUGIN / "name_rec"
+    if name_rec_src.is_dir():
+        shutil.copytree(name_rec_src, OUT / "name_rec", dirs_exist_ok=True)
     print(f"bundle ready: {OUT}")
     return 0
 

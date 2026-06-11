@@ -8,6 +8,21 @@
 ## [Unreleased]
 
 ### Added
+- 新增手寫中文姓名 rec 模型微調訓練引擎（CPU、離線）：`training.fetch_paddleocr_train`（pin 官方
+  trainer repo 與預訓練權重）、`training.gen_names`（姓氏×名用字合成語料，train/validation/holdout
+  三批不相交、留出集永不進訓練、OOV 字過濾）、`training.train_name_model`（官方管線微調＋匯出薄殼）、
+  `training.eval_name_model`（exact-match＋字元準確率報告）、`training.retrain_name`（留出集 gate：
+  exact-match 提升且字元準確率不退化才原子部署 runtime 模型目錄，稽核 `name_audit.jsonl`）。
+  v1 留出集成績：exact-match 0.9832 / 字元準確率 0.9944（pip PP-OCRv5_mobile_rec baseline
+  0.8255 / 0.9145）。
+- PaddleOCR 外掛支援姓名專用 rec 模型：解析順序 `NAME_REC_MODEL_DIR` env →
+  `OCR_FROM2XLSX_HOME`/`~/.ocr_from2xlsx/name_rec/`（`training.retrain_name` 寫此）→ bundle 內
+  `name_rec/`；對既有姓名裁圖辨識並填入 `record.name` 建議（維持 `name.unconfirmed`），模型缺席或
+  推論失敗時行為與現狀完全相同。`build/build_paddle_plugin.py` 會在 `name_rec/` 存在時一併打包。
+  注意：v1 模型因匯出體積 ~136 MB 未 commit 進 repo（官方 mobile rec 約 16 MB，體積異常列為
+  follow-up），需依 README 在本機產出。
+- 新增 `training.harvest_name_corrections`：把 `name_corrections.jsonl`（人工確認姓名＋裁圖）轉成
+  rec label 格式併入下次微調語料；缺圖或無效列跳過不中斷。
 - 新增 `training.retrain`：手動修正重訓指令——在指定語料（合成 ∪ 修正 manifest）上重訓候選權重，
   以固定留出集對「現行權重（無則 `is_marked` baseline）」過 eval-gate（recall 上升且 precision ≥ 門檻
   才採用），採用時原子寫入使用者 runtime 權重（`OCR_FROM2XLSX_HOME` 或 `~/.ocr_from2xlsx/`），
@@ -47,6 +62,9 @@
 - 新增參考 PDF ground-truth fixture、可選的實機 PaddleOCR 驗證測試，與 `build/build_paddle_plugin.py` 的 bundle 內容回歸測試。
 
 ### Fixed
+- `training.gen_names.render_corpus()` 現在會先做 CJK-aware 字型選擇；手寫字型支援中文時仍優先使用，不支援時會安全退回系統 CJK 字型，避免 Latin handwriting fonts 直接渲染中文姓名。
+- `training.fetch_paddleocr_train` now pins the PP-OCRv5 mobile rec pretrained weights URL to
+  PaddleX's official pretrained model host, matching the current PaddleOCR docs.
 - `training.generate --augment` 修正 `Image.Resampling` 誤用 instance 屬性導致的 `AttributeError`，
   augmentation 路徑現在可用。
 - `form_layout.Field.selected_codes` 現在把空字串視為未選（同 `None`），收割含未勾 single_choice

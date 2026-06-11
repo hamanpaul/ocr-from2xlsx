@@ -144,6 +144,58 @@ def _resolve_mark_model_path() -> Path | None:
     return _existing_path(_HERE / "mark_model.json")
 
 
+def _existing_dir(value: str | os.PathLike[str] | None) -> Path | None:
+    if not value:
+        return None
+    path = Path(value)
+    try:
+        if not path.is_dir():
+            return None
+    except (OSError, PermissionError):
+        return None
+    try:
+        has_any = any(path.iterdir())
+    except (OSError, PermissionError):
+        return None
+    return path if has_any else None
+
+
+def _resolve_name_rec_dir() -> Path | None:
+    # Resolution order mirrors mark weights: env override, user runtime, bundle.
+    env_dir = _existing_dir(os.environ.get("NAME_REC_MODEL_DIR"))
+    if env_dir is not None:
+        return env_dir
+    runtime_dir = _existing_dir(_user_runtime_dir() / "name_rec")
+    if runtime_dir is not None:
+        return runtime_dir
+    return _existing_dir(_HERE / "name_rec")
+
+
+def apply_name_suggestion(record: dict[str, Any], name: str | None) -> None:
+    if isinstance(name, str) and name.strip():
+        record["name"] = name.strip()
+
+
+def _paddle_name_rec(crop_path: str, model_dir: str) -> str:
+    from paddleocr import TextRecognition
+
+    model = TextRecognition(model_dir=model_dir, model_name="PP-OCRv5_mobile_rec")
+    results = model.predict(crop_path)
+    if not results:
+        return ""
+    return str(results[0].get("rec_text") or "")
+
+
+def recognize_name_safe(crop_path: str, model_dir: str) -> str | None:
+    try:
+        return _paddle_name_rec(crop_path, model_dir)
+    except (ImportError, ModuleNotFoundError, AssertionError, ValueError, OSError, RuntimeError, IndexError, KeyError, TypeError, AttributeError):
+        # Treat missing optional PaddleOCR/name-rec dependencies and any
+        # unexpected output-shape or attribute-access errors from the optional
+        # recognition path as safe fallbacks — do not let them crash the whole plugin.
+        return None
+
+
 def _runtime_mark_fn() -> MarkFn:
     template_path = _existing_path(os.environ.get("MARK_TEMPLATE_BOXES"))
     if template_path is None:
@@ -204,10 +256,15 @@ def main() -> int:
     response = run(request, ocr_fn=lambda _path: lines, mark_fn=_runtime_mark_fn())
     if image_path:
         from pathlib import Path as _Path
+
         crop_out = _Path(image_path).with_name(_Path(image_path).stem + "-name.png")
         saved = name_crop.save_name_crop(image_path, lines, str(crop_out))
         if saved:
             response["record"]["ocr"]["name_crop"] = _Path(saved).name
+            name_rec_dir = _resolve_name_rec_dir()
+            if name_rec_dir is not None:
+                suggestion = recognize_name_safe(str(crop_out), str(name_rec_dir))
+                apply_name_suggestion(response["record"], suggestion)
     sys.stdout.write(json.dumps(response, ensure_ascii=False))
     return 0
 

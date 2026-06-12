@@ -62,6 +62,7 @@
 - 新增參考 PDF ground-truth fixture、可選的實機 PaddleOCR 驗證測試，與 `build/build_paddle_plugin.py` 的 bundle 內容回歸測試。
 
 ### Fixed
+- `ReviewApp` 攝影機預覽現在會對連續 `read()` / `imencode()` 失敗採用有限重試，超限後推送狀態、停止攝影機並恢復 placeholder；啟動路徑的 `VideoCapture` 建立 / `isOpened()` 檢查 / failure cleanup 也統一留在 graceful fallback 內，避免 backend 例外直接中斷 UI。
 - `training.gen_names.render_corpus()` 現在會先做 CJK-aware 字型選擇；手寫字型支援中文時仍優先使用，不支援時會安全退回系統 CJK 字型，避免 Latin handwriting fonts 直接渲染中文姓名。
 - `training.fetch_paddleocr_train` now pins the PP-OCRv5 mobile rec pretrained weights URL to
   PaddleX's official pretrained model host, matching the current PaddleOCR docs.

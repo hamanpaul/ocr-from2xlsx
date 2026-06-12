@@ -136,6 +136,12 @@ class ConfirmForm:
 
 class ReviewApp(tk.Tk):
     _PREVIEW_PLACEHOLDER = "攝影機或圖片預覽區\n第一版可用 JSON 模擬連續掃描。"
+    _CAMERA_POLL_INTERVAL_MS = 33
+    _CAMERA_RETRY_INTERVAL_MS = 100
+    _CAMERA_FAILURE_LIMIT = 3
+    _camera_capture: object | None = None
+    _camera_after_id: str | None = None
+    _camera_failure_count: int = 0
 
     def __init__(self) -> None:
         super().__init__()
@@ -152,6 +158,7 @@ class ReviewApp(tk.Tk):
         self._preview_image: tk.PhotoImage | None = None
         self._camera_capture = None
         self._camera_after_id: str | None = None
+        self._camera_failure_count = 0
         self.fields: dict[str, tk.StringVar] = {}
         self._build_ui()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -458,24 +465,35 @@ class ReviewApp(tk.Tk):
 
     def _start_camera(self, index: int) -> None:
         self._stop_camera()
+        capture = None
         try:
             import cv2
+
             capture = cv2.VideoCapture(index)
+            if not capture.isOpened():
+                try:
+                    capture.release()
+                except Exception:
+                    pass
+                self._push_status(f"無法開啟攝影機 {index}")
+                self._show_placeholder_preview()
+                return
         except Exception:
+            if capture is not None:
+                try:
+                    capture.release()
+                except Exception:
+                    pass
             self._push_status("攝影機啟動失敗")
             self._show_placeholder_preview()
             return
-        if not capture.isOpened():
-            capture.release()
-            self._push_status(f"無法開啟攝影機 {index}")
-            self._show_placeholder_preview()
-            return
         self._camera_capture = capture
+        self._camera_failure_count = 0
         self._push_status(f"已連接攝影機 {index}")
         self._camera_after_id = self.after(0, self._poll_camera_frame)
 
     def _poll_camera_frame(self) -> None:
-        capture = self.__dict__.get("_camera_capture")
+        capture = self._camera_capture
         if capture is None:
             return
         try:
@@ -483,7 +501,7 @@ class ReviewApp(tk.Tk):
 
             ok, frame = capture.read()
             if not ok or frame is None:
-                self._camera_after_id = self.after(100, self._poll_camera_frame)
+                self._retry_camera_preview("攝影機畫面連續讀取失敗，已停止預覽")
                 return
 
             self.preview.update_idletasks()
@@ -500,7 +518,7 @@ class ReviewApp(tk.Tk):
 
             success, buffer = cv2.imencode(".ppm", frame)
             if not success:
-                self._camera_after_id = self.after(100, self._poll_camera_frame)
+                self._retry_camera_preview("攝影機畫面連續編碼失敗，已停止預覽")
                 return
 
             image = tk.PhotoImage(data=bytes(buffer))
@@ -509,29 +527,45 @@ class ReviewApp(tk.Tk):
             self.preview.delete("1.0", tk.END)
             self.preview.image_create("1.0", image=image)
             self.preview.configure(state="disabled")
+            self._camera_failure_count = 0
         except Exception:
-            self._stop_camera()
-            self._show_placeholder_preview()
+            self._fail_camera_preview("攝影機預覽失敗，已停止預覽")
             return
 
-        self._camera_after_id = self.after(50, self._poll_camera_frame)
+        self._camera_after_id = self.after(
+            self._CAMERA_POLL_INTERVAL_MS, self._poll_camera_frame
+        )
 
     def _stop_camera(self) -> None:
-        after_id = self.__dict__.get("_camera_after_id")
+        after_id = self._camera_after_id
+        self._camera_after_id = None
         if after_id is not None:
             try:
                 self.after_cancel(after_id)
             except tk.TclError:
                 pass
-            self._camera_after_id = None
 
-        capture = self.__dict__.get("_camera_capture")
+        capture = self._camera_capture
+        self._camera_capture = None
         if capture is not None:
             try:
                 capture.release()
             except Exception:
                 pass
-            self._camera_capture = None
+        self._camera_failure_count = 0
+
+    def _retry_camera_preview(self, message: str) -> None:
+        self._camera_failure_count += 1
+        if self._camera_failure_count < self._CAMERA_FAILURE_LIMIT:
+            self._camera_after_id = self.after(
+                self._CAMERA_RETRY_INTERVAL_MS, self._poll_camera_frame
+            )
+            return
+        self._fail_camera_preview(message)
+
+    def _fail_camera_preview(self, message: str) -> None:
+        self._push_status(message)
+        self._show_placeholder_preview()
 
     def _show_placeholder_preview(self) -> None:
         self._stop_camera()

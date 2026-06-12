@@ -8,6 +8,11 @@
 ## [Unreleased]
 
 ### Added
+- 一般使用者體驗：裸跑 `ocr-from2xlsx`（或雙擊 exe）直接開啟桌面 app（#18），exe 改為 windowed
+  （無 console 視窗；CLI 需 stdout 時改用 `python -m ocr_from2xlsx`）。
+- app 啟動自動偵測攝影機：單支自動連接並即時預覽，多支彈出選擇對話框，無攝影機或未安裝 opencv 時
+  優雅降級維持既有 JSON 流程；新增「選擇攝影機」按鈕（#19）。opencv 一併打包進 exe。
+
 - 新增手寫中文姓名 rec 模型微調訓練引擎（CPU、離線）：`training.fetch_paddleocr_train`（pin 官方
   trainer repo 與預訓練權重）、`training.gen_names`（姓氏×名用字合成語料，train/validation/holdout
   三批不相交、留出集永不進訓練、OOV 字過濾）、`training.train_name_model`（官方管線微調＋匯出薄殼）、

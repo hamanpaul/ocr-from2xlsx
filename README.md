@@ -38,12 +38,12 @@ You can open the desktop review app in any of these ways:
 - Run the explicit subcommand: `ocr-from2xlsx app`.
 - Double-click the packaged executable (`dist/ocr-from2xlsx.exe`) to launch the app.
 
-Note: The packaged exe is windowed (no console). CLI users who need stdout should run `python -m ocr_from2xlsx` instead.
+Note: The packaged exe is windowed (no console). CLI users who need stdout should run an explicit subcommand, for example `python -m ocr_from2xlsx <subcommand>` (e.g. `python -m ocr_from2xlsx import-json`).
 
 On startup the app auto-detects webcams: if exactly one camera is found it auto-connects and shows a preview; if multiple cameras are present it prompts to select one; if none are present or OpenCV is unavailable it gracefully falls back to the existing JSON-driven flow and the preview placeholder is used. A `選擇攝影機` button is provided in the UI to switch cameras.
 
 ```powershell
-ocr-from2xlsx app
+ocr-from2xlsx
 ```
 
 <!-- BEGIN: cli-help marker="ocr-from2xlsx-help" -->

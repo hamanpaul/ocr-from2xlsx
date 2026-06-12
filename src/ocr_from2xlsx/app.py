@@ -5,7 +5,11 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-from ocr_from2xlsx.capture import JsonRecordSource
+from ocr_from2xlsx.capture import (
+    JsonRecordSource,
+    decide_camera_selection,
+    enumerate_cameras,
+)
 from ocr_from2xlsx.confirm_form import apply_form_state, record_to_form_state
 from ocr_from2xlsx.correction_store import default_correction_store_path
 from ocr_from2xlsx.domain import Record
@@ -146,6 +150,8 @@ class ReviewApp(tk.Tk):
         self.editing = False
         self.written_indices: set[int] = set()
         self._preview_image: tk.PhotoImage | None = None
+        self._camera_capture = None
+        self._camera_after_id: str | None = None
         self.fields: dict[str, tk.StringVar] = {}
         self._build_ui()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -165,6 +171,9 @@ class ReviewApp(tk.Tk):
             side=tk.LEFT, padx=4
         )
         ttk.Button(toolbar, text="強制寫入", command=self._force_write).pack(side=tk.LEFT, padx=4)
+        ttk.Button(toolbar, text="選擇攝影機", command=self._choose_camera).pack(
+            side=tk.LEFT, padx=4
+        )
 
         body = ttk.PanedWindow(self, orient=tk.HORIZONTAL)
         body.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
@@ -213,6 +222,7 @@ class ReviewApp(tk.Tk):
         scrollbar = ttk.Scrollbar(status_frame, orient="vertical", command=self.status_list.yview)
         scrollbar.grid(row=0, column=1, sticky="ns")
         self.status_list.configure(yscrollcommand=scrollbar.set)
+        self._init_camera()
 
     def _choose_template(self) -> None:
         template = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx")])
@@ -381,7 +391,150 @@ class ReviewApp(tk.Tk):
     def _mark_editing(self, _event: tk.Event | None = None) -> None:
         self.editing = True
 
+    def _init_camera(self) -> None:
+        try:
+            indices = enumerate_cameras()
+        except Exception:
+            self._show_placeholder_preview()
+            return
+
+        decision = decide_camera_selection(indices)
+        if not decision or decision[0] == "none":
+            self._show_placeholder_preview()
+            return
+        if decision[0] == "auto":
+            self.after(0, lambda index=int(decision[1]): self._start_camera(index))
+            return
+        self.after(0, lambda indices=list(decision[1]): self._choose_camera(indices))
+
+    def _choose_camera(self, indices: list[int] | None = None) -> None:
+        if indices is None:
+            try:
+                indices = enumerate_cameras()
+            except Exception:
+                indices = []
+
+        decision = decide_camera_selection(indices)
+        if not decision or decision[0] == "none":
+            self._push_status("找不到攝影機")
+            return
+        if decision[0] == "auto":
+            self._start_camera(int(decision[1]))
+            return
+
+        index = self._ask_camera(list(decision[1]))
+        if index is not None:
+            self._start_camera(index)
+
+    def _ask_camera(self, indices: list[int]) -> int | None:
+        if not indices:
+            return None
+
+        dialog = tk.Toplevel(self)
+        dialog.title("選擇攝影機")
+        dialog.transient(self)
+
+        ttk.Label(dialog, text="偵測到多支攝影機，請選擇：").pack(padx=12, pady=(12, 4))
+        listbox = tk.Listbox(dialog, height=min(6, len(indices)))
+        for index in indices:
+            listbox.insert(tk.END, f"攝影機 {index}")
+        listbox.selection_set(0)
+        listbox.activate(0)
+        listbox.pack(padx=12, pady=4, fill=tk.BOTH, expand=True)
+
+        chosen: dict[str, int | None] = {"value": None}
+
+        def _confirm() -> None:
+            selection = listbox.curselection()
+            if selection:
+                chosen["value"] = indices[selection[0]]
+            dialog.destroy()
+
+        ttk.Button(dialog, text="連接", command=_confirm).pack(padx=12, pady=(4, 12))
+        dialog.grab_set()
+        listbox.focus_set()
+        self.wait_window(dialog)
+        return chosen["value"]
+
+    def _start_camera(self, index: int) -> None:
+        self._stop_camera()
+        try:
+            import cv2
+            capture = cv2.VideoCapture(index)
+        except Exception:
+            self._push_status("攝影機啟動失敗")
+            self._show_placeholder_preview()
+            return
+        if not capture.isOpened():
+            capture.release()
+            self._push_status(f"無法開啟攝影機 {index}")
+            self._show_placeholder_preview()
+            return
+        self._camera_capture = capture
+        self._push_status(f"已連接攝影機 {index}")
+        self._camera_after_id = self.after(0, self._poll_camera_frame)
+
+    def _poll_camera_frame(self) -> None:
+        capture = self.__dict__.get("_camera_capture")
+        if capture is None:
+            return
+        try:
+            import cv2
+
+            ok, frame = capture.read()
+            if not ok or frame is None:
+                self._camera_after_id = self.after(100, self._poll_camera_frame)
+                return
+
+            self.preview.update_idletasks()
+            target_width = self.preview.winfo_width()
+            target_height = self.preview.winfo_height()
+            if target_width > 1 and target_height > 1:
+                height, width = frame.shape[:2]
+                scale = min(target_width / width, target_height / height)
+                if 0 < scale < 1:
+                    frame = cv2.resize(
+                        frame,
+                        (max(1, int(width * scale)), max(1, int(height * scale))),
+                    )
+
+            success, buffer = cv2.imencode(".ppm", frame)
+            if not success:
+                self._camera_after_id = self.after(100, self._poll_camera_frame)
+                return
+
+            image = tk.PhotoImage(data=bytes(buffer))
+            self._preview_image = image
+            self.preview.configure(state="normal")
+            self.preview.delete("1.0", tk.END)
+            self.preview.image_create("1.0", image=image)
+            self.preview.configure(state="disabled")
+        except Exception:
+            self._stop_camera()
+            self._show_placeholder_preview()
+            return
+
+        self._camera_after_id = self.after(50, self._poll_camera_frame)
+
+    def _stop_camera(self) -> None:
+        after_id = self.__dict__.get("_camera_after_id")
+        if after_id is not None:
+            try:
+                self.after_cancel(after_id)
+            except tk.TclError:
+                pass
+            self._camera_after_id = None
+
+        capture = self.__dict__.get("_camera_capture")
+        if capture is not None:
+            try:
+                capture.release()
+            except Exception:
+                pass
+            self._camera_capture = None
+
     def _show_placeholder_preview(self) -> None:
+        self._stop_camera()
         self._preview_image = None
         self.preview.configure(state="normal")
         self.preview.delete("1.0", tk.END)
@@ -415,6 +568,7 @@ class ReviewApp(tk.Tk):
             if scale > 1:
                 image = image.subsample(scale, scale)
 
+            self._stop_camera()
             self._preview_image = image
             self.preview.configure(state="normal")
             self.preview.delete("1.0", tk.END)
@@ -428,6 +582,7 @@ class ReviewApp(tk.Tk):
         self.status_list.see(tk.END)
 
     def _on_close(self) -> None:
+        self._stop_camera()
         if self.session:
             self.session.close()
         self.destroy()

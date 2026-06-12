@@ -40,7 +40,7 @@ You can open the desktop review app in any of these ways:
 
 Note: The packaged exe is windowed (no console). CLI users who need stdout should run `python -m ocr_from2xlsx` instead.
 
-On startup the app auto-detects webcams: if exactly one camera is found it auto-connects and shows a preview; if multiple cameras are present it prompts to select one; if none are present or OpenCV is unavailable it gracefully falls back to the existing JSON-driven flow and the preview placeholder is used. A "Choose camera" button is provided in the UI to switch cameras.
+On startup the app auto-detects webcams: if exactly one camera is found it auto-connects and shows a preview; if multiple cameras are present it prompts to select one; if none are present or OpenCV is unavailable it gracefully falls back to the existing JSON-driven flow and the preview placeholder is used. A `選擇攝影機` button is provided in the UI to switch cameras.
 
 ```powershell
 ocr-from2xlsx app
@@ -288,9 +288,11 @@ known follow-up). Produce it locally with the commands above; `build/build_paddl
 
 ## Packaging
 
-Build a portable executable:
+Build a portable executable. Before running the packager, you must install the dev and camera extras so OpenCV is bundled into the packaged exe:
 
 ```powershell
+# required: install dev and camera extras so OpenCV is included in the packaged exe
+python -m pip install -e ".[dev,camera]"
 python build/package.py
 ```
 

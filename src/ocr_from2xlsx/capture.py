@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterator
+from typing import Iterator, Callable
 
 from ocr_from2xlsx.domain import Record
 from ocr_from2xlsx.json_io import load_batch
@@ -74,3 +74,33 @@ class UvcCameraSource:
             return bool(capture.isOpened())
         finally:
             capture.release()
+
+
+def _default_camera_opener(index: int) -> bool:
+    try:
+        import cv2
+    except ImportError:
+        return False
+    capture = cv2.VideoCapture(index)
+    try:
+        return bool(capture.isOpened())
+    finally:
+        capture.release()
+
+
+def enumerate_cameras(
+    max_probe: int = 5,
+    opener: Callable[[int], bool] | None = None,
+) -> list[int]:
+    """Probe indices 0..max_probe-1 and return those that open. opener is injectable for tests."""
+    probe = opener if opener is not None else _default_camera_opener
+    return [index for index in range(max_probe) if probe(index)]
+
+
+def decide_camera_selection(indices: list[int]) -> tuple:
+    """Pure decision: () -> none, single -> auto, multiple -> choose."""
+    if not indices:
+        return ("none",)
+    if len(indices) == 1:
+        return ("auto", indices[0])
+    return ("choose", tuple(indices))

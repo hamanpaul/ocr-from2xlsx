@@ -32,8 +32,18 @@ Current capture boundaries cover normalized JSON, image folders, UVC cameras, an
 
 Launch the native desktop UI:
 
+You can open the desktop review app in any of these ways:
+
+- Run the CLI with no subcommand to open the app directly: `ocr-from2xlsx`.
+- Run the explicit subcommand: `ocr-from2xlsx app`.
+- Double-click the packaged executable (`dist/ocr-from2xlsx.exe`) to launch the app.
+
+Note: The packaged exe is windowed (no console). CLI users who need stdout should run an explicit subcommand, for example `python -m ocr_from2xlsx <subcommand>` (e.g. `python -m ocr_from2xlsx import-json`).
+
+On startup the app auto-detects webcams: if exactly one camera is found it auto-connects and shows a preview; if multiple cameras are present it prompts to select one; if none are present or OpenCV is unavailable it gracefully falls back to the existing JSON-driven flow and the preview placeholder is used. A `選擇攝影機` button is provided in the UI to switch cameras.
+
 ```powershell
-ocr-from2xlsx app
+ocr-from2xlsx
 ```
 
 <!-- BEGIN: cli-help marker="ocr-from2xlsx-help" -->
@@ -278,9 +288,11 @@ known follow-up). Produce it locally with the commands above; `build/build_paddl
 
 ## Packaging
 
-Build a portable executable:
+Build a portable executable. Before running the packager, you must install the dev and camera extras so OpenCV is bundled into the packaged exe:
 
 ```powershell
+# required: install dev and camera extras so OpenCV is included in the packaged exe
+python -m pip install -e ".[dev,camera]"
 python build/package.py
 ```
 

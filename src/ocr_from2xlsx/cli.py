@@ -134,6 +134,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional TOML config for the handwritten-name agent; absent or disabled = no-op.",
     )
     subparsers.add_parser("app", help="Launch the native desktop review UI.")
+    parser.set_defaults(command="app")
     return parser
 
 

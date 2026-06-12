@@ -8,6 +8,11 @@
 ## [Unreleased]
 
 ### Added
+- 一般使用者體驗：裸跑 `ocr-from2xlsx`（或雙擊 exe）直接開啟桌面 app（#18），exe 改為 windowed
+  （無 console 視窗；需要 stdout 的 CLI 使用者請以明確子命令執行，例如 `python -m ocr_from2xlsx <subcommand>` 或 `python -m ocr_from2xlsx import-json`）。
+- app 啟動自動偵測攝影機：單支自動連接並即時預覽，多支彈出選擇對話框，無攝影機或未安裝 opencv 時
+  優雅降級維持既有 JSON 流程；新增「選擇攝影機」按鈕（#19）。opencv 一併打包進 exe。
+
 - 新增手寫中文姓名 rec 模型微調訓練引擎（CPU、離線）：`training.fetch_paddleocr_train`（pin 官方
   trainer repo 與預訓練權重）、`training.gen_names`（姓氏×名用字合成語料，train/validation/holdout
   三批不相交、留出集永不進訓練、OOV 字過濾）、`training.train_name_model`（官方管線微調＋匯出薄殼）、
@@ -62,6 +67,7 @@
 - 新增參考 PDF ground-truth fixture、可選的實機 PaddleOCR 驗證測試，與 `build/build_paddle_plugin.py` 的 bundle 內容回歸測試。
 
 ### Fixed
+- `ReviewApp` 攝影機預覽現在會對連續 `read()` / `imencode()` 失敗採用有限重試，超限後推送狀態、停止攝影機並恢復 placeholder；啟動路徑的 `VideoCapture` 建立 / `isOpened()` 檢查 / failure cleanup 也統一留在 graceful fallback 內，避免 backend 例外直接中斷 UI。
 - `training.gen_names.render_corpus()` 現在會先做 CJK-aware 字型選擇；手寫字型支援中文時仍優先使用，不支援時會安全退回系統 CJK 字型，避免 Latin handwriting fonts 直接渲染中文姓名。
 - `training.fetch_paddleocr_train` now pins the PP-OCRv5 mobile rec pretrained weights URL to
   PaddleX's official pretrained model host, matching the current PaddleOCR docs.

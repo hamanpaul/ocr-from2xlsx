@@ -51,7 +51,8 @@ PR #20 讓 app 能即時預覽 webcam，但「webcam → 辨識」未串接。�
 
 1. **擷取品質核心（`capture.py` 擴充）**
    - `measure_sharpness(gray) -> float`：純函式（Laplacian variance），給定影像陣列即可測，CI 可測。
-   - `capture_still(index, *, min_sharpness, ...) -> CaptureResult`：cv2-guarded。開 `CAP_PROP_AUTOFOCUS=1`、要求最高解析度（請求 3840×2160，driver 自動 clamp）、暖機 ~80 frames 讓 AF 鎖定，回傳 `frame`、`resolution`、`sharpness`、`brightness`、`passed`（是否過清晰度閘）。
+   - `capture_still(index, *, min_sharpness, ...) -> CaptureResult`：cv2-guarded。開 `CAP_PROP_AUTOFOCUS=1`、**拉滿相機原生最高解析度**、暖機 ~80 frames 讓 AF 鎖定，回傳 `frame`、`resolution`、`sharpness`、`brightness`、`passed`（是否過清晰度閘）。
+   - `negotiate_max_resolution(cap)`：**不寫死目標解析度**——請求一個超大值（如 10000×10000）讓 driver clamp 到實機上限，再讀回 `CAP_PROP_FRAME_WIDTH/HEIGHT` 取得真實最大值並沿用。確保不浪費高階相機（如 demo 機讀回 3264×2448 8MP；更高階相機自動吃滿其上限）。
    - 沿用既有 `enumerate_cameras` / `decide_camera_selection`。
 
 2. **影像條件化（Phase B，`document_condition.py`，cv2-guarded、預設關、可量測）**
@@ -88,7 +89,7 @@ PR #20 讓 app 能即時預覽 webcam，但「webcam → 辨識」未串接。�
 
 ## 成功準則
 
-- [ ] `capture_still` 在良好擺位下穩定產出 sharpness >100 的高解析影像（手動驗證 + 量測）。
+- [ ] `capture_still` 拉滿相機原生最高解析度（讀回實際值，不寫死），良好擺位下穩定產出 sharpness >100 的影像（手動驗證 + 量測）。
 - [ ] 清晰度品質閘擋下糊照並提示重拍（純測試覆蓋決策）。
 - [ ] webcam/影像 → OCR → batch JSON → app 自動填表單，service_date/identity/gender 在良品擷取下正確（eval harness）。
 - [ ] Phase B 條件化「只有在量測顯示提升時」才納入預設；否則保留為可選旗標並記錄結論。

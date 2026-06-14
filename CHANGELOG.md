@@ -34,6 +34,10 @@
   動輒十餘秒。改後列舉 ~0.9s 並穩定找到相機；`capture_still` 仍保留跨 backend 解析度協商（取最高解析度）。
 
 ### Added
+- 離線 VLM 輔助辨識（進行中，change `replace-recognition-with-local-vlm`）：新增 `recognition` 模組——
+  `service_record.v1` 版面 layout（identity/gender/國籍/年齡組/管道/疾病狀態/來源/癌別 對應官方代碼）與純
+  band 幾何。將以本機 Vision-LLM 預填整張表＋人工核對，取代既有不準的 OCR/幾何/heuristic 辨識路徑。設計見
+  `docs/superpowers/specs/2026-06-14-offline-vlm-assisted-recognition-design.md`。
 - webcam 掃描 Phase A：新增清晰度量測/門檻、原生高解析 still capture、`scan` CLI、still-image OCR bridge，
   以及 app「擷取並辨識」按鈕，可把相機拍照直接送入既有 JSON review flow。
 - webcam 掃描 Phase B：新增 opt-in `document_condition.enhance()` OpenCV 文件影像增強，以及

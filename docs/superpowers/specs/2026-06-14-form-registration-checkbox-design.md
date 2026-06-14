@@ -1,7 +1,7 @@
 # 表單對位 + 全表勾選擷取設計（辨識準確度子專案）
 
 **Date:** 2026-06-14
-**Status:** Draft (brainstormed; pending spec review)
+**Status:** **PARKED (2026-06-14)** — Phase 0 對位精度 smoke 證實此幾何路線在手持 webcam 上達不到 6px 精度：ORB 對「合成線稿 canonical 參考」完全失敗（4/400 inliers、影像扭曲），文件角點 → 四點 warp 大致對齊但框漂移、對不到 6px 小框。決定轉向 #23（AI agent 視覺辨識）。本 spec/plan 保留作為「已驗證為脆弱」的紀錄；若日後要重啟幾何路線，需先解決對位精度（real-blank 參考、格線/分區局部對位、或容差分類）。
 **Tracks:** GitHub #22（準確度部分；暖 plugin 與 agent 路線另開 #22 剩項 / #23）
 
 ---

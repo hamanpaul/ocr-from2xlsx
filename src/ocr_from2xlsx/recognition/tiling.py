@@ -26,7 +26,8 @@ def crop_sections(
     auto-contrasted — Phase 0 showed this gives the small VLM cleaner, more
     consistently-structured output on checkbox sections.
     """
-    image = Image.open(image_path).convert("RGB")
+    with Image.open(image_path) as source:
+        image = source.convert("RGB")
     if rotate:
         image = image.rotate(-rotate, expand=True)  # PIL rotates CCW; negate for clockwise
     width, height = image.size

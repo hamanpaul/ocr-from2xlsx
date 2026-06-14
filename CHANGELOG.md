@@ -38,6 +38,8 @@
   `service_record.v1` 版面 layout（identity/gender/國籍/年齡組/管道/疾病狀態/來源/癌別 對應官方代碼）與純
   band 幾何。將以本機 Vision-LLM 預填整張表＋人工核對，取代既有不準的 OCR/幾何/heuristic 辨識路徑。設計見
   `docs/superpowers/specs/2026-06-14-offline-vlm-assisted-recognition-design.md`。
+- 辨識覆蓋強化：`癌別` grid 改為 **5 直欄子切片**（整格太寬、2B 讀不到 → 分欄後正確讀出，含 ✓肝癌），並加
+  「整片全勾即視為幻覺丟棄」守則，去除某欄全 marked 的 false positive。
 - webcam 掃描 Phase A：新增清晰度量測/門檻、原生高解析 still capture、`scan` CLI、still-image OCR bridge，
   以及 app「擷取並辨識」按鈕，可把相機拍照直接送入既有 JSON review flow。
 - webcam 掃描 Phase B：新增 opt-in `document_condition.enhance()` OpenCV 文件影像增強，以及

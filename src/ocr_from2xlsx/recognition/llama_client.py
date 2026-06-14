@@ -80,6 +80,16 @@ def _chunks(items: list[Any], size: int) -> list[list[Any]]:
     return [items[i : i + size] for i in range(0, len(items), size)]
 
 
+def _reject_all_marked(options: list[dict], chunk: list) -> list[dict]:
+    """Drop a chunk whose every option came back marked — the 2B model occasionally
+    marks an entire column, which is almost never a real form state."""
+    chunk_ids = {opt.id for opt in chunk}
+    marked = [e for e in options if e.get("marked") and e.get("id") in chunk_ids]
+    if len(chunk) >= 3 and len(marked) == len(chunk):
+        return []
+    return options
+
+
 def make_ollama_vlm_fn(
     host: str, model: str, *, post_fn: PostFn = _default_post
 ) -> Callable[[str, Section], dict[str, Any]]:
@@ -106,7 +116,7 @@ def make_ollama_vlm_fn(
             image_b64 = base64.b64encode(Path(crop_path).read_bytes()).decode("ascii")
             for chunk in _chunks(list(section.options), MAX_OPTIONS_PER_CALL):
                 parsed = _ask(image_b64, build_options_prompt(tuple(chunk)))
-                result["options"].extend(parsed.get("options", []) or [])
+                result["options"].extend(_reject_all_marked(parsed.get("options", []) or [], chunk))
             if section.values:
                 parsed = _ask(image_b64, build_values_prompt(section.values))
                 result["values"].extend(parsed.get("values", []) or [])

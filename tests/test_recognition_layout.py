@@ -28,3 +28,17 @@ def test_every_band_is_within_unit_square():
 def test_option_ids_are_unique():
     ids = [opt.id for s in SERVICE_RECORD_V1_LAYOUT for opt in s.options]
     assert len(ids) == len(set(ids))
+
+
+def test_all_25_cancers_present_across_sections():
+    from ocr_from2xlsx.constants import CANCER_LABELS
+
+    cancer_codes = {
+        opt.code
+        for s in SERVICE_RECORD_V1_LAYOUT
+        for opt in s.options
+        if opt.field == "patient_fields.cancers"
+    }
+    assert cancer_codes == set(CANCER_LABELS)
+    assert len(cancer_codes) == 25
+

@@ -111,6 +111,17 @@ PR #21（webcam 擷取品質）落地後，對真實文件攝影機（IPEVO DO-C
 - **「預填夠好」定義**：相對全手動，預填能砍掉多少勾選工；最終人核 Excel ≥95%（實際接近 100%）。
 - 產出決定是否沿用 2B 或升級 4B/7B、分區帶座標、prompt 模板。
 
+### Phase 0 實測發現（2026-06-14，`qwen3-vl:2b` on Ollama）
+
+實機跑真實樣本 `output/reg/filled_upright.png`，系統性除錯出**四個真因並逐一修掉**：
+
+1. **band 對齊**：最初的 best-guess 比例錯位（identity 框到數量框）。以「切片→Read 檢視」零模型成本校準，bands 已對齊（見 `layout.py` 註解）。
+2. **prompt 過繁**：含 confidence + values + 冗長 preamble 的 id-schema 讓 2B 退回空模板 → 改**精簡版**、options/values 分開問。
+3. **單批選項過多**：>~12 個選項 → 模型回空 → `vlm_fn` 把選項**分批 ≤12**多次呼叫合併。
+4. **取樣隨機**：Ollama 預設 temperature 0.8，同輸入時對時空 → 改 **temperature=0 greedy**。
+
+**判決：方法成立，但 `qwen3-vl:2b` 觸頂、不堪可靠預填。** 每修一因就多過幾欄（identity/gender/nationality/age_group/name 都曾正確讀出），但**單次只對約一半**，密集癌別格與手寫病歷號/日期穩定失敗——符合 CheckboxQA 尺寸敏感度（2B≈43%）。**下一步：升 4B/8B 再實測**（config `OCR_VLM_MODEL` 一行），bands/prompt/分批/temperature 等修正可直接沿用。
+
 ## 錯誤處理 / Fallback
 - `llama-server` 未就緒 / 模型缺檔 → 明確提示，**手動輸入照常可用**（預填是加分，不是前提）。
 - 某片辨識失敗或 JSON 不合法 → 該區留白交人，不 crash。

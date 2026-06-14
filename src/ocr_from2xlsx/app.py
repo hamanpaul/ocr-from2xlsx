@@ -145,16 +145,46 @@ class ReviewApp(tk.Tk):
     _camera_failure_count: int = 0
     _camera_index: int | None = None
     _preview_rotation: int = 0
+    _splash_closed: bool = False
     _status_var: object | None = None
     _status_log_path: object | None = None
 
     @staticmethod
-    def _default_status_log_path() -> Path:
+    def _runtime_base_dir() -> Path:
         import os
 
         home = os.environ.get("OCR_FROM2XLSX_HOME")
-        base = Path(home) if home else Path.home() / ".ocr_from2xlsx"
-        return base / "app.log"
+        return Path(home) if home else Path.home() / ".ocr_from2xlsx"
+
+    @classmethod
+    def _default_status_log_path(cls) -> Path:
+        return cls._runtime_base_dir() / "app.log"
+
+    @classmethod
+    def _config_path(cls) -> Path:
+        return cls._runtime_base_dir() / "config.json"
+
+    @classmethod
+    def _load_preview_rotation(cls) -> int:
+        import json
+
+        try:
+            data = json.loads(cls._config_path().read_text(encoding="utf-8"))
+            return int(data.get("preview_rotation", 0)) % 360
+        except Exception:
+            return 0
+
+    def _save_preview_rotation(self) -> None:
+        import json
+
+        try:
+            path = self._config_path()
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(
+                json.dumps({"preview_rotation": self._preview_rotation}), encoding="utf-8"
+            )
+        except OSError:
+            pass
 
     def __init__(self) -> None:
         super().__init__()
@@ -173,7 +203,8 @@ class ReviewApp(tk.Tk):
         self._camera_after_id: str | None = None
         self._camera_failure_count = 0
         self._camera_index = None
-        self._preview_rotation = 0
+        self._preview_rotation = self._load_preview_rotation()
+        self._splash_closed = False
         self._status_log: list[str] = []
         self._status_var = None
         self._status_log_path = self._default_status_log_path()
@@ -615,7 +646,7 @@ class ReviewApp(tk.Tk):
         self._camera_capture = capture
         self._camera_failure_count = 0
         self._camera_index = index
-        self._push_status(f"已連接攝影機 {index}")
+        self._push_status(f"攝影機已連接（裝置 #{index}）")
         self._camera_after_id = self.after(0, self._poll_camera_frame)
 
     def _poll_camera_frame(self) -> None:
@@ -659,6 +690,7 @@ class ReviewApp(tk.Tk):
             self.preview.image_create("1.0", image=image)
             self.preview.configure(state="disabled")
             self._camera_failure_count = 0
+            self._dismiss_splash()  # first real frame drawn — safe to drop the boot splash
         except Exception:
             self._fail_camera_preview("攝影機預覽失敗，已停止預覽")
             return
@@ -706,6 +738,13 @@ class ReviewApp(tk.Tk):
         self.preview.delete("1.0", tk.END)
         self.preview.insert("1.0", self._PREVIEW_PLACEHOLDER)
         self.preview.configure(state="disabled")
+        self._dismiss_splash()  # placeholder shown (no camera) — drop the boot splash
+
+    def _dismiss_splash(self) -> None:
+        if self._splash_closed:
+            return
+        self._splash_closed = True
+        _close_boot_splash()
 
     def _show_source_image(self, record: Record) -> None:
         try:
@@ -769,7 +808,8 @@ class ReviewApp(tk.Tk):
 
     def _rotate_preview(self) -> None:
         self._preview_rotation = (self._preview_rotation + 90) % 360
-        self._push_status(f"預覽旋轉 {self._preview_rotation}°（套用於擷取與辨識）")
+        self._save_preview_rotation()
+        self._push_status(f"預覽旋轉 {self._preview_rotation}°（已記住，下次啟動沿用）")
 
     def _on_close(self) -> None:
         self._stop_camera()
@@ -792,7 +832,9 @@ def _close_boot_splash() -> None:
 
 def run_app() -> int:
     app = ReviewApp()
-    app.update_idletasks()
-    _close_boot_splash()
+    # The splash is dismissed once the first camera frame (or the placeholder) is drawn,
+    # so the user never sees a blank window. This timer is only a fallback in case neither
+    # path fires promptly.
+    app.after(4000, app._dismiss_splash)
     app.mainloop()
     return 0

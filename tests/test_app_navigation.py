@@ -550,7 +550,7 @@ def test_start_camera_falls_back_to_directshow_and_keeps_selected_index(
     assert app._camera_after_id == "after-0"
     assert app._camera_failure_count == 0
     assert app._camera_index == 4
-    assert statuses == ["已連接攝影機 4"]
+    assert statuses == ["攝影機已連接（裝置 #4）"]
     assert placeholders == []
 
 
@@ -594,7 +594,7 @@ def test_start_camera_skips_backend_that_opens_but_cannot_read_frames(
     assert app._camera_after_id == "after-0"
     assert app._camera_failure_count == 0
     assert app._camera_index == 4
-    assert statuses == ["已連接攝影機 4"]
+    assert statuses == ["攝影機已連接（裝置 #4）"]
     assert placeholders == []
 
 
@@ -645,7 +645,7 @@ def test_start_camera_accepts_slow_start_plain_backend(
     assert app._camera_after_id == "after-0"
     assert app._camera_failure_count == 0
     assert app._camera_index == 4
-    assert statuses == ["已連接攝影機 4"]
+    assert statuses == ["攝影機已連接（裝置 #4）"]
     assert placeholders == []
 
 

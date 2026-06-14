@@ -16,6 +16,11 @@
   就緒後自動關閉，避免使用者以為程式沒啟動。
 
 ### Fixed
+- 開機 splash 改為「第一幀預覽（或佔位）畫出後」才關閉（另有 4 秒 fallback），避免 GUI 出現到繪製
+  完成之間的大片空白。
+- 攝影機已連接狀態訊息由「已連接攝影機 0」改為「攝影機已連接（裝置 #0）」，避免把裝置編號 0 誤讀成
+  「0 台」。
+- 「旋轉」設定持久化到 `~/.ocr_from2xlsx/config.json`：開程式喬正一次後，之後每次啟動沿用該旋轉。
 - 相機列舉改用 DirectShow 快速探測（`_default_camera_opener`/`_enumeration_backend`）：原本預設 MSMF
   backend 對不存在的 index 會各卡數秒、且 index 存取不穩，造成「選擇攝影機→找不到攝影機」與啟動偵測
   動輒十餘秒。改後列舉 ~0.9s 並穩定找到相機；`capture_still` 仍保留跨 backend 解析度協商（取最高解析度）。

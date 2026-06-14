@@ -145,6 +145,7 @@ class ReviewApp(tk.Tk):
     _camera_failure_count: int = 0
     _camera_index: int | None = None
     _preview_rotation: int = 0
+    _preview_zoom: float = 1.0
     _splash_closed: bool = False
     _status_var: object | None = None
     _status_log_path: object | None = None
@@ -204,6 +205,7 @@ class ReviewApp(tk.Tk):
         self._camera_failure_count = 0
         self._camera_index = None
         self._preview_rotation = self._load_preview_rotation()
+        self._preview_zoom = 1.0
         self._splash_closed = False
         self._status_log: list[str] = []
         self._status_var = None
@@ -234,6 +236,12 @@ class ReviewApp(tk.Tk):
             side=tk.LEFT, padx=4
         )
         ttk.Button(toolbar, text="旋轉", command=self._rotate_preview).pack(
+            side=tk.LEFT, padx=4
+        )
+        ttk.Button(toolbar, text="放大", command=lambda: self._zoom_preview(1.25)).pack(
+            side=tk.LEFT, padx=4
+        )
+        ttk.Button(toolbar, text="縮小", command=lambda: self._zoom_preview(1 / 1.25)).pack(
             side=tk.LEFT, padx=4
         )
 
@@ -413,19 +421,59 @@ class ReviewApp(tk.Tk):
         if not cv2.imwrite(str(image_path), frame):
             raise OSError(f"無法寫入擷取影像：{image_path}")
         env_overrides = scan_doc_preprocess_env_overrides()
-        if env_overrides is None:
-            backend = PluginOcrBackend.resolve()
-        else:
-            backend = PluginOcrBackend.resolve(env_overrides=env_overrides)
-        template = _resolve_template("service_record.v1")
-        batch = prepare_records_from_images([image_path], output_dir, template, backend)
-        json_path = next_output_artifact_path(output_dir, "scan-prepared.json")
-        dump_batch(batch, json_path)
+        modal = self._open_processing_modal(
+            "辨識中，請稍候…\n首次辨識需載入模型，可能需要數十秒。"
+        )
+        try:
+            try:
+                if env_overrides is None:
+                    backend = PluginOcrBackend.resolve()
+                else:
+                    backend = PluginOcrBackend.resolve(env_overrides=env_overrides)
+            except Exception as exc:
+                raise RuntimeError(
+                    "找不到可用的 OCR plugin。請先建置 plugin bundle："
+                    "python build/build_paddle_plugin.py（產生 dist/plugins/paddleocr）。"
+                ) from exc
+            template = _resolve_template("service_record.v1")
+            batch = prepare_records_from_images([image_path], output_dir, template, backend)
+            json_path = next_output_artifact_path(output_dir, "scan-prepared.json")
+            dump_batch(batch, json_path)
+        finally:
+            self._close_processing_modal(modal)
         records = list(JsonRecordSource(json_path).records())
         if not records:
             raise ValueError("辨識結果沒有任何紀錄。")
         self._set_loaded_records(records, json_path)
         return True
+
+    def _open_processing_modal(self, message: str):
+        # Global modal "processing" indicator during the blocking OCR call. Defensive: returns
+        # None when there is no real Tk root (e.g. unit-test fixtures), so callers stay testable.
+        try:
+            modal = tk.Toplevel(self)
+        except Exception:
+            return None
+        try:
+            modal.title("處理中")
+            modal.transient(self)
+            modal.resizable(False, False)
+            ttk.Label(modal, text=message, padding=24, justify="center").pack()
+            modal.update_idletasks()
+            modal.grab_set()  # global input lock while recognizing
+            modal.update()  # force a draw before the blocking OCR call
+        except Exception:
+            pass
+        return modal
+
+    def _close_processing_modal(self, modal) -> None:
+        if modal is None:
+            return
+        try:
+            modal.grab_release()
+            modal.destroy()
+        except Exception:
+            pass
 
     def _next_record(self) -> None:
         if not self.records:
@@ -665,6 +713,7 @@ class ReviewApp(tk.Tk):
                 from ocr_from2xlsx.capture import rotate_frame
 
                 frame = rotate_frame(frame, self._preview_rotation)
+            frame = self._zoom_crop(frame)
 
             self.preview.update_idletasks()
             target_width = self.preview.winfo_width()
@@ -672,10 +721,13 @@ class ReviewApp(tk.Tk):
             if target_width > 1 and target_height > 1:
                 height, width = frame.shape[:2]
                 scale = min(target_width / width, target_height / height)
-                if 0 < scale < 1:
+                # Downscale large frames to fit, and upscale a zoomed crop to fill the pane.
+                if scale > 0 and abs(scale - 1.0) > 0.01:
+                    interpolation = cv2.INTER_AREA if scale < 1 else cv2.INTER_LINEAR
                     frame = cv2.resize(
                         frame,
                         (max(1, int(width * scale)), max(1, int(height * scale))),
+                        interpolation=interpolation,
                     )
 
             success, buffer = cv2.imencode(".ppm", frame)
@@ -738,7 +790,6 @@ class ReviewApp(tk.Tk):
         self.preview.delete("1.0", tk.END)
         self.preview.insert("1.0", self._PREVIEW_PLACEHOLDER)
         self.preview.configure(state="disabled")
-        self._dismiss_splash()  # placeholder shown (no camera) — drop the boot splash
 
     def _dismiss_splash(self) -> None:
         if self._splash_closed:
@@ -811,6 +862,21 @@ class ReviewApp(tk.Tk):
         self._save_preview_rotation()
         self._push_status(f"預覽旋轉 {self._preview_rotation}°（已記住，下次啟動沿用）")
 
+    def _zoom_preview(self, factor: float) -> None:
+        self._preview_zoom = min(8.0, max(1.0, self._preview_zoom * factor))
+        self._push_status(f"預覽縮放 {self._preview_zoom:.2f}×")
+
+    def _zoom_crop(self, frame: object):
+        # Zoom by cropping a centered region (then the fit-resize scales it up to the pane).
+        if self._preview_zoom <= 1.0:
+            return frame
+        height, width = frame.shape[:2]
+        crop_w = max(1, int(width / self._preview_zoom))
+        crop_h = max(1, int(height / self._preview_zoom))
+        x0 = (width - crop_w) // 2
+        y0 = (height - crop_h) // 2
+        return frame[y0:y0 + crop_h, x0:x0 + crop_w]
+
     def _on_close(self) -> None:
         self._stop_camera()
         if self.session:
@@ -832,9 +898,9 @@ def _close_boot_splash() -> None:
 
 def run_app() -> int:
     app = ReviewApp()
-    # The splash is dismissed once the first camera frame (or the placeholder) is drawn,
-    # so the user never sees a blank window. This timer is only a fallback in case neither
-    # path fires promptly.
-    app.after(4000, app._dismiss_splash)
+    # Heavy startup (cv2 load, camera enumeration) happens in __init__ while the native
+    # boot splash is still up. The Tk window only maps once mainloop starts, so dismiss the
+    # splash a moment after that — never during __init__, which would leave a blank gap.
+    app.after(500, app._dismiss_splash)
     app.mainloop()
     return 0

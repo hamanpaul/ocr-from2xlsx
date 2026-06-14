@@ -22,7 +22,15 @@ def test_build_bundle_includes_runtime_modules(tmp_path: Path, monkeypatch) -> N
     (src_plugin / "mark_model.json").write_text("{}", encoding="utf-8")
     (src_plugin / "name_rec").mkdir()
     (src_plugin / "name_rec" / "inference.pdmodel").write_text("name-rec", encoding="utf-8")
-    (src_plugin / "plugin.json").write_text("{}", encoding="utf-8")
+    (src_plugin / "plugin.json").write_text(
+        json.dumps(
+            {
+                "contract_version": "ocr_plugin.v1",
+                "command": ["__PYTHON__", "main.py"],
+            }
+        ),
+        encoding="utf-8",
+    )
 
     src_venv = repo / ".venv-paddle"
     src_venv.mkdir()
@@ -47,3 +55,7 @@ def test_build_bundle_includes_runtime_modules(tmp_path: Path, monkeypatch) -> N
     assert (out / "template_boxes.json").exists()
     assert (out / "mark_model.json").exists()
     assert (out / "name_rec" / "inference.pdmodel").exists()
+    assert json.loads((out / "plugin.json").read_text(encoding="utf-8"))["command"] == [
+        "python\\Scripts\\python.exe",
+        "main.py",
+    ]

@@ -63,6 +63,7 @@ assert _NC_SPEC and _NC_SPEC.loader
 _NC_SPEC.loader.exec_module(name_crop)
 
 CONTRACT_VERSION = "ocr_plugin.v1"
+_DOC_PREPROCESS_MODEL_NAMES = ("PP-LCNet_x1_0_doc_ori", "UVDoc")
 
 OcrFn = Callable[[str], list[dict[str, Any]]]
 MarkFn = Callable[[str, list[dict[str, Any]]], set[str]]
@@ -223,15 +224,60 @@ def _configure_offline_models() -> None:
         os.environ.setdefault("PADDLE_PDX_CACHE_HOME", str(bundled_models))
 
 
+def _paddlex_official_models_dir() -> Path:
+    cache_home = Path(os.environ.get("PADDLE_PDX_CACHE_HOME") or Path.home() / ".paddlex")
+    if cache_home.name == "official_models":
+        return cache_home
+    return cache_home / "official_models"
+
+
+def _doc_preprocess_model_dirs() -> dict[str, Path] | None:
+    official_models = _paddlex_official_models_dir()
+    doc_orientation_dir = _existing_dir(official_models / _DOC_PREPROCESS_MODEL_NAMES[0])
+    doc_unwarping_dir = _existing_dir(official_models / _DOC_PREPROCESS_MODEL_NAMES[1])
+    if doc_orientation_dir is None or doc_unwarping_dir is None:
+        return None
+    return {
+        "doc_orientation_classify_model_dir": doc_orientation_dir,
+        "doc_unwarping_model_dir": doc_unwarping_dir,
+    }
+
+
+def _doc_preprocess_models_available() -> bool:
+    return _doc_preprocess_model_dirs() is not None
+
+
+def _doc_preprocess_enabled() -> bool:
+    return os.environ.get("SCAN_DOC_PREPROCESS", "").strip().lower() in {
+        "1",
+        "true",
+    } and _doc_preprocess_models_available()
+
+
 def _paddle_ocr_fn(image_path: str) -> list[dict[str, Any]]:
     from paddleocr import PaddleOCR
 
+    doc_preprocess_model_dirs = _doc_preprocess_model_dirs()
+    use_doc_preprocess = _doc_preprocess_enabled()
+    doc_preprocess_kwargs: dict[str, Any] = {}
+    if use_doc_preprocess and doc_preprocess_model_dirs is not None:
+        doc_preprocess_kwargs = {
+            "doc_orientation_classify_model_name": _DOC_PREPROCESS_MODEL_NAMES[0],
+            "doc_orientation_classify_model_dir": str(
+                doc_preprocess_model_dirs["doc_orientation_classify_model_dir"]
+            ),
+            "doc_unwarping_model_name": _DOC_PREPROCESS_MODEL_NAMES[1],
+            "doc_unwarping_model_dir": str(
+                doc_preprocess_model_dirs["doc_unwarping_model_dir"]
+            ),
+        }
     ocr = PaddleOCR(
         text_detection_model_name="PP-OCRv5_mobile_det",
         text_recognition_model_name="PP-OCRv5_mobile_rec",
-        use_doc_orientation_classify=False,
-        use_doc_unwarping=False,
+        use_doc_orientation_classify=use_doc_preprocess,
+        use_doc_unwarping=use_doc_preprocess,
         use_textline_orientation=True,
+        **doc_preprocess_kwargs,
     )
     lines: list[dict[str, Any]] = []
     for res in ocr.predict(image_path):

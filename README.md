@@ -50,18 +50,20 @@ ocr-from2xlsx
 Prepare PDF records or import normalized service-record JSON into the monthly report XLSX.
 
 usage: ocr-from2xlsx [-h] [--version]
-                     {sample-json,validate-json,import-json,prepare-records,app}
+                     {sample-json,validate-json,import-json,prepare-records,scan,app}
                      ...
 
 Prepare PDF records or import normalized service-record JSON into the monthly
 report XLSX.
 
 positional arguments:
-  {sample-json,validate-json,import-json,prepare-records,app}
+  {sample-json,validate-json,import-json,prepare-records,scan,app}
     sample-json         Generate deterministic sample service-record JSON.
     validate-json       Validate normalized service-record JSON.
     import-json         Import normalized JSON records into a working XLSX.
     prepare-records     Prepare normalized JSON records from PDF inputs.
+    scan                Capture a webcam still (or read an image) and
+                        recognize it into normalized JSON.
     app                 Launch the native desktop review UI.
 
 options:
@@ -112,10 +114,13 @@ ocr-from2xlsx prepare-records --input scan.pdf --output out.json `
 ```
 
 The bundle ships a Python venv, the PP-OCRv5 mobile models, and runs fully offline
-(`PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True`, models loaded from the bundle). It recognizes the form
-full-page, probes checkbox ink immediately left of OCR label anchors, and also uses OCR-text anomalies
-such as `中女性` / `病人625...` as secondary marked signals. The current plugin extracts service date,
-identity, gender, handwritten name, and medical-record-no; PDF preprocessing now renders at 400 DPI to
+(`PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True`, models loaded from the bundle). The default portable
+bundle does not include the extra PaddleX document-orientation / unwarping models (`PP-LCNet_x1_0_doc_ori`,
+`UVDoc`), so `SCAN_DOC_PREPROCESS=1` only takes effect when those model dirs are also present in the
+cache/bundle; otherwise the plugin safely keeps that opt-in path off. It recognizes the form full-page,
+probes checkbox ink immediately left of OCR label anchors, and also uses OCR-text anomalies such as
+`中女性` / `病人625...` as secondary marked signals. The current plugin extracts service date, identity,
+gender, handwritten name, and medical-record-no; PDF preprocessing now renders at 400 DPI to
 improve real-form MRN recovery.
 
 The plugin also emits a PII-minimized handwritten-name crop. When `prepare-records` runs with

@@ -132,3 +132,63 @@ def test_command_leaves_bare_name_for_path_lookup(tmp_path: Path) -> None:
     cmd = PluginOcrBackend(plugin_dir)._command()
 
     assert cmd[0] == "python"
+
+
+def test_resolve_can_apply_env_overrides_without_inheriting_scan_docpre_by_default(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    plugin_dir = tmp_path / "plugin"
+    plugin_dir.mkdir()
+    (plugin_dir / "echo_env_plugin.py").write_text(
+        "\n".join(
+            [
+                "from __future__ import annotations",
+                "",
+                "import json",
+                "import os",
+                "import sys",
+                "",
+                "",
+                "def main() -> int:",
+                "    request = json.loads(sys.stdin.read())",
+                "    response = {",
+                "        'contract_version': request.get('contract_version'),",
+                "        'record': {",
+                "            'record_id': 'plugin-0001',",
+                "            'service_date': '2026-05-26',",
+                "            'identity': 'patient',",
+                "            'name': os.environ.get('SCAN_DOC_PREPROCESS', ''),",
+                "            'medical_record_no': 'PLUGIN-OK',",
+                "            'gender': 'female',",
+                "            'ocr': {'raw_text': ''},",
+                "        },",
+                "    }",
+                "    sys.stdout.write(json.dumps(response, ensure_ascii=False))",
+                "    return 0",
+                "",
+                "",
+                "if __name__ == '__main__':",
+                "    raise SystemExit(main())",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (plugin_dir / "plugin.json").write_text(
+        json.dumps(
+            {
+                "contract_version": "ocr_plugin.v1",
+                "command": [sys.executable, "echo_env_plugin.py"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SCAN_DOC_PREPROCESS", "1")
+
+    default_backend = PluginOcrBackend.resolve(explicit_dir=plugin_dir)
+    opt_in_backend = PluginOcrBackend.resolve(
+        explicit_dir=plugin_dir,
+        env_overrides={"SCAN_DOC_PREPROCESS": "1"},
+    )
+
+    assert default_backend.extract(_prepared_page(tmp_path))["name"] == ""
+    assert opt_in_backend.extract(_prepared_page(tmp_path))["name"] == "1"

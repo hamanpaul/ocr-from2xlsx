@@ -9,6 +9,7 @@ from typing import Any
 
 OCR_PLUGIN_CONTRACT_VERSION = "ocr_plugin.v1"
 DEFAULT_PLUGIN_SUBDIR = Path("plugins") / "paddleocr"
+SOURCE_BUNDLE_PLUGIN_SUBDIR = Path("dist") / DEFAULT_PLUGIN_SUBDIR
 MANIFEST_NAME = "plugin.json"
 
 
@@ -56,7 +57,29 @@ def parse_response(payload: dict[str, Any]) -> dict[str, Any]:
 def _app_base_dir() -> Path:
     if getattr(sys, "frozen", False):
         return Path(sys.executable).resolve().parent
-    return Path.cwd()
+    module_path = Path(__file__).resolve()
+    for base_dir in module_path.parents:
+        if (base_dir / "pyproject.toml").is_file():
+            return base_dir
+        if (base_dir / SOURCE_BUNDLE_PLUGIN_SUBDIR).is_dir():
+            return base_dir
+        if (base_dir / DEFAULT_PLUGIN_SUBDIR).is_dir():
+            return base_dir
+    return module_path.parent.parent
+
+
+def _default_plugin_candidates(
+    default_dir: Path | str | None = None,
+) -> list[tuple[Path, bool]]:
+    if default_dir is not None:
+        return [(Path(default_dir), False)]
+    base_dir = _app_base_dir()
+    if getattr(sys, "frozen", False):
+        return [(base_dir / DEFAULT_PLUGIN_SUBDIR, False)]
+    return [
+        (base_dir / SOURCE_BUNDLE_PLUGIN_SUBDIR, True),
+        (base_dir / DEFAULT_PLUGIN_SUBDIR, False),
+    ]
 
 
 def resolve_plugin_dir(
@@ -78,14 +101,25 @@ def resolve_plugin_dir(
             f"OCR_PLUGIN_DIR points to a missing directory: {candidate}"
         )
 
-    default_candidate = (
-        Path(default_dir) if default_dir is not None else _app_base_dir() / DEFAULT_PLUGIN_SUBDIR
-    )
-    if default_candidate.is_dir():
-        return default_candidate
+    default_candidates = _default_plugin_candidates(default_dir)
+    for candidate, require_valid_manifest in default_candidates:
+        if not candidate.is_dir():
+            continue
+        if require_valid_manifest:
+            try:
+                load_manifest(candidate)
+            except PluginManifestError:
+                continue
+            return candidate
+        return candidate
+    candidate_paths = [candidate for candidate, _ in default_candidates]
+    if len(candidate_paths) == 1:
+        install_hint = str(candidate_paths[0])
+    else:
+        install_hint = " or ".join(str(candidate) for candidate in candidate_paths)
     raise PluginUnavailableError(
         "No OCR plugin found. Pass --ocr-plugin-dir, set OCR_PLUGIN_DIR, "
-        f"or install the plugin at {default_candidate}."
+        f"or install the plugin at {install_hint}."
     )
 
 

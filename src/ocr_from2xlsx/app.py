@@ -9,6 +9,7 @@ from ocr_from2xlsx.capture import (
     JsonRecordSource,
     decide_camera_selection,
     enumerate_cameras,
+    open_camera_capture,
 )
 from ocr_from2xlsx.confirm_form import apply_form_state, record_to_form_state
 from ocr_from2xlsx.correction_store import default_correction_store_path
@@ -142,6 +143,49 @@ class ReviewApp(tk.Tk):
     _camera_capture: object | None = None
     _camera_after_id: str | None = None
     _camera_failure_count: int = 0
+    _camera_index: int | None = None
+    _preview_rotation: int = 0
+    _preview_zoom: float = 1.0
+    _splash_closed: bool = False
+    _status_var: object | None = None
+    _status_log_path: object | None = None
+
+    @staticmethod
+    def _runtime_base_dir() -> Path:
+        import os
+
+        home = os.environ.get("OCR_FROM2XLSX_HOME")
+        return Path(home) if home else Path.home() / ".ocr_from2xlsx"
+
+    @classmethod
+    def _default_status_log_path(cls) -> Path:
+        return cls._runtime_base_dir() / "app.log"
+
+    @classmethod
+    def _config_path(cls) -> Path:
+        return cls._runtime_base_dir() / "config.json"
+
+    @classmethod
+    def _load_preview_rotation(cls) -> int:
+        import json
+
+        try:
+            data = json.loads(cls._config_path().read_text(encoding="utf-8"))
+            return int(data.get("preview_rotation", 0)) % 360
+        except Exception:
+            return 0
+
+    def _save_preview_rotation(self) -> None:
+        import json
+
+        try:
+            path = self._config_path()
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(
+                json.dumps({"preview_rotation": self._preview_rotation}), encoding="utf-8"
+            )
+        except OSError:
+            pass
 
     def __init__(self) -> None:
         super().__init__()
@@ -159,6 +203,13 @@ class ReviewApp(tk.Tk):
         self._camera_capture = None
         self._camera_after_id: str | None = None
         self._camera_failure_count = 0
+        self._camera_index = None
+        self._preview_rotation = self._load_preview_rotation()
+        self._preview_zoom = 1.0
+        self._splash_closed = False
+        self._status_log: list[str] = []
+        self._status_var = None
+        self._status_log_path = self._default_status_log_path()
         self.fields: dict[str, tk.StringVar] = {}
         self._build_ui()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -181,16 +232,35 @@ class ReviewApp(tk.Tk):
         ttk.Button(toolbar, text="選擇攝影機", command=self._choose_camera).pack(
             side=tk.LEFT, padx=4
         )
+        ttk.Button(toolbar, text="擷取並辨識", command=self._capture_and_recognize).pack(
+            side=tk.LEFT, padx=4
+        )
+        ttk.Button(toolbar, text="旋轉", command=self._rotate_preview).pack(
+            side=tk.LEFT, padx=4
+        )
+        ttk.Button(toolbar, text="放大", command=lambda: self._zoom_preview(1.25)).pack(
+            side=tk.LEFT, padx=4
+        )
+        ttk.Button(toolbar, text="縮小", command=lambda: self._zoom_preview(1 / 1.25)).pack(
+            side=tk.LEFT, padx=4
+        )
 
+        # Footer status bar: shows only the latest status; full history goes to the log file.
+        self._status_var = tk.StringVar(value="就緒")
+        ttk.Label(self, textvariable=self._status_var, anchor="w", relief="sunken").pack(
+            side=tk.BOTTOM, fill=tk.X, padx=8, pady=(0, 8)
+        )
+
+        # Two maximized panes: webcam/source preview on the left, the review form on the right.
         body = ttk.PanedWindow(self, orient=tk.HORIZONTAL)
-        body.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
+        body.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=8, pady=8)
 
-        self.preview = tk.Text(body, width=35, wrap="word")
+        self.preview = tk.Text(body, width=60, wrap="word")
         self._show_placeholder_preview()
-        body.add(self.preview)
+        body.add(self.preview, weight=1)
 
         form = ttk.Frame(body)
-        body.add(form)
+        body.add(form, weight=1)
         form.columnconfigure(0, weight=1)
         form.rowconfigure(0, weight=1)
 
@@ -220,15 +290,6 @@ class ReviewApp(tk.Tk):
             "gender": self.confirm_form.single_choice_fields["gender"],
         }
 
-        status_frame = ttk.Frame(body)
-        body.add(status_frame)
-        status_frame.columnconfigure(0, weight=1)
-        status_frame.rowconfigure(0, weight=1)
-        self.status_list = tk.Listbox(status_frame, width=50)
-        self.status_list.grid(row=0, column=0, sticky="nsew")
-        scrollbar = ttk.Scrollbar(status_frame, orient="vertical", command=self.status_list.yview)
-        scrollbar.grid(row=0, column=1, sticky="ns")
-        self.status_list.configure(yscrollcommand=scrollbar.set)
         self._init_camera()
 
     def _choose_template(self) -> None:
@@ -254,17 +315,165 @@ class ReviewApp(tk.Tk):
         if not path:
             return
         try:
-            self.records = list(JsonRecordSource(path).records())
+            records = list(JsonRecordSource(path).records())
         except (OSError, ValueError) as exc:
             messagebox.showerror("無法載入 JSON", str(exc))
             return
-        self.loaded_json_path = Path(path)
+        self._set_loaded_records(records, Path(path))
+
+    def _set_loaded_records(self, records: list[Record], json_path: Path) -> None:
+        self.records = records
+        self.loaded_json_path = json_path
         self.correction_store_path = default_correction_store_path(self.loaded_json_path)
         self.current_index = -1
         self.editing = False
         self.written_indices = set()
         self._push_status(f"已載入 {len(self.records)} 筆 JSON")
-        self._next_record()
+        if self.records:
+            self._next_record()
+        else:
+            self._show_placeholder_preview()
+
+    def _has_live_camera_preview(self) -> bool:
+        return self._camera_capture is not None or self._camera_after_id is not None
+
+    def _clear_inactive_camera_selection(self) -> None:
+        if not self._has_live_camera_preview():
+            self._camera_index = None
+
+    def _capture_and_recognize(self) -> None:
+        from ocr_from2xlsx.capture import (
+            DEFAULT_MIN_SHARPNESS,
+            CameraDependencyError,
+            capture_still,
+            require_camera_support,
+        )
+
+        if self.editing:
+            messagebox.showerror("尚未保存", "目前資料已修改，請先使用「確認並寫入」或「強制寫入」。")
+            return
+        restore_camera_index = self._camera_index
+        restore_live_preview = self._has_live_camera_preview()
+        if restore_camera_index is None:
+            try:
+                require_camera_support()
+            except CameraDependencyError as exc:
+                self._clear_inactive_camera_selection()
+                messagebox.showerror("擷取並辨識", str(exc))
+                return
+            self._clear_inactive_camera_selection()
+            messagebox.showwarning("擷取並辨識", "請先選擇可用的攝影機。")
+            return
+        should_restore_preview = restore_live_preview
+        self._stop_camera()
+        try:
+            result = capture_still(
+                restore_camera_index,
+                min_sharpness=DEFAULT_MIN_SHARPNESS,
+            )
+            if result is None:
+                should_restore_preview = False
+                self._clear_inactive_camera_selection()
+                messagebox.showwarning("擷取並辨識", "找不到可用的攝影機。")
+                return
+            if not result.passed:
+                messagebox.showwarning(
+                    "擷取並辨識",
+                    f"畫面太模糊（清晰度 {result.sharpness:.0f}）。請調整對焦/光線/距離後重試。",
+                )
+                return
+            recognized = self._recognize_capture(result.frame)
+            should_restore_preview = restore_live_preview and not recognized
+        except CameraDependencyError as exc:
+            should_restore_preview = False
+            self._clear_inactive_camera_selection()
+            messagebox.showerror("擷取並辨識", str(exc))
+        except Exception as exc:
+            messagebox.showerror("擷取並辨識", f"辨識失敗：{exc}")
+        finally:
+            if should_restore_preview:
+                if restore_camera_index is None:
+                    self._init_camera()
+                else:
+                    self._start_camera(restore_camera_index)
+
+    def _recognize_capture(self, frame: object) -> bool:
+        import cv2
+
+        from ocr_from2xlsx.cli import _resolve_template
+        from ocr_from2xlsx.json_io import dump_batch
+        from ocr_from2xlsx.plugin_backend import (
+            PluginOcrBackend,
+            scan_doc_preprocess_env_overrides,
+        )
+        from ocr_from2xlsx.scan import next_output_artifact_path, prepare_records_from_images
+
+        selected_dir = filedialog.askdirectory(title="選擇辨識輸出資料夾")
+        if not selected_dir:
+            return False
+        output_dir = Path(selected_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        image_path = next_output_artifact_path(output_dir, "scan-capture.png")
+        if self._preview_rotation:
+            from ocr_from2xlsx.capture import rotate_frame
+
+            frame = rotate_frame(frame, self._preview_rotation)
+        if not cv2.imwrite(str(image_path), frame):
+            raise OSError(f"無法寫入擷取影像：{image_path}")
+        env_overrides = scan_doc_preprocess_env_overrides()
+        modal = self._open_processing_modal(
+            "辨識中，請稍候…\n首次辨識需載入模型，可能需要數十秒。"
+        )
+        try:
+            try:
+                if env_overrides is None:
+                    backend = PluginOcrBackend.resolve()
+                else:
+                    backend = PluginOcrBackend.resolve(env_overrides=env_overrides)
+            except Exception as exc:
+                raise RuntimeError(
+                    "找不到可用的 OCR plugin。請先建置 plugin bundle："
+                    "python build/build_paddle_plugin.py（產生 dist/plugins/paddleocr）。"
+                ) from exc
+            template = _resolve_template("service_record.v1")
+            batch = prepare_records_from_images([image_path], output_dir, template, backend)
+            json_path = next_output_artifact_path(output_dir, "scan-prepared.json")
+            dump_batch(batch, json_path)
+        finally:
+            self._close_processing_modal(modal)
+        records = list(JsonRecordSource(json_path).records())
+        if not records:
+            raise ValueError("辨識結果沒有任何紀錄。")
+        self._set_loaded_records(records, json_path)
+        return True
+
+    def _open_processing_modal(self, message: str):
+        # Global modal "processing" indicator during the blocking OCR call. Defensive: returns
+        # None when there is no real Tk root (e.g. unit-test fixtures), so callers stay testable.
+        try:
+            modal = tk.Toplevel(self)
+        except Exception:
+            return None
+        try:
+            modal.title("處理中")
+            modal.transient(self)
+            modal.resizable(False, False)
+            ttk.Label(modal, text=message, padding=24, justify="center").pack()
+            modal.update_idletasks()
+            modal.grab_set()  # global input lock while recognizing
+            modal.update()  # force a draw before the blocking OCR call
+        except Exception:
+            pass
+        return modal
+
+    def _close_processing_modal(self, modal) -> None:
+        if modal is None:
+            return
+        try:
+            modal.grab_release()
+            modal.destroy()
+        except Exception:
+            pass
 
     def _next_record(self) -> None:
         if not self.records:
@@ -402,11 +611,13 @@ class ReviewApp(tk.Tk):
         try:
             indices = enumerate_cameras()
         except Exception:
+            self._clear_inactive_camera_selection()
             self._show_placeholder_preview()
             return
 
         decision = decide_camera_selection(indices)
         if not decision or decision[0] == "none":
+            self._clear_inactive_camera_selection()
             self._show_placeholder_preview()
             return
         if decision[0] == "auto":
@@ -423,6 +634,7 @@ class ReviewApp(tk.Tk):
 
         decision = decide_camera_selection(indices)
         if not decision or decision[0] == "none":
+            self._clear_inactive_camera_selection()
             self._push_status("找不到攝影機")
             return
         if decision[0] == "auto":
@@ -430,8 +642,10 @@ class ReviewApp(tk.Tk):
             return
 
         index = self._ask_camera(list(decision[1]))
-        if index is not None:
-            self._start_camera(index)
+        if index is None:
+            self._clear_inactive_camera_selection()
+            return
+        self._start_camera(index)
 
     def _ask_camera(self, indices: list[int]) -> int | None:
         if not indices:
@@ -465,31 +679,22 @@ class ReviewApp(tk.Tk):
 
     def _start_camera(self, index: int) -> None:
         self._stop_camera()
-        capture = None
         try:
-            import cv2
-
-            capture = cv2.VideoCapture(index)
-            if not capture.isOpened():
-                try:
-                    capture.release()
-                except Exception:
-                    pass
-                self._push_status(f"無法開啟攝影機 {index}")
-                self._show_placeholder_preview()
-                return
+            capture = open_camera_capture(index)
         except Exception:
-            if capture is not None:
-                try:
-                    capture.release()
-                except Exception:
-                    pass
+            self._clear_inactive_camera_selection()
             self._push_status("攝影機啟動失敗")
+            self._show_placeholder_preview()
+            return
+        if capture is None:
+            self._clear_inactive_camera_selection()
+            self._push_status(f"無法開啟攝影機 {index}")
             self._show_placeholder_preview()
             return
         self._camera_capture = capture
         self._camera_failure_count = 0
-        self._push_status(f"已連接攝影機 {index}")
+        self._camera_index = index
+        self._push_status(f"攝影機已連接（裝置 #{index}）")
         self._camera_after_id = self.after(0, self._poll_camera_frame)
 
     def _poll_camera_frame(self) -> None:
@@ -504,16 +709,25 @@ class ReviewApp(tk.Tk):
                 self._retry_camera_preview("攝影機畫面連續讀取失敗，已停止預覽")
                 return
 
+            if self._preview_rotation:
+                from ocr_from2xlsx.capture import rotate_frame
+
+                frame = rotate_frame(frame, self._preview_rotation)
+            frame = self._zoom_crop(frame)
+
             self.preview.update_idletasks()
             target_width = self.preview.winfo_width()
             target_height = self.preview.winfo_height()
             if target_width > 1 and target_height > 1:
                 height, width = frame.shape[:2]
                 scale = min(target_width / width, target_height / height)
-                if 0 < scale < 1:
+                # Downscale large frames to fit, and upscale a zoomed crop to fill the pane.
+                if scale > 0 and abs(scale - 1.0) > 0.01:
+                    interpolation = cv2.INTER_AREA if scale < 1 else cv2.INTER_LINEAR
                     frame = cv2.resize(
                         frame,
                         (max(1, int(width * scale)), max(1, int(height * scale))),
+                        interpolation=interpolation,
                     )
 
             success, buffer = cv2.imencode(".ppm", frame)
@@ -528,6 +742,7 @@ class ReviewApp(tk.Tk):
             self.preview.image_create("1.0", image=image)
             self.preview.configure(state="disabled")
             self._camera_failure_count = 0
+            self._dismiss_splash()  # first real frame drawn — safe to drop the boot splash
         except Exception:
             self._fail_camera_preview("攝影機預覽失敗，已停止預覽")
             return
@@ -566,6 +781,7 @@ class ReviewApp(tk.Tk):
     def _fail_camera_preview(self, message: str) -> None:
         self._push_status(message)
         self._show_placeholder_preview()
+        self._clear_inactive_camera_selection()
 
     def _show_placeholder_preview(self) -> None:
         self._stop_camera()
@@ -574,6 +790,12 @@ class ReviewApp(tk.Tk):
         self.preview.delete("1.0", tk.END)
         self.preview.insert("1.0", self._PREVIEW_PLACEHOLDER)
         self.preview.configure(state="disabled")
+
+    def _dismiss_splash(self) -> None:
+        if self._splash_closed:
+            return
+        self._splash_closed = True
+        _close_boot_splash()
 
     def _show_source_image(self, record: Record) -> None:
         try:
@@ -612,8 +834,48 @@ class ReviewApp(tk.Tk):
             self._show_placeholder_preview()
 
     def _push_status(self, message: str) -> None:
-        self.status_list.insert(tk.END, message)
-        self.status_list.see(tk.END)
+        log = getattr(self, "_status_log", None)
+        if log is None:
+            log = self._status_log = []
+        log.append(message)
+        if self._status_var is not None:
+            try:
+                self._status_var.set(message)
+            except Exception:
+                pass
+        self._append_status_log_file(message)
+
+    def _append_status_log_file(self, message: str) -> None:
+        path = self._status_log_path
+        if path is None:
+            return
+        try:
+            path = Path(path)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("a", encoding="utf-8") as handle:
+                handle.write(message + "\n")
+        except OSError:
+            pass
+
+    def _rotate_preview(self) -> None:
+        self._preview_rotation = (self._preview_rotation + 90) % 360
+        self._save_preview_rotation()
+        self._push_status(f"預覽旋轉 {self._preview_rotation}°（已記住，下次啟動沿用）")
+
+    def _zoom_preview(self, factor: float) -> None:
+        self._preview_zoom = min(8.0, max(1.0, self._preview_zoom * factor))
+        self._push_status(f"預覽縮放 {self._preview_zoom:.2f}×")
+
+    def _zoom_crop(self, frame: object):
+        # Zoom by cropping a centered region (then the fit-resize scales it up to the pane).
+        if self._preview_zoom <= 1.0:
+            return frame
+        height, width = frame.shape[:2]
+        crop_w = max(1, int(width / self._preview_zoom))
+        crop_h = max(1, int(height / self._preview_zoom))
+        x0 = (width - crop_w) // 2
+        y0 = (height - crop_h) // 2
+        return frame[y0:y0 + crop_h, x0:x0 + crop_w]
 
     def _on_close(self) -> None:
         self._stop_camera()
@@ -622,7 +884,23 @@ class ReviewApp(tk.Tk):
         self.destroy()
 
 
+def _close_boot_splash() -> None:
+    # Close the PyInstaller native splash (frozen exe only); a no-op when not bundled.
+    try:
+        import pyi_splash  # type: ignore
+    except Exception:
+        return
+    try:
+        pyi_splash.close()
+    except Exception:
+        pass
+
+
 def run_app() -> int:
     app = ReviewApp()
+    # Heavy startup (cv2 load, camera enumeration) happens in __init__ while the native
+    # boot splash is still up. The Tk window only maps once mainloop starts, so dismiss the
+    # splash a moment after that — never during __init__, which would leave a blank gap.
+    app.after(500, app._dismiss_splash)
     app.mainloop()
     return 0

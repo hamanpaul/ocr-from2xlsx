@@ -13,6 +13,8 @@ build/
 build/*
 !build/package.py
 !build/ocr-from2xlsx.spec
+!build/build_paddle_plugin.py
+!build/splash.png
 *.egg-info/
 .eggs/
 *.spec

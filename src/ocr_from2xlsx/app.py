@@ -144,6 +144,17 @@ class ReviewApp(tk.Tk):
     _camera_after_id: str | None = None
     _camera_failure_count: int = 0
     _camera_index: int | None = None
+    _preview_rotation: int = 0
+    _status_var: object | None = None
+    _status_log_path: object | None = None
+
+    @staticmethod
+    def _default_status_log_path() -> Path:
+        import os
+
+        home = os.environ.get("OCR_FROM2XLSX_HOME")
+        base = Path(home) if home else Path.home() / ".ocr_from2xlsx"
+        return base / "app.log"
 
     def __init__(self) -> None:
         super().__init__()
@@ -162,6 +173,10 @@ class ReviewApp(tk.Tk):
         self._camera_after_id: str | None = None
         self._camera_failure_count = 0
         self._camera_index = None
+        self._preview_rotation = 0
+        self._status_log: list[str] = []
+        self._status_var = None
+        self._status_log_path = self._default_status_log_path()
         self.fields: dict[str, tk.StringVar] = {}
         self._build_ui()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -187,16 +202,26 @@ class ReviewApp(tk.Tk):
         ttk.Button(toolbar, text="擷取並辨識", command=self._capture_and_recognize).pack(
             side=tk.LEFT, padx=4
         )
+        ttk.Button(toolbar, text="旋轉", command=self._rotate_preview).pack(
+            side=tk.LEFT, padx=4
+        )
 
+        # Footer status bar: shows only the latest status; full history goes to the log file.
+        self._status_var = tk.StringVar(value="就緒")
+        ttk.Label(self, textvariable=self._status_var, anchor="w", relief="sunken").pack(
+            side=tk.BOTTOM, fill=tk.X, padx=8, pady=(0, 8)
+        )
+
+        # Two maximized panes: webcam/source preview on the left, the review form on the right.
         body = ttk.PanedWindow(self, orient=tk.HORIZONTAL)
-        body.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
+        body.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=8, pady=8)
 
-        self.preview = tk.Text(body, width=35, wrap="word")
+        self.preview = tk.Text(body, width=60, wrap="word")
         self._show_placeholder_preview()
-        body.add(self.preview)
+        body.add(self.preview, weight=1)
 
         form = ttk.Frame(body)
-        body.add(form)
+        body.add(form, weight=1)
         form.columnconfigure(0, weight=1)
         form.rowconfigure(0, weight=1)
 
@@ -226,15 +251,6 @@ class ReviewApp(tk.Tk):
             "gender": self.confirm_form.single_choice_fields["gender"],
         }
 
-        status_frame = ttk.Frame(body)
-        body.add(status_frame)
-        status_frame.columnconfigure(0, weight=1)
-        status_frame.rowconfigure(0, weight=1)
-        self.status_list = tk.Listbox(status_frame, width=50)
-        self.status_list.grid(row=0, column=0, sticky="nsew")
-        scrollbar = ttk.Scrollbar(status_frame, orient="vertical", command=self.status_list.yview)
-        scrollbar.grid(row=0, column=1, sticky="ns")
-        self.status_list.configure(yscrollcommand=scrollbar.set)
         self._init_camera()
 
     def _choose_template(self) -> None:
@@ -359,6 +375,10 @@ class ReviewApp(tk.Tk):
         output_dir = Path(selected_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
         image_path = next_output_artifact_path(output_dir, "scan-capture.png")
+        if self._preview_rotation:
+            from ocr_from2xlsx.capture import rotate_frame
+
+            frame = rotate_frame(frame, self._preview_rotation)
         if not cv2.imwrite(str(image_path), frame):
             raise OSError(f"無法寫入擷取影像：{image_path}")
         env_overrides = scan_doc_preprocess_env_overrides()
@@ -610,6 +630,11 @@ class ReviewApp(tk.Tk):
                 self._retry_camera_preview("攝影機畫面連續讀取失敗，已停止預覽")
                 return
 
+            if self._preview_rotation:
+                from ocr_from2xlsx.capture import rotate_frame
+
+                frame = rotate_frame(frame, self._preview_rotation)
+
             self.preview.update_idletasks()
             target_width = self.preview.winfo_width()
             target_height = self.preview.winfo_height()
@@ -719,8 +744,32 @@ class ReviewApp(tk.Tk):
             self._show_placeholder_preview()
 
     def _push_status(self, message: str) -> None:
-        self.status_list.insert(tk.END, message)
-        self.status_list.see(tk.END)
+        log = getattr(self, "_status_log", None)
+        if log is None:
+            log = self._status_log = []
+        log.append(message)
+        if self._status_var is not None:
+            try:
+                self._status_var.set(message)
+            except Exception:
+                pass
+        self._append_status_log_file(message)
+
+    def _append_status_log_file(self, message: str) -> None:
+        path = self._status_log_path
+        if path is None:
+            return
+        try:
+            path = Path(path)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("a", encoding="utf-8") as handle:
+                handle.write(message + "\n")
+        except OSError:
+            pass
+
+    def _rotate_preview(self) -> None:
+        self._preview_rotation = (self._preview_rotation + 90) % 360
+        self._push_status(f"預覽旋轉 {self._preview_rotation}°（套用於擷取與辨識）")
 
     def _on_close(self) -> None:
         self._stop_camera()
@@ -729,7 +778,21 @@ class ReviewApp(tk.Tk):
         self.destroy()
 
 
+def _close_boot_splash() -> None:
+    # Close the PyInstaller native splash (frozen exe only); a no-op when not bundled.
+    try:
+        import pyi_splash  # type: ignore
+    except Exception:
+        return
+    try:
+        pyi_splash.close()
+    except Exception:
+        pass
+
+
 def run_app() -> int:
     app = ReviewApp()
+    app.update_idletasks()
+    _close_boot_splash()
     app.mainloop()
     return 0

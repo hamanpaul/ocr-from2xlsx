@@ -7,6 +7,14 @@
 
 ## [Unreleased]
 
+### Changed
+- app GUI 改版：webcam/來源預覽與審核表單兩大區塊最大化（2-pane），移除右側 status list，改為底部
+  單行狀態列只顯示目前狀態；完整訊息寫入 log 檔（`OCR_FROM2XLSX_HOME` 或 `~/.ocr_from2xlsx/app.log`）。
+- 新增「旋轉」鈕：開程式時把預覽喬正一次（每按一次轉 90°、整個 session 記住），同一旋轉也套用到
+  擷取送辨識的影像；live 預覽不做逐幀方向偵測（CPU 不可行），辨識端另有 `SCAN_DOC_PREPROCESS` 校正。
+- 打包加入 PyInstaller 原生開機 splash（`build/splash.png`），exe 解包期間即顯示載入視窗，app 視窗
+  就緒後自動關閉，避免使用者以為程式沒啟動。
+
 ### Fixed
 - 相機列舉改用 DirectShow 快速探測（`_default_camera_opener`/`_enumeration_backend`）：原本預設 MSMF
   backend 對不存在的 index 會各卡數秒、且 index 存取不穩，造成「選擇攝影機→找不到攝影機」與啟動偵測

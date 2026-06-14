@@ -283,6 +283,20 @@ def measure_sharpness(image: object) -> float:
     return float(cv2.Laplacian(gray, cv2.CV_64F).var())
 
 
+def rotate_frame(frame: object, degrees: int) -> object:
+    """Rotate a camera frame by a multiple of 90 degrees (clockwise). 0 returns it unchanged."""
+    import cv2
+
+    normalized = int(degrees) % 360
+    if normalized == 90:
+        return cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
+    if normalized == 180:
+        return cv2.rotate(frame, cv2.ROTATE_180)
+    if normalized == 270:
+        return cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
+    return frame
+
+
 @dataclass(frozen=True, slots=True)
 class CaptureResult:
     frame: object | None

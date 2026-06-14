@@ -220,9 +220,7 @@ def test_confirm_current_writes_whole_page_and_clears_unconfirmed_name(tmp_path:
         assert first.ocr.warnings == []
         assert set(first.patient_fields.cancers) == {"breast_cancer", "lung_cancer"}
         assert load_corrections(app.correction_store_path)[0].final_value == "王小明"
-        assert any(
-            "scan-0001: written" in status for status in app.status_list.get(0, tk.END)
-        )
+        assert any("scan-0001: written" in status for status in app._status_log)
 
         workbook = load_workbook(working)
         try:
@@ -341,7 +339,10 @@ def app(monkeypatch: pytest.MonkeyPatch) -> ReviewApp:
     review_app.confirm_form = FakeConfirmForm(review_app.fields)
     review_app.preview = FakePreview()
     review_app._preview_image = None
-    review_app.status_list = FakeListbox()
+    review_app._preview_rotation = 0
+    review_app._status_log = []
+    review_app._status_var = None
+    review_app._status_log_path = None
     return review_app
 
 

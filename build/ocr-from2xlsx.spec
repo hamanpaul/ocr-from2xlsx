@@ -21,9 +21,23 @@ a = Analysis(
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=None)
 
+# Native splash shown during PyInstaller bootstrap (before Python/Tk start), so the
+# user sees a loading window immediately instead of thinking the exe did nothing.
+splash = Splash(
+    str(PROJECT_ROOT / "build" / "splash.png"),
+    binaries=a.binaries,
+    datas=a.datas,
+    text_pos=(26, 130),
+    text_size=9,
+    text_color="white",
+    text_default="loading components...",
+)
+
 exe = EXE(
     pyz,
     a.scripts,
+    splash,
+    splash.binaries,
     a.binaries,
     a.zipfiles,
     a.datas,

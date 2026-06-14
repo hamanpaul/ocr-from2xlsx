@@ -21,6 +21,9 @@
   plugin 時改報明確訊息（提示先 `python build/build_paddle_plugin.py`）。
 
 ### Fixed
+- app 關閉視窗後不再殘留 zombie 進程：cv2/DirectShow 會留下非 daemon 擷取執行緒，使 one-file exe
+  關窗後仍存活、佔住相機並鎖住 exe 檔。`_on_close` 完成 teardown 後改為強制結束程序，關窗即乾淨退出
+  （子程序與 one-file bootloader 父程序皆退出，實測關窗 5 秒後殘留 0）。
 - 開機 splash 不再於 `__init__` 初建佔位預覽時就提早關閉（那會在 GUI 視窗 map 前、cv2 載入那十幾秒
   留下空白）；改為視窗 map 後才關，splash 真正覆蓋啟動載入期。
 - 攝影機已連接狀態訊息由「已連接攝影機 0」改為「攝影機已連接（裝置 #0）」，避免把裝置編號 0 誤讀成

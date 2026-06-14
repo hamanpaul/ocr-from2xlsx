@@ -70,6 +70,10 @@ def make_ollama_vlm_fn(
             "model": model,
             "stream": False,
             "format": "json",
+            # Deterministic (greedy) decoding — Ollama defaults to temperature 0.8,
+            # which made the same crop+prompt return correct answers or an empty
+            # template at random. Extraction must be deterministic.
+            "options": {"temperature": 0},
             "messages": [{"role": "user", "content": prompt, "images": [image_b64]}],
         }
         body = post_fn(url, payload)

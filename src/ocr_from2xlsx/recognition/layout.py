@@ -127,3 +127,37 @@ SERVICE_RECORD_V1_LAYOUT: tuple[Section, ...] = (
     Section("cancers_c4", (0.562, 0.735, 0.706, 0.875), options=_cancer_column(4)),
     Section("cancers_c5", (0.706, 0.735, 0.85, 0.875), options=_cancer_column(5)),
 )
+
+
+# --- Section A 服務評估統計 (consultation grid) ----------------------------------
+# Labels/codes are reused from form_layout (the review-UI source of truth) so they
+# never drift. Each consultation category is one full-width row; bands calibrated
+# against filled_upright.png. supplies / referrals / outcomes rows are a follow-up.
+_SECTION_A_BANDS: dict[str, tuple[float, float, float, float]] = {
+    "services.consultation.health_medical": (0.13, 0.138, 1.0, 0.168),
+    "services.consultation.symptom_side_effect": (0.13, 0.168, 1.0, 0.196),
+    "services.consultation.nutrition_diet": (0.13, 0.196, 1.0, 0.216),
+    "services.consultation.psychosocial_emotion": (0.13, 0.216, 1.0, 0.246),
+    "services.consultation.financial_social": (0.13, 0.246, 1.0, 0.278),
+    "services.consultation.care_support": (0.13, 0.288, 1.0, 0.318),
+}
+
+
+def _section_a_sections() -> tuple[Section, ...]:
+    from ocr_from2xlsx.form_layout import service_record_layout
+
+    section_a = next(s for s in service_record_layout().sections if s.id == "A")
+    sections: list[Section] = []
+    for field in section_a.fields:
+        band = _SECTION_A_BANDS.get(field.record_path or "")
+        if band is None:
+            continue
+        options = tuple(
+            Option(f"{field.key}.{opt.code}", opt.label, field.record_path, opt.code, "multi")
+            for opt in field.options
+        )
+        sections.append(Section(field.key.replace(".", "_"), band, options=options))
+    return tuple(sections)
+
+
+SERVICE_RECORD_V1_LAYOUT = SERVICE_RECORD_V1_LAYOUT + _section_a_sections()

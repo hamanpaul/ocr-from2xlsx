@@ -66,6 +66,10 @@ def _find_anchor(lines: list[dict[str, Any]], needles: tuple[str, ...] | str):
     return None
 
 
+def _find_name_anchor(lines: list[dict[str, Any]]) -> dict[str, Any] | None:
+    return _find_anchor(lines, _NAME_ANCHOR)
+
+
 def extract_service_date(lines: list[dict[str, Any]]) -> str | None:
     """Return the service date as ISO YYYY-MM-DD, or None if not found.
 
@@ -133,8 +137,18 @@ def extract_gender(marked_labels) -> str:
     return _resolve_choice(marked_labels or set(), GENDER_BY_LABEL)
 
 
+def extract_name_anchor(lines: list[dict[str, Any]]) -> dict[str, Any] | None:
+    anchor = _find_name_anchor(lines)
+    if anchor is None:
+        return None
+    return {
+        "text": str(anchor.get("text") or ""),
+        "box": [[float(pt[0]), float(pt[1])] for pt in anchor["box"]],
+    }
+
+
 def extract_name_and_mrn(lines: list[dict[str, Any]]) -> tuple[str | None, str | None]:
-    anchor = _find_anchor(lines, _NAME_ANCHOR)
+    anchor = _find_name_anchor(lines)
     if anchor is None:
         return (None, None)
     ax, ay = _center(anchor["box"])
@@ -164,4 +178,5 @@ def extract_fields(lines: list[dict[str, Any]], marked_labels=None) -> dict[str,
         "medical_record_no": mrn,
         "identity": extract_identity(marked_labels),
         "gender": extract_gender(marked_labels),
+        "name_anchor": extract_name_anchor(lines),
     }

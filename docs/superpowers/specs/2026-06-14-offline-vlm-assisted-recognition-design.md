@@ -120,7 +120,13 @@ PR #21（webcam 擷取品質）落地後，對真實文件攝影機（IPEVO DO-C
 3. **單批選項過多**：>~12 個選項 → 模型回空 → `vlm_fn` 把選項**分批 ≤12**多次呼叫合併。
 4. **取樣隨機**：Ollama 預設 temperature 0.8，同輸入時對時空 → 改 **temperature=0 greedy**。
 
-**判決：方法成立，但 `qwen3-vl:2b` 觸頂、不堪可靠預填。** 每修一因就多過幾欄（identity/gender/nationality/age_group/name 都曾正確讀出），但**單次只對約一半**，密集癌別格與手寫病歷號/日期穩定失敗——符合 CheckboxQA 尺寸敏感度（2B≈43%）。**下一步：升 4B/8B 再實測**（config `OCR_VLM_MODEL` 一行），bands/prompt/分批/temperature 等修正可直接沿用。
+**model bake-off**：4B 不比 2B 好（還把 prompt 佔位符 `<id>` 照抄回來）；8B 抓到的欄位不同但更慢（每張 7.75 min）且仍不全——**沒有任何單模型/單次讀全**。
+
+**再修兩因（決定性）**：
+5. **解析過嚴**：2B 常把對的答案回成稍歪結構（裸 option 物件 / top-level list），被丟掉 → `normalize_tile_json` 寬容接收。**這是最大單一改進**。
+6. **crop 前處理**：灰階 + autocontrast 讓輸出更穩。
+
+**最終判決（採用方案）：`qwen3-vl:2b` ＋ 上述六修，單次 ~8/10 欄穩定命中**（identity/gender/nationality/age_group/disease_status/channel/name/**手寫病歷號** 皆正確，每張 ~2.5 min）。使用者決定 **2B＋人工校正**、手寫日期本批放生。**剩餘 follow-up**：(a) 寬版 `cancers` 格需**分欄子切片**（2448px 太寬、解析度被吃）；(b) `service_date`/`source` 偶漏。不升 4B/8B（不划算）。
 
 ## 錯誤處理 / Fallback
 - `llama-server` 未就緒 / 模型缺檔 → 明確提示，**手動輸入照常可用**（預填是加分，不是前提）。

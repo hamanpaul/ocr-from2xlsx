@@ -46,3 +46,18 @@ separate PRs; A is the proven foundation and must land first.
 
 - [ ] All phases complete and quality gates green (Phase B/C outcomes recorded, even if a deferral)
 - [ ] Ready for `/openspec-archive add-webcam-capture-quality`
+
+## Outcome (2026-06-14)
+
+- Phase A landed and **verified end-to-end** (`scan --image` of a sharp 8MP capture → real PaddleOCR
+  plugin → batch JSON: service_date `2025-06-25`, identity `patient`, gender `female`).
+- Phase B kept **opt-in, default OFF** (`document_condition.enhance()` + `SCAN_DOC_PREPROCESS`, the
+  latter only active when doc-ori/UVDoc models are present locally; PDF scan path unchanged).
+- Phase C committed a real captured-form fixture + regression test and documented the ceiling (MRN
+  recoverable, name-crop anchor locatable, this fixture's handwritten name may stay unresolved — not
+  forced).
+- Phase D eval harness (`training/eval_scan.py` + tests) added during salvage; full suite 508 passed,
+  policy 16/0.
+- Implemented over ~8h by a copilot run that exited on premium-request quota before committing;
+  salvaged and finished inline (junk artefacts dropped, work committed in phase-grouped commits,
+  eval harness completed, end-to-end verified).

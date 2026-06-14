@@ -8,6 +8,15 @@
 ## [Unreleased]
 
 ### Added
+- webcam 掃描 Phase A：新增清晰度量測/門檻、原生高解析 still capture、`scan` CLI、still-image OCR bridge，
+  以及 app「擷取並辨識」按鈕，可把相機拍照直接送入既有 JSON review flow。
+- webcam 掃描 Phase B：新增 opt-in `document_condition.enhance()` OpenCV 文件影像增強，以及
+  `SCAN_DOC_PREPROCESS` 控制的 PaddleOCR 文件方向/去扭曲 hook；預設流程仍維持關閉。`PluginOcrBackend`
+  也支援 subprocess env override，供後續只對 scan 路徑做量測後 rollout。
+- webcam 掃描 Phase C：提交實拍 `tests\fixtures\scan\form.png` / `lines.json` fixture 與
+  `tests\test_paddle_field_extract_scan.py` regression test，並讓 `plugins\paddleocr\field_extract.py`
+  額外回傳 `name_anchor` metadata，明確鎖定目前可驗證的上限：MRN 可回收、姓名裁圖錨點可定位，但
+  這張 fixture 的手寫姓名仍可能 unresolved。
 - 一般使用者體驗：裸跑 `ocr-from2xlsx`（或雙擊 exe）直接開啟桌面 app（#18），exe 改為 windowed
   （無 console 視窗；需要 stdout 的 CLI 使用者請以明確子命令執行，例如 `python -m ocr_from2xlsx <subcommand>` 或 `python -m ocr_from2xlsx import-json`）。
 - app 啟動自動偵測攝影機：單支自動連接並即時預覽，多支彈出選擇對話框，無攝影機或未安裝 opencv 時
@@ -67,7 +76,49 @@
 - 新增參考 PDF ground-truth fixture、可選的實機 PaddleOCR 驗證測試，與 `build/build_paddle_plugin.py` 的 bundle 內容回歸測試。
 
 ### Fixed
+- webcam 掃描 Phase A：camera discovery / preview 的輕量 readable probe 現在會在讀到第一張有效 frame 後立刻停止，
+  不再把整個 probe budget 全數耗完；`capture_still()` 也改為先完成 backend 解析度排序，再只對最後實際候選
+  做完整 autofocus warmup，保留慢啟動 fallback 與「通過清晰度優先、否則退回最高解析度失敗 capture」規則的同時，
+  降低 preview 啟動與拍照掃描延遲。
+- webcam 掃描 Phase A/C follow-ups：repo 內 `plugins\paddleocr\plugin.json` 改回 source-runnable
+  `__PYTHON__` placeholder，而 `build\build_paddle_plugin.py` 會在 bundle 時改寫成內嵌
+  `python\Scripts\python.exe`；`scan` CLI / `ReviewApp` 的 webcam 擷取在缺少 OpenCV 時也會明確提示
+  `pip install .[camera]` / `pip install opencv-python`，不再誤報成無攝影機；`capture_still()`
+  則會在已有通過門檻且解析度不低的最佳 backend 後，跳過不可能勝出的後續 backend 重 warmup。
+- webcam 掃描 Phase A/C review follow-ups：source-mode 預設 OCR plugin 解析現在會錨定 package/repo 位置而非啟動
+  cwd；camera discovery / preview 先保留輕量 probe、全失敗後再回退 still-capture startup budget，因此慢啟動
+  webcam 也能最終被辨識；`plugins\paddleocr\name_crop.py` 的實際 saved crop 則會額外裁掉 real scan
+  fixture 上方殘留的 MRN 墨跡。
+- webcam 掃描 Phase A：source / unfrozen 的 scan/app 預設 OCR plugin 解析現在會先尋找
+  `dist\plugins\paddleocr` built bundle，再退回 repo 內 `plugins\paddleocr`；明確
+  `--ocr-plugin-dir` 與 `OCR_PLUGIN_DIR` override 優先序維持不變。
+- webcam 掃描 Phase A：`ocr-from2xlsx scan` 在指定的 `--output` JSON 已存在時，現在會像 app 一樣自動配置同目錄唯一 sibling 檔名，避免重跑時靜默覆寫先前的 prepared JSON。
+- webcam 掃描 Phase A/C blocking defects：`plugins\paddleocr\name_crop.py` 現在會依實際自上方侵入姓名列的
+  MRN bbox 下緣裁掉重疊，同列且位於姓名錨點右側的合法姓名文字不再被誤裁；`capture_still()` 也會先偏好
+  通過清晰度門檻的 backend capture，只有全部 backend 都失敗時才退回解析度最佳的失敗 capture。
+- webcam 掃描 Phase A/C blocking defects：`capture_still()` 現在會在所有可讀 backend 間挑選實際協商解析度最佳的 still；
+  `scan.prepare_records_from_images()` 在輸出目錄發生同名去重時，`source.image_path` 會記錄本地複製後檔名；
+  `plugins\paddleocr\name_crop.py` 的頂部裁切不再把同列、位於姓名錨點右側的手寫姓名誤判成 MRN 侵入而回傳 `None`。
+- webcam 掃描 Phase A/B/C blocking review fixes：`plugins\paddleocr\name_crop.py` 現在會對裁掉 MRN 後的
+  top edge 做安全整數化（避免殘留重疊，且無正高度可裁時回傳 `None`）；`ReviewApp` 的「擷取並辨識」
+  在有未保存人工編輯時會直接阻擋；`capture_still()` 也可直接處理 grayscale frame 的亮度量測。
+- webcam 掃描 Phase C：`plugins\paddleocr\name_crop.py` 現在會在 `姓名/病歷號` 錨點上方的 MRN OCR bbox
+  侵入姓名列時，往下裁掉重疊區；`tests\test_paddle_field_extract_scan.py` 也改為驗證「姓名裁圖不得與
+  MRN bbox 重疊」的性質，而不再凍結錯誤的重疊座標。
+- webcam 掃描 Phase B：`plugins\paddleocr` 的 `SCAN_DOC_PREPROCESS` opt-in 現在只會在 runtime
+  可找到 `PP-LCNet_x1_0_doc_ori` 與 `UVDoc` model dirs 時才啟用文件方向/去扭曲；離線/bundled plugin
+  缺模型時會安全維持關閉，不再要求額外下載才可執行預設流程。
+- webcam 掃描 Phase A：camera enumeration、`ReviewApp._start_camera()` 預覽啟動與 `capture_still()` 現在共用同一套相機開啟策略：backend 不只要 `isOpened()`，還必須真的能讀到 frame；因此遇到「開得起來但完全不出畫面」的 default backend 時，discovery/preview 會像 `capture_still()` 一樣回退到後續可讀取的 backend（例如 `cv2.CAP_DSHOW`），而正常可讀的 default backend 仍維持既有優先順序。
+- webcam 掃描 Phase A：`capture.negotiate_max_resolution()` 改為使用純 property id，不再在 default 非 camera 測試環境硬性 import OpenCV；未安裝 `opencv-python` 也可執行解析度 negotiation regression test。
+- webcam 掃描 Phase A：`scan` CLI 在 webcam still 寫檔失敗（`cv2.imwrite(...) == False`）時，現在會走既有 `error: ...` 路徑並回傳 exit code 2，不再拋出 traceback。
+- webcam 掃描 Phase A：`ReviewApp` 的「擷取並辨識」成功載入 still image 後不再自動重啟 live preview 覆蓋預覽；capture 失敗（無攝影機 / 模糊 / OCR 例外）時也只會在 capture 前 live preview 原本就啟用時才恢復，不再覆蓋既有 record/placeholder preview。`scan --image` 對非 PNG 輸入也會在輸出旁建立 `.png` preview bridge，並把 `source.preprocessed_image_path` 指向該 preview，讓 review app 可持續顯示來源影像。
+- webcam 掃描 Phase A：camera-backed `scan` CLI / `ReviewApp`「擷取並辨識」現在會先配置唯一的 `scan-capture*.png` / `scan-prepared*.json` 路徑，避免重複掃描同一輸出資料夾時覆寫舊批次 artefacts；`capture_still()` 回傳無可用攝影機時，也不會在同一次擷取流程內立刻重啟剛失敗的 live preview。
 - `ReviewApp` 攝影機預覽現在會對連續 `read()` / `imencode()` 失敗採用有限重試，超限後推送狀態、停止攝影機並恢復 placeholder；啟動路徑的 `VideoCapture` 建立 / `isOpened()` 檢查 / failure cleanup 也統一留在 graceful fallback 內，避免 backend 例外直接中斷 UI。
+- webcam 掃描 Phase A：`ReviewApp` 現在只會在已有明確可用的攝影機選擇時執行「擷取並辨識」；取消選擇、啟動失敗、找不到相機或預覽故障都會清掉失效 camera state，不再靜默退回 camera 0 或沿用 stale index。
+- webcam 掃描 Phase A：camera discovery / preview 使用的 readable-backend probe budget 現在與 still capture warmup 對齊，慢啟動但可用的 webcam 不再在 enumerate/preview 階段被過早判定為不可用。
+- webcam 掃描 Phase A：camera discovery / preview 現在改用獨立的輕量 readable probe budget，不再在 app 啟動或「選擇攝影機」同步耗掉 still capture 的 80-frame warmup；`capture_still()` 仍保留較重的 warmup / backend selection 路徑。
+- webcam 掃描 Phase A/B review follow-ups：`capture_still()` 的 backend 解析度 probe 現在會在每次探測後立即釋放 handle，再只重開排序後的候選 backend 做最終 warmup/capture，避免獨占式 camera driver 卡住較高解析度 backend；`SCAN_DOC_PREPROCESS` 也改為預設不再被一般 `PluginOcrBackend` subprocess 繼承，只有 `scan` CLI / app「擷取並辨識」在明確 opt-in 時才會顯式傳遞。
+- webcam 掃描 Phase A blocking follow-up：`capture_still()` 在選定 backend 後重新開啟最終 handle 時，現在會重新協商/確認解析度再進入 warmup；`CaptureResult.resolution` 也改為回報 final handle 的實際 capture resolution，不再沿用 probe-only handle 的舊值。
 - `training.gen_names.render_corpus()` 現在會先做 CJK-aware 字型選擇；手寫字型支援中文時仍優先使用，不支援時會安全退回系統 CJK 字型，避免 Latin handwriting fonts 直接渲染中文姓名。
 - `training.fetch_paddleocr_train` now pins the PP-OCRv5 mobile rec pretrained weights URL to
   PaddleX's official pretrained model host, matching the current PaddleOCR docs.

@@ -6,6 +6,18 @@ All code uses TDD (test first, watch it fail, implement, watch it pass, commit).
 the main `.venv`; real-VLM checks run against a locally served model and are optional-marker gated.
 Per paulsha-conventions: every code commit syncs `CHANGELOG.md [Unreleased]`.
 
+## Status (2026-06-14)
+
+Phases 0–4 **landed** (pure core, backend, real Ollama client + tiler, CLI `--ocr-backend vision`,
+review-form low-confidence flags). Phase 0 measured on `qwen3-vl:2b`: after six fixes (band
+alignment, terse prompts, option chunking, temperature=0, lenient parsing, greyscale crops) it
+pre-fills **~8/10 fields single-pass** (incl. handwritten MRN). Decision: **2B + human correction**,
+opt-in (default backend unchanged). **Remaining / follow-up:** dense `cancers` grid needs narrower
+sub-tiles; `service_date`/`source` occasionally missed; handwriting (date) deferred to human;
+Phase 5 portable llama.cpp packaging not started (uses local Ollama for now); Phase 6 ground-truth
+fixture/test pending; Phase 7 keeps the old plugin as default (vision is opt-in). **Not archived** —
+change remains in progress.
+
 ---
 
 ## Phase 0: De-risk — model + runtime bake-off (manual, on user hardware)

@@ -17,20 +17,18 @@ def _fake_tiler(image_path, layout):
 
 
 def _fake_vlm(crop_path: str, section: Section) -> dict:
-    if section.key == "identity_gender":
-        return {
-            "options": [
-                {"id": "identity.patient", "marked": True, "confidence": 0.9},
-                {"id": "gender.female", "marked": True, "confidence": 0.9},
-            ],
-            "values": [{"id": "service_date", "text": "114.06.25", "confidence": 0.8}],
-        }
+    if section.key == "identity":
+        return {"options": [{"id": "identity.patient", "marked": True}], "values": []}
+    if section.key == "gender_nationality_age":
+        return {"options": [{"id": "gender.female", "marked": True}], "values": []}
+    if section.key == "service_date":
+        return {"options": [], "values": [{"id": "service_date", "text": "114.06.25"}]}
     if section.key == "name_mrn":
         return {
             "options": [],
             "values": [
-                {"id": "name", "text": "葉心安", "confidence": 0.7},
-                {"id": "medical_record_no", "text": "病入6250712919", "confidence": 0.7},
+                {"id": "name", "text": "葉心安"},
+                {"id": "medical_record_no", "text": "病入6250712919"},
             ],
         }
     return {"options": [], "values": []}

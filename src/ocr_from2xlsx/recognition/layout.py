@@ -65,35 +65,41 @@ def _options(prefix: str, field: str, labels: dict[str, str], kind: str = "singl
     return tuple(Option(f"{prefix}.{code}", label, field, code, kind) for code, label in labels.items())
 
 
+# Bands calibrated against output/reg/filled_upright.png (upright 2448x3264) in
+# Phase 0 by cropping + inspecting each region. Section groupings follow the
+# physical layout: the 身分 row spans full width; 性別/國籍/年齡 stack in a narrow
+# left column; 管道/疾病狀態/來源 sit in Section C above the 癌別 grid.
 SERVICE_RECORD_V1_LAYOUT: tuple[Section, ...] = (
     Section(
-        "identity_gender",
-        (0.45, 0.42, 1.0, 0.52),
-        options=(
-            *_options("identity", "identity", IDENTITY_LABELS),
-            *_options("gender", "gender", GENDER_LABELS),
-        ),
+        "service_date",
+        (0.0, 0.02, 0.45, 0.09),
         values=(ValueSpec("service_date", "service_date", "date"),),
     ),
     Section(
+        "identity",
+        (0.0, 0.40, 1.0, 0.47),
+        options=_options("identity", "identity", IDENTITY_LABELS),
+    ),
+    Section(
         "name_mrn",
-        (0.0, 0.40, 0.45, 0.50),
+        (0.13, 0.40, 0.45, 0.47),
         values=(
             ValueSpec("name", "name", "name"),
             ValueSpec("medical_record_no", "medical_record_no", "mrn"),
         ),
     ),
     Section(
-        "patient_demographics",
-        (0.45, 0.52, 1.0, 0.62),
+        "gender_nationality_age",
+        (0.04, 0.47, 0.37, 0.66),
         options=(
+            *_options("gender", "gender", GENDER_LABELS),
             *_options("nationality", "patient_fields.nationality", NATIONALITY_LABELS),
             *_options("age_group", "patient_fields.age_group", AGE_GROUP_LABELS),
         ),
     ),
     Section(
         "patient_status",
-        (0.45, 0.62, 1.0, 0.74),
+        (0.0, 0.655, 0.82, 0.745),
         options=(
             *_options("channel", "patient_fields.channel", CHANNEL_LABELS),
             *_options("disease_status", "patient_fields.disease_status", DISEASE_STATUS_LABELS),
@@ -102,7 +108,7 @@ SERVICE_RECORD_V1_LAYOUT: tuple[Section, ...] = (
     ),
     Section(
         "cancers",
-        (0.45, 0.74, 1.0, 0.98),
+        (0.0, 0.74, 1.0, 0.87),
         options=_options("cancer", "patient_fields.cancers", CANCER_LABELS, kind="multi"),
     ),
 )

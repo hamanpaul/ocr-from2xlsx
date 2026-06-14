@@ -18,7 +18,7 @@ def collect_confidence(
             if not entry.get("marked"):
                 continue
             fid = entry.get("id", "")
-            conf = float(entry.get("confidence") or 0.0)
+            conf = _confidence(entry)
             field_conf[fid] = conf
             if conf < threshold:
                 warnings.append(f"low-confidence:{fid}:{conf:.2f}")
@@ -27,8 +27,14 @@ def collect_confidence(
             if not (entry.get("text") or "").strip():
                 warnings.append(f"empty:{fid}")
                 continue
-            conf = float(entry.get("confidence") or 0.0)
+            conf = _confidence(entry)
             field_conf[fid] = conf
             if conf < threshold:
                 warnings.append(f"low-confidence:{fid}:{conf:.2f}")
     return field_conf, warnings
+
+
+def _confidence(entry: dict[str, Any]) -> float:
+    # The model no longer emits confidence; absent => treat as high (not flagged).
+    raw = entry.get("confidence")
+    return 1.0 if raw is None else float(raw)

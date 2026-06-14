@@ -32,3 +32,11 @@ def test_unmarked_options_are_not_scored():
     field_conf, warnings = collect_confidence(tiles, threshold=0.6)
     assert field_conf == {}
     assert warnings == []
+
+
+def test_absent_confidence_treated_as_high():
+    # The 2B model no longer emits confidence; a marked option without it is not flagged.
+    tiles = [{"options": [{"id": "gender.female", "marked": True}], "values": []}]
+    field_conf, warnings = collect_confidence(tiles, threshold=0.6)
+    assert field_conf["gender.female"] == 1.0
+    assert warnings == []

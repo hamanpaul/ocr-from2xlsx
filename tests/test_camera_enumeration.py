@@ -93,15 +93,12 @@ def test_open_camera_capture_stops_probe_after_first_successful_frame(monkeypatc
     assert capture.read_calls == 2
 
 
-def test_enumerate_cameras_default_opener_falls_back_to_directshow(monkeypatch) -> None:
+def test_enumerate_cameras_default_opener_uses_directshow_on_windows(monkeypatch) -> None:
     calls: list[tuple[int, ...]] = []
-    plain_capture = _FakeProbeCapture(opened=False)
     directshow_capture = _FakeProbeCapture(opened=True, frames=["frame"])
 
     def fake_video_capture(index: int, backend: int | None = None) -> _FakeProbeCapture:
         calls.append((index,) if backend is None else (index, backend))
-        if backend is None:
-            return plain_capture
         return directshow_capture
 
     monkeypatch.setitem(
@@ -114,23 +111,17 @@ def test_enumerate_cameras_default_opener_falls_back_to_directshow(monkeypatch) 
     )
 
     assert enumerate_cameras(max_probe=1) == [0]
-    assert calls == [(0,), (0, 700)]
-    assert plain_capture.released is True
+    # DirectShow only — the slow/flaky MSMF backend is never probed on Windows.
+    assert calls == [(0, 700)]
     assert directshow_capture.released is True
 
 
-def test_enumerate_cameras_default_opener_skips_backend_that_opens_but_cannot_read(
-    monkeypatch,
-) -> None:
+def test_enumerate_cameras_default_opener_requires_readable_frame(monkeypatch) -> None:
     calls: list[tuple[int, ...]] = []
-    plain_capture = _FakeProbeCapture(opened=True)
-    directshow_capture = _FakeProbeCapture(opened=True, frames=["frame"])
 
     def fake_video_capture(index: int, backend: int | None = None) -> _FakeProbeCapture:
         calls.append((index,) if backend is None else (index, backend))
-        if backend is None:
-            return plain_capture
-        return directshow_capture
+        return _FakeProbeCapture(opened=True)  # opens but never yields a frame
 
     monkeypatch.setitem(
         sys.modules,
@@ -141,10 +132,10 @@ def test_enumerate_cameras_default_opener_skips_backend_that_opens_but_cannot_re
         ),
     )
 
-    assert enumerate_cameras(max_probe=1) == [0]
-    assert calls == [(0,), (0, 700)]
-    assert plain_capture.released is True
-    assert directshow_capture.released is True
+    # A camera that opens but never produces a frame is not reported as available.
+    assert enumerate_cameras(max_probe=1) == []
+    # Only DirectShow is attempted (probe budget then startup budget), never MSMF.
+    assert calls == [(0, 700), (0, 700)]
 
 
 def test_enumerate_cameras_default_opener_accepts_slow_start_plain_backend(

@@ -86,6 +86,15 @@ def _camera_backends(cv2: object) -> list[int | None]:
     return backends
 
 
+def _enumeration_backend(cv2: object) -> int | None:
+    # Enumeration probes several indices, so it must be fast AND reliable. On Windows
+    # the default (MSMF) backend blocks for seconds on absent indices and is flaky for
+    # index-based access (cameras reported "not found"); DirectShow opens present
+    # indices quickly and fails absent ones instantly. Probe with DirectShow when it
+    # is available, falling back to the default backend on other platforms.
+    return getattr(cv2, "CAP_DSHOW", None)
+
+
 DEFAULT_CAMERA_PROBE_READS = 8
 DEFAULT_CAMERA_STARTUP_READS = 80
 CAMERA_SUPPORT_INSTALL_GUIDANCE = "pip install .[camera] or pip install opencv-python"
@@ -211,13 +220,23 @@ def open_camera_capture(index: int) -> object | None:
 
 
 def _default_camera_opener(index: int) -> bool:
-    capture = open_camera_capture(index)
-    if capture is None:
-        return False
+    # Fast, reliable enumeration probe: DirectShow only on Windows (the MSMF default
+    # backend blocks for seconds on absent indices). Keeps the two-tier slow-start
+    # budget so cameras slow to produce their first frame are still detected, but never
+    # pays the MSMF cost that made enumeration hang and miss cameras.
     try:
-        return True
-    finally:
-        capture.release()
+        cv2 = _import_cv2()
+    except CameraDependencyError:
+        return False
+    backend = _enumeration_backend(cv2)
+    for attempts in (DEFAULT_CAMERA_PROBE_READS, DEFAULT_CAMERA_STARTUP_READS):
+        capture = _open_backend_camera_capture(cv2, index, backend, read_attempts=attempts)
+        if capture is not None:
+            capture.release()
+            return True
+        if DEFAULT_CAMERA_PROBE_READS >= DEFAULT_CAMERA_STARTUP_READS:
+            break
+    return False
 
 
 def enumerate_cameras(

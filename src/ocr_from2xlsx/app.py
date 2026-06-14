@@ -14,6 +14,8 @@ from ocr_from2xlsx.capture import (
     open_camera_capture,
 )
 from ocr_from2xlsx.confirm_form import apply_form_state, record_to_form_state
+from ocr_from2xlsx.recognition.layout import SERVICE_RECORD_V1_LAYOUT
+from ocr_from2xlsx.recognition.review_flags import flagged_fields
 from ocr_from2xlsx.correction_store import default_correction_store_path
 from ocr_from2xlsx.domain import Record
 from ocr_from2xlsx.form_layout import FormLayout, service_record_layout
@@ -35,6 +37,10 @@ class ConfirmForm:
         self.single_choice_fields: dict[str, tk.StringVar] = {}
         self.single_choice_clear_buttons: dict[str, ttk.Button] = {}
         self.multi_choice_fields: dict[str, dict[str, tk.BooleanVar]] = {}
+        # Field-title labels keyed by record_path, so recognition can flag
+        # low-confidence / unfilled fields for the reviewer.
+        self._field_labels: dict[str, ttk.Label] = {}
+        self._field_titles: dict[str, str] = {}
         self.frame.columnconfigure(0, weight=1)
 
         for section_row, section in enumerate(layout.sections):
@@ -42,9 +48,11 @@ class ConfirmForm:
             group.grid(row=section_row, column=0, sticky="ew", padx=4, pady=4)
             group.columnconfigure(1, weight=1)
             for field_row, field in enumerate(section.fields):
-                ttk.Label(group, text=field.title).grid(
-                    row=field_row, column=0, sticky="nw", padx=(0, 8), pady=3
-                )
+                title_label = ttk.Label(group, text=field.title)
+                title_label.grid(row=field_row, column=0, sticky="nw", padx=(0, 8), pady=3)
+                if field.record_path:
+                    self._field_labels[field.record_path] = title_label
+                    self._field_titles[field.record_path] = field.title
                 if field.kind == "text":
                     var = tk.StringVar()
                     entry = ttk.Entry(group, textvariable=var, width=30)
@@ -112,6 +120,16 @@ class ConfirmForm:
     def _notify_change(self) -> None:
         if self._on_change is not None:
             self._on_change()
+
+    def set_flagged_fields(self, flagged: dict[str, str]) -> None:
+        """Mark fields needing the reviewer's attention (low-confidence / empty /
+        unconfirmed) and clear marks on the rest. ``flagged`` maps record_path -> reason."""
+        for record_path, label in self._field_labels.items():
+            title = self._field_titles[record_path]
+            if record_path in flagged:
+                label.configure(text=f"⚠ {title}", foreground="#b00020")
+            else:
+                label.configure(text=title, foreground="")
 
     def prefill(self, state: dict[str, object]) -> None:
         for key, var in self.text_fields.items():
@@ -565,6 +583,9 @@ class ReviewApp(tk.Tk):
     def _show_record(self, record: Record) -> None:
         self.fields["record_id"].set(record.record_id)
         self.confirm_form.prefill(record_to_form_state(self.layout, record))
+        self.confirm_form.set_flagged_fields(
+            flagged_fields(list(record.ocr.warnings), SERVICE_RECORD_V1_LAYOUT)
+        )
         self._show_source_image(record)
         self.editing = False
 

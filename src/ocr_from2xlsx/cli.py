@@ -33,6 +33,18 @@ def _resolve_template(template_id: str):
     raise ValueError(f"Unsupported template_id: {template_id!r}")
 
 
+def _resolve_scan_backend(args):
+    from ocr_from2xlsx.plugin_backend import PluginOcrBackend, scan_doc_preprocess_env_overrides
+
+    env_overrides = scan_doc_preprocess_env_overrides()
+    if env_overrides is None:
+        return PluginOcrBackend.resolve(explicit_dir=args.ocr_plugin_dir)
+    return PluginOcrBackend.resolve(
+        explicit_dir=args.ocr_plugin_dir,
+        env_overrides=env_overrides,
+    )
+
+
 def _resolve_name_crop_path(record, output_dir: Path) -> str | None:
     crop_value = getattr(record.ocr, "name_crop", None)
     if crop_value:
@@ -132,6 +144,35 @@ def build_parser() -> argparse.ArgumentParser:
     prepare_parser.add_argument(
         "--name-agent-config",
         help="Optional TOML config for the handwritten-name agent; absent or disabled = no-op.",
+    )
+    scan_parser = subparsers.add_parser(
+        "scan",
+        help="Capture a webcam still (or read an image) and recognize it into normalized JSON.",
+        description="Capture a webcam still (or read an image) and recognize it into normalized JSON.",
+    )
+    scan_parser.add_argument("--output", required=True, help="Output JSON path.")
+    scan_parser.add_argument("--image", help="Recognize this image file instead of capturing.")
+    scan_parser.add_argument("--camera", type=int, default=0, help="Webcam index when capturing.")
+    scan_parser.add_argument(
+        "--template-id",
+        default="service_record.v1",
+        help="Form template identifier (currently only service_record.v1 is supported).",
+    )
+    scan_parser.add_argument(
+        "--ocr-backend",
+        choices=["plugin"],
+        default="plugin",
+        help="OCR source: 'plugin' (external portable OCR).",
+    )
+    scan_parser.add_argument(
+        "--ocr-plugin-dir",
+        help="OCR plugin directory (overrides OCR_PLUGIN_DIR; used when --ocr-backend plugin).",
+    )
+    scan_parser.add_argument(
+        "--min-sharpness",
+        type=float,
+        default=None,
+        help="Reject captures below this sharpness (default: capture.DEFAULT_MIN_SHARPNESS).",
     )
     subparsers.add_parser("app", help="Launch the native desktop review UI.")
     parser.set_defaults(command="app")
@@ -276,6 +317,66 @@ def main(argv: list[str] | None = None) -> int:
                                     record.ocr.warnings.append(warning)
             dump_batch(batch, output_path)
         except (
+            OSError,
+            json.JSONDecodeError,
+            ValueError,
+            KeyError,
+            IndexError,
+            TypeError,
+            RuntimeError,
+        ) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        print(output_path)
+        return 0
+    if args.command == "scan":
+        from ocr_from2xlsx.capture import (
+            DEFAULT_MIN_SHARPNESS,
+            CameraDependencyError,
+            capture_still,
+        )
+        from ocr_from2xlsx.json_io import dump_batch
+        from ocr_from2xlsx.ocr_plugin import PluginUnavailableError
+        from ocr_from2xlsx.scan import next_output_artifact_path, prepare_records_from_images
+
+        output_path = Path(args.output)
+        output_dir = output_path.parent
+        output_path = next_output_artifact_path(output_dir, output_path.name)
+        try:
+            if args.image:
+                image_path = Path(args.image)
+            else:
+                min_sharpness = (
+                    DEFAULT_MIN_SHARPNESS
+                    if args.min_sharpness is None
+                    else args.min_sharpness
+                )
+                result = capture_still(args.camera, min_sharpness=min_sharpness)
+                if result is None:
+                    print("scan: no camera available", file=sys.stderr)
+                    return 1
+                if not result.passed:
+                    print(
+                        f"scan: capture too blurry (sharpness {result.sharpness:.1f} < "
+                        f"{min_sharpness:.1f}); improve focus/lighting/distance and retry",
+                        file=sys.stderr,
+                    )
+                    return 1
+                output_dir.mkdir(parents=True, exist_ok=True)
+                image_path = next_output_artifact_path(output_dir, "scan-capture.png")
+                import cv2
+
+                if not cv2.imwrite(str(image_path), result.frame):
+                    raise OSError(f"Failed to write captured image: {image_path}")
+            template = _resolve_template(args.template_id)
+            backend = _resolve_scan_backend(args)
+            batch = prepare_records_from_images([image_path], output_dir, template, backend)
+            dump_batch(batch, output_path)
+        except CameraDependencyError as exc:
+            print(f"scan: {exc}", file=sys.stderr)
+            return 1
+        except (
+            PluginUnavailableError,
             OSError,
             json.JSONDecodeError,
             ValueError,

@@ -9,6 +9,7 @@ from ocr_from2xlsx.capture import (
     JsonRecordSource,
     decide_camera_selection,
     enumerate_cameras,
+    open_camera_capture,
 )
 from ocr_from2xlsx.confirm_form import apply_form_state, record_to_form_state
 from ocr_from2xlsx.correction_store import default_correction_store_path
@@ -142,6 +143,7 @@ class ReviewApp(tk.Tk):
     _camera_capture: object | None = None
     _camera_after_id: str | None = None
     _camera_failure_count: int = 0
+    _camera_index: int | None = None
 
     def __init__(self) -> None:
         super().__init__()
@@ -159,6 +161,7 @@ class ReviewApp(tk.Tk):
         self._camera_capture = None
         self._camera_after_id: str | None = None
         self._camera_failure_count = 0
+        self._camera_index = None
         self.fields: dict[str, tk.StringVar] = {}
         self._build_ui()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -179,6 +182,9 @@ class ReviewApp(tk.Tk):
         )
         ttk.Button(toolbar, text="強制寫入", command=self._force_write).pack(side=tk.LEFT, padx=4)
         ttk.Button(toolbar, text="選擇攝影機", command=self._choose_camera).pack(
+            side=tk.LEFT, padx=4
+        )
+        ttk.Button(toolbar, text="擷取並辨識", command=self._capture_and_recognize).pack(
             side=tk.LEFT, padx=4
         )
 
@@ -254,17 +260,121 @@ class ReviewApp(tk.Tk):
         if not path:
             return
         try:
-            self.records = list(JsonRecordSource(path).records())
+            records = list(JsonRecordSource(path).records())
         except (OSError, ValueError) as exc:
             messagebox.showerror("無法載入 JSON", str(exc))
             return
-        self.loaded_json_path = Path(path)
+        self._set_loaded_records(records, Path(path))
+
+    def _set_loaded_records(self, records: list[Record], json_path: Path) -> None:
+        self.records = records
+        self.loaded_json_path = json_path
         self.correction_store_path = default_correction_store_path(self.loaded_json_path)
         self.current_index = -1
         self.editing = False
         self.written_indices = set()
         self._push_status(f"已載入 {len(self.records)} 筆 JSON")
-        self._next_record()
+        if self.records:
+            self._next_record()
+        else:
+            self._show_placeholder_preview()
+
+    def _has_live_camera_preview(self) -> bool:
+        return self._camera_capture is not None or self._camera_after_id is not None
+
+    def _clear_inactive_camera_selection(self) -> None:
+        if not self._has_live_camera_preview():
+            self._camera_index = None
+
+    def _capture_and_recognize(self) -> None:
+        from ocr_from2xlsx.capture import (
+            DEFAULT_MIN_SHARPNESS,
+            CameraDependencyError,
+            capture_still,
+            require_camera_support,
+        )
+
+        if self.editing:
+            messagebox.showerror("尚未保存", "目前資料已修改，請先使用「確認並寫入」或「強制寫入」。")
+            return
+        restore_camera_index = self._camera_index
+        restore_live_preview = self._has_live_camera_preview()
+        if restore_camera_index is None:
+            try:
+                require_camera_support()
+            except CameraDependencyError as exc:
+                self._clear_inactive_camera_selection()
+                messagebox.showerror("擷取並辨識", str(exc))
+                return
+            self._clear_inactive_camera_selection()
+            messagebox.showwarning("擷取並辨識", "請先選擇可用的攝影機。")
+            return
+        should_restore_preview = restore_live_preview
+        self._stop_camera()
+        try:
+            result = capture_still(
+                restore_camera_index,
+                min_sharpness=DEFAULT_MIN_SHARPNESS,
+            )
+            if result is None:
+                should_restore_preview = False
+                self._clear_inactive_camera_selection()
+                messagebox.showwarning("擷取並辨識", "找不到可用的攝影機。")
+                return
+            if not result.passed:
+                messagebox.showwarning(
+                    "擷取並辨識",
+                    f"畫面太模糊（清晰度 {result.sharpness:.0f}）。請調整對焦/光線/距離後重試。",
+                )
+                return
+            recognized = self._recognize_capture(result.frame)
+            should_restore_preview = restore_live_preview and not recognized
+        except CameraDependencyError as exc:
+            should_restore_preview = False
+            self._clear_inactive_camera_selection()
+            messagebox.showerror("擷取並辨識", str(exc))
+        except Exception as exc:
+            messagebox.showerror("擷取並辨識", f"辨識失敗：{exc}")
+        finally:
+            if should_restore_preview:
+                if restore_camera_index is None:
+                    self._init_camera()
+                else:
+                    self._start_camera(restore_camera_index)
+
+    def _recognize_capture(self, frame: object) -> bool:
+        import cv2
+
+        from ocr_from2xlsx.cli import _resolve_template
+        from ocr_from2xlsx.json_io import dump_batch
+        from ocr_from2xlsx.plugin_backend import (
+            PluginOcrBackend,
+            scan_doc_preprocess_env_overrides,
+        )
+        from ocr_from2xlsx.scan import next_output_artifact_path, prepare_records_from_images
+
+        selected_dir = filedialog.askdirectory(title="選擇辨識輸出資料夾")
+        if not selected_dir:
+            return False
+        output_dir = Path(selected_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        image_path = next_output_artifact_path(output_dir, "scan-capture.png")
+        if not cv2.imwrite(str(image_path), frame):
+            raise OSError(f"無法寫入擷取影像：{image_path}")
+        env_overrides = scan_doc_preprocess_env_overrides()
+        if env_overrides is None:
+            backend = PluginOcrBackend.resolve()
+        else:
+            backend = PluginOcrBackend.resolve(env_overrides=env_overrides)
+        template = _resolve_template("service_record.v1")
+        batch = prepare_records_from_images([image_path], output_dir, template, backend)
+        json_path = next_output_artifact_path(output_dir, "scan-prepared.json")
+        dump_batch(batch, json_path)
+        records = list(JsonRecordSource(json_path).records())
+        if not records:
+            raise ValueError("辨識結果沒有任何紀錄。")
+        self._set_loaded_records(records, json_path)
+        return True
 
     def _next_record(self) -> None:
         if not self.records:
@@ -402,11 +512,13 @@ class ReviewApp(tk.Tk):
         try:
             indices = enumerate_cameras()
         except Exception:
+            self._clear_inactive_camera_selection()
             self._show_placeholder_preview()
             return
 
         decision = decide_camera_selection(indices)
         if not decision or decision[0] == "none":
+            self._clear_inactive_camera_selection()
             self._show_placeholder_preview()
             return
         if decision[0] == "auto":
@@ -423,6 +535,7 @@ class ReviewApp(tk.Tk):
 
         decision = decide_camera_selection(indices)
         if not decision or decision[0] == "none":
+            self._clear_inactive_camera_selection()
             self._push_status("找不到攝影機")
             return
         if decision[0] == "auto":
@@ -430,8 +543,10 @@ class ReviewApp(tk.Tk):
             return
 
         index = self._ask_camera(list(decision[1]))
-        if index is not None:
-            self._start_camera(index)
+        if index is None:
+            self._clear_inactive_camera_selection()
+            return
+        self._start_camera(index)
 
     def _ask_camera(self, indices: list[int]) -> int | None:
         if not indices:
@@ -465,30 +580,21 @@ class ReviewApp(tk.Tk):
 
     def _start_camera(self, index: int) -> None:
         self._stop_camera()
-        capture = None
         try:
-            import cv2
-
-            capture = cv2.VideoCapture(index)
-            if not capture.isOpened():
-                try:
-                    capture.release()
-                except Exception:
-                    pass
-                self._push_status(f"無法開啟攝影機 {index}")
-                self._show_placeholder_preview()
-                return
+            capture = open_camera_capture(index)
         except Exception:
-            if capture is not None:
-                try:
-                    capture.release()
-                except Exception:
-                    pass
+            self._clear_inactive_camera_selection()
             self._push_status("攝影機啟動失敗")
+            self._show_placeholder_preview()
+            return
+        if capture is None:
+            self._clear_inactive_camera_selection()
+            self._push_status(f"無法開啟攝影機 {index}")
             self._show_placeholder_preview()
             return
         self._camera_capture = capture
         self._camera_failure_count = 0
+        self._camera_index = index
         self._push_status(f"已連接攝影機 {index}")
         self._camera_after_id = self.after(0, self._poll_camera_frame)
 
@@ -566,6 +672,7 @@ class ReviewApp(tk.Tk):
     def _fail_camera_preview(self, message: str) -> None:
         self._push_status(message)
         self._show_placeholder_preview()
+        self._clear_inactive_camera_selection()
 
     def _show_placeholder_preview(self) -> None:
         self._stop_camera()

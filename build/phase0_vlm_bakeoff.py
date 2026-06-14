@@ -19,82 +19,28 @@ upright (90 = clockwise quarter turn).
 from __future__ import annotations
 
 import argparse
-import base64
 import json
 import tempfile
 import time
-import urllib.request
 from pathlib import Path
-
-from PIL import Image
+from typing import Any, Callable
 
 from ocr_from2xlsx.domain import SourceInfo
 from ocr_from2xlsx.preprocess import PreparedPage
 from ocr_from2xlsx.recognition.backend import VisionOcrBackend
-from ocr_from2xlsx.recognition.layout import Section, band_pixels
+from ocr_from2xlsx.recognition.layout import Section
+from ocr_from2xlsx.recognition.llama_client import make_ollama_vlm_fn
+from ocr_from2xlsx.recognition.tiling import crop_sections
 
 
-def make_tiler(rotate: int, out_dir: Path):
-    def tiler(image_path: str, layout: tuple[Section, ...]) -> dict[str, str]:
-        image = Image.open(image_path).convert("RGB")
-        if rotate:
-            image = image.rotate(-rotate, expand=True)  # PIL rotates CCW; negate for clockwise
-        width, height = image.size
-        crops: dict[str, str] = {}
-        for section in layout:
-            crop_path = out_dir / f"{section.key}.png"
-            image.crop(band_pixels(section.band, width, height)).save(crop_path)
-            crops[section.key] = str(crop_path)
-        return crops
-
-    return tiler
-
-
-def build_prompt(section: Section) -> str:
-    lines = [
-        "You are reading ONE cropped section of a Taiwanese cancer-resource-center service form.",
-        "For each option id, decide whether its checkbox is marked (a tick, cross, or fill).",
-        "Also read each handwritten value exactly as written.",
-        'Return ONLY JSON: {"options":[{"id":"...","marked":true,"confidence":0.0}],'
-        '"values":[{"id":"...","text":"...","confidence":0.0}]}',
-    ]
-    if section.options:
-        lines.append("Options:")
-        lines.extend(f"  {opt.id} = {opt.label}" for opt in section.options)
-    if section.values:
-        lines.append("Values:")
-        lines.extend(f"  {value.id} ({value.parser})" for value in section.values)
-    return "\n".join(lines)
-
-
-def make_vlm_fn(host: str, model: str, timing: list[tuple[str, float]]):
-    url = host.rstrip("/") + "/api/chat"
-
-    def vlm_fn(crop_path: str, section: Section) -> dict:
-        image_b64 = base64.b64encode(Path(crop_path).read_bytes()).decode("ascii")
-        payload = {
-            "model": model,
-            "stream": False,
-            "format": "json",
-            "messages": [{"role": "user", "content": build_prompt(section), "images": [image_b64]}],
-        }
-        request = urllib.request.Request(
-            url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"}
-        )
+def _timed(vlm_fn: Callable[[str, Section], dict], timing: list[tuple[str, float]]):
+    def wrapped(crop_path: str, section: Section) -> dict[str, Any]:
         start = time.perf_counter()
-        try:
-            with urllib.request.urlopen(request, timeout=600) as response:
-                body = json.loads(response.read().decode("utf-8"))
-            result = json.loads(body.get("message", {}).get("content", "{}"))
-            if not isinstance(result, dict):
-                result = {"options": [], "values": []}
-        except Exception as exc:  # noqa: BLE001 - spike: degrade, never crash the run
-            print(f"  [warn] {section.key}: {exc}")
-            result = {"options": [], "values": []}
+        result = vlm_fn(crop_path, section)
         timing.append((section.key, time.perf_counter() - start))
         return result
 
-    return vlm_fn
+    return wrapped
 
 
 def main() -> int:
@@ -110,8 +56,8 @@ def main() -> int:
     roster = [name for name in args.roster.split(",") if name]
     timing: list[tuple[str, float]] = []
     backend = VisionOcrBackend(
-        vlm_fn=make_vlm_fn(args.host, args.model, timing),
-        tiler=make_tiler(args.rotate, out_dir),
+        vlm_fn=_timed(make_ollama_vlm_fn(args.host, args.model), timing),
+        tiler=lambda image_path, layout: crop_sections(image_path, layout, out_dir, rotate=args.rotate),
         roster=roster,
         model_name=args.model,
     )

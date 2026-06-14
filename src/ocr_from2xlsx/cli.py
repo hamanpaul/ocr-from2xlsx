@@ -33,7 +33,20 @@ def _resolve_template(template_id: str):
     raise ValueError(f"Unsupported template_id: {template_id!r}")
 
 
+def _build_vision_backend():
+    import tempfile
+
+    from ocr_from2xlsx.recognition.factory import build_vision_ocr_backend, vision_config_from_env
+
+    host, model, rotate = vision_config_from_env()
+    work_dir = tempfile.mkdtemp(prefix="vision_crops_")
+    return build_vision_ocr_backend(work_dir=work_dir, host=host, model=model, rotate=rotate)
+
+
 def _resolve_scan_backend(args):
+    if getattr(args, "ocr_backend", "plugin") == "vision":
+        return _build_vision_backend()
+
     from ocr_from2xlsx.plugin_backend import PluginOcrBackend, scan_doc_preprocess_env_overrides
 
     env_overrides = scan_doc_preprocess_env_overrides()
@@ -124,9 +137,10 @@ def build_parser() -> argparse.ArgumentParser:
     prepare_parser.add_argument("--output", required=True, help="Output JSON path.")
     prepare_parser.add_argument(
         "--ocr-backend",
-        choices=["fixture", "plugin"],
+        choices=["fixture", "plugin", "vision"],
         default="fixture",
-        help="OCR source: 'fixture' (default, deterministic) or 'plugin' (external portable OCR).",
+        help="OCR source: 'fixture' (default, deterministic), 'plugin' (external portable OCR), "
+        "or 'vision' (local Vision-LLM pre-fill via Ollama; OCR_VLM_HOST/MODEL/ROTATE).",
     )
     prepare_parser.add_argument(
         "--ocr-fixture",
@@ -160,9 +174,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     scan_parser.add_argument(
         "--ocr-backend",
-        choices=["plugin"],
+        choices=["plugin", "vision"],
         default="plugin",
-        help="OCR source: 'plugin' (external portable OCR).",
+        help="OCR source: 'plugin' (external portable OCR) or 'vision' (local Vision-LLM pre-fill "
+        "via Ollama; configure with OCR_VLM_HOST/MODEL/ROTATE).",
     )
     scan_parser.add_argument(
         "--ocr-plugin-dir",
@@ -266,6 +281,8 @@ def main(argv: list[str] | None = None) -> int:
                 except PluginUnavailableError as exc:
                     print(f"error: {exc}", file=sys.stderr)
                     return 2
+            elif args.ocr_backend == "vision":
+                backend = _build_vision_backend()
             else:
                 from ocr_from2xlsx.ocr_backend import FixtureOcrBackend
 

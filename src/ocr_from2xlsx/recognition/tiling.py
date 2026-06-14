@@ -8,7 +8,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageOps
 
 from ocr_from2xlsx.recognition.layout import Section, band_pixels
 
@@ -18,8 +18,14 @@ def crop_sections(
     layout: tuple[Section, ...],
     out_dir: str | os.PathLike[str],
     rotate: int = 0,
+    enhance: bool = True,
 ) -> dict[str, str]:
-    """Crop each section band; return ``{section_key: crop_path}``."""
+    """Crop each section band; return ``{section_key: crop_path}``.
+
+    With ``enhance`` (default), each crop is converted to greyscale and
+    auto-contrasted — Phase 0 showed this gives the small VLM cleaner, more
+    consistently-structured output on checkbox sections.
+    """
     image = Image.open(image_path).convert("RGB")
     if rotate:
         image = image.rotate(-rotate, expand=True)  # PIL rotates CCW; negate for clockwise
@@ -29,6 +35,9 @@ def crop_sections(
     crops: dict[str, str] = {}
     for section in layout:
         crop_path = out / f"{section.key}.png"
-        image.crop(band_pixels(section.band, width, height)).save(crop_path)
+        crop = image.crop(band_pixels(section.band, width, height))
+        if enhance:
+            crop = ImageOps.autocontrast(ImageOps.grayscale(crop), cutoff=2)
+        crop.save(crop_path)
         crops[section.key] = str(crop_path)
     return crops

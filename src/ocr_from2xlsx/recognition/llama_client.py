@@ -48,6 +48,26 @@ def build_values_prompt(values: tuple[ValueSpec, ...]) -> str:
     return "\n".join(lines)
 
 
+def normalize_tile_json(parsed: Any) -> dict[str, list]:
+    """Coerce the model's reply into ``{"options":[...], "values":[...]}``.
+
+    The 2B model often returns a correct answer in a slightly-off shape — a bare
+    option object, or a top-level list — so accept those rather than dropping them.
+    """
+    if isinstance(parsed, list):
+        options = [x for x in parsed if isinstance(x, dict) and "id" in x and "marked" in x]
+        return {"options": options, "values": []}
+    if not isinstance(parsed, dict):
+        return {"options": [], "values": []}
+    if "options" in parsed or "values" in parsed:
+        return {"options": parsed.get("options") or [], "values": parsed.get("values") or []}
+    if "id" in parsed and "marked" in parsed:
+        return {"options": [parsed], "values": []}
+    if "id" in parsed and "text" in parsed:
+        return {"options": [], "values": [parsed]}
+    return {"options": [], "values": []}
+
+
 def _default_post(url: str, payload: dict[str, Any]) -> dict[str, Any]:
     request = urllib.request.Request(
         url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"}
@@ -78,7 +98,7 @@ def make_ollama_vlm_fn(
         }
         body = post_fn(url, payload)
         parsed = json.loads(body.get("message", {}).get("content", "") or "{}")
-        return parsed if isinstance(parsed, dict) else {}
+        return normalize_tile_json(parsed)
 
     def vlm_fn(crop_path: str, section: Section) -> dict[str, Any]:
         result: dict[str, Any] = {"options": [], "values": []}

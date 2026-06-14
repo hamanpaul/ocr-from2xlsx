@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import sys
 from collections.abc import Callable
 import tkinter as tk
 from pathlib import Path
@@ -878,10 +880,27 @@ class ReviewApp(tk.Tk):
         return frame[y0:y0 + crop_h, x0:x0 + crop_w]
 
     def _on_close(self) -> None:
+        self._dismiss_splash()
         self._stop_camera()
         if self.session:
-            self.session.close()
-        self.destroy()
+            try:
+                self.session.close()
+            except Exception:
+                pass
+        try:
+            self.destroy()
+        except Exception:
+            pass
+        # Force-kill the process: cv2/DirectShow leaves non-daemon capture threads that
+        # otherwise keep this (and the one-file bootloader parent) alive after the window
+        # closes — the zombie that holds the camera and locks the exe. Closing the window
+        # always routes through here (WM_DELETE_WINDOW), so exit hard once teardown is done.
+        try:
+            sys.stdout.flush()
+            sys.stderr.flush()
+        except Exception:
+            pass
+        os._exit(0)
 
 
 def _close_boot_splash() -> None:
@@ -903,4 +922,12 @@ def run_app() -> int:
     # splash a moment after that — never during __init__, which would leave a blank gap.
     app.after(500, app._dismiss_splash)
     app.mainloop()
-    return 0
+    # Force a clean process exit. cv2/DirectShow leaves non-daemon capture threads that
+    # otherwise keep the (frozen one-file) process — and its bootloader parent — alive after
+    # the window closes, holding the camera and the exe file (zombie processes).
+    try:
+        sys.stdout.flush()
+        sys.stderr.flush()
+    except Exception:
+        pass
+    os._exit(0)

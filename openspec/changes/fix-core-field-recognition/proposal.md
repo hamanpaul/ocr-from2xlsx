@@ -2,7 +2,13 @@
 
 **Change ID:** `fix-core-field-recognition`
 **Created:** 2026-05-30
-**Status:** Draft
+**Status:** Superseded by `replace-recognition-with-local-vlm` (2026-06-14)
+
+> The text-anchor + ink-probe hybrid below was empirically found too brittle on real
+> document-camera captures (checkbox marks do not reliably leak into the OCR text layer, and
+> geometric registration cannot reach 6px box precision). Recognition is replaced by a
+> fully-local Vision-LLM pre-fill — see `replace-recognition-with-local-vlm`. This change will
+> NOT be implemented or archived.
 
 ---
 

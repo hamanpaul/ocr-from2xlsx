@@ -97,6 +97,9 @@ class FakeConfirmForm:
                 value = state[key]
                 self._fields[key].set("" if value is None else str(value))
 
+    def set_flagged_fields(self, flagged: dict[str, str]) -> None:
+        self.flagged = dict(flagged)
+
     def collect(self) -> dict[str, object]:
         collected = dict(self.state)
         for key in ("service_date", "identity", "name", "medical_record_no", "gender"):

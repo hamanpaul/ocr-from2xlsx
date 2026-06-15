@@ -33,19 +33,37 @@ def _resolve_template(template_id: str):
     raise ValueError(f"Unsupported template_id: {template_id!r}")
 
 
-def _build_vision_backend():
+def _vision_name_roster(output_path) -> list[str]:
+    """Confirmed names from previously-served patients, used to snap a recognised name."""
+    if not output_path:
+        return []
+    from ocr_from2xlsx.correction_store import default_correction_store_path, roster_from_store
+
+    try:
+        return roster_from_store(default_correction_store_path(output_path))
+    except (OSError, ValueError):
+        return []
+
+
+def _build_vision_backend(output_path=None):
     import tempfile
 
     from ocr_from2xlsx.recognition.factory import build_vision_ocr_backend, vision_config_from_env
 
     host, model, rotate = vision_config_from_env()
     work_dir = tempfile.mkdtemp(prefix="vision_crops_")
-    return build_vision_ocr_backend(work_dir=work_dir, host=host, model=model, rotate=rotate)
+    return build_vision_ocr_backend(
+        work_dir=work_dir,
+        host=host,
+        model=model,
+        rotate=rotate,
+        roster=_vision_name_roster(output_path),
+    )
 
 
 def _resolve_scan_backend(args):
     if getattr(args, "ocr_backend", "plugin") == "vision":
-        return _build_vision_backend()
+        return _build_vision_backend(getattr(args, "output", None))
 
     from ocr_from2xlsx.plugin_backend import PluginOcrBackend, scan_doc_preprocess_env_overrides
 
@@ -282,7 +300,7 @@ def main(argv: list[str] | None = None) -> int:
                     print(f"error: {exc}", file=sys.stderr)
                     return 2
             elif args.ocr_backend == "vision":
-                backend = _build_vision_backend()
+                backend = _build_vision_backend(args.output)
             else:
                 from ocr_from2xlsx.ocr_backend import FixtureOcrBackend
 

@@ -44,6 +44,8 @@
   重用 `form_layout`（DRY），mapper 支援三層 dotted（`services.consultation.<category>`），並把模型回的裸編號
   （如 `"1"`）依 label 開頭數字 remap 回完整 code。諮詢類別實測讀出 心理情緒支持/失落與悲傷關懷/照顧者支持 等；
   院內/院外轉介為又寬又薄的 10 項密集列，2B 偏弱、主要交人工核對（同癌別格病灶，子切片回報低不划算）。
+- 辨識：把「已服務病人確認名單」接進 vision backend——CLI `--ocr-backend vision` 現會從 `name_corrections.jsonl`
+  載入 roster，VLM 讀到的手寫姓名自動 snap 到既有病人（先前 roster 是空的、形同未比對）。
 - webcam 掃描 Phase A：新增清晰度量測/門檻、原生高解析 still capture、`scan` CLI、still-image OCR bridge，
   以及 app「擷取並辨識」按鈕，可把相機拍照直接送入既有 JSON review flow。
 - webcam 掃描 Phase B：新增 opt-in `document_condition.enhance()` OpenCV 文件影像增強，以及

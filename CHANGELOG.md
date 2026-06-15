@@ -8,6 +8,8 @@
 ## [Unreleased]
 
 ### Changed
+- (#31) 審核表單單選欄改用 checkbox：原本的 radio + 「清除」按鈕改為**互斥 checkbox**——點選一項即選取（自動取消
+  其他），再點已選的即清除，因此不再需要清除按鈕。資料仍是單一值（StringVar 不變），collect/寫回語意不變。
 - app GUI 改版：webcam/來源預覽與審核表單兩大區塊最大化（2-pane），移除右側 status list，改為底部
   單行狀態列只顯示目前狀態；完整訊息寫入 log 檔（`OCR_FROM2XLSX_HOME` 或 `~/.ocr_from2xlsx/app.log`）。
 - 新增「旋轉」鈕：開程式時把預覽喬正一次（每按一次轉 90°、整個 session 記住），同一旋轉也套用到

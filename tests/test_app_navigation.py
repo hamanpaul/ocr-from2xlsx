@@ -310,9 +310,29 @@ def test_confirm_form_single_choice_can_clear_to_unselected() -> None:
         form.prefill({"nationality": "local"})
         assert form.collect()["nationality"] == "local"
 
-        form.single_choice_clear_buttons["nationality"].invoke()
+        # No "清除" button anymore (#31): single choice is checkboxes that clear by
+        # toggling the selected one off; the field can return to unselected.
+        assert not hasattr(form, "single_choice_clear_buttons")
+        form.single_choice_fields["nationality"].set("")
 
         assert form.collect()["nationality"] == ""
+    finally:
+        root.destroy()
+
+
+def test_single_choice_checkboxes_reflect_selection() -> None:
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        pytest.skip(f"no display available for Tk: {exc}")
+
+    root.withdraw()
+    try:
+        form = app_module.ConfirmForm(root, service_record_layout())
+        form.prefill({"identity": "patient"})
+        option_vars = form._single_choice_option_vars["identity"]
+        assert option_vars["patient"].get() is True
+        assert all(not var.get() for code, var in option_vars.items() if code != "patient")
     finally:
         root.destroy()
 

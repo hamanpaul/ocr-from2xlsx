@@ -65,6 +65,16 @@ def server_is_up(host: str, timeout: float = 1.0) -> bool:
         return False
 
 
+def vision_runtime_available(host: str) -> bool:
+    """True when vision recognition can run: a server is already up, or a bundled
+    runtime is resolvable (so the app can launch one). Lets the shipped exe default
+    to vision without an env flag."""
+    if server_is_up(host):
+        return True
+    exe, _ = resolve_ollama()
+    return exe is not None
+
+
 def ensure_server(host: str, *, wait_seconds: float = 30.0) -> subprocess.Popen | None:
     """Ensure a server answers at ``host``; launch the bundled one if needed.
 

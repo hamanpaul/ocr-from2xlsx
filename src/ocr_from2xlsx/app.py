@@ -446,12 +446,23 @@ class ReviewApp(tk.Tk):
         )
         try:
             try:
-                if os.environ.get("OCR_BACKEND", "").strip().lower() == "vision":
-                    from ocr_from2xlsx.cli import _build_vision_backend
-                    from ocr_from2xlsx.recognition.factory import vision_config_from_env
-                    from ocr_from2xlsx.recognition.vlm_server import ensure_server
+                from ocr_from2xlsx.recognition.factory import vision_config_from_env
+                from ocr_from2xlsx.recognition.vlm_server import (
+                    ensure_server,
+                    vision_runtime_available,
+                )
 
-                    ensure_server(vision_config_from_env()[0])
+                vlm_host = vision_config_from_env()[0]
+                backend_choice = os.environ.get("OCR_BACKEND", "").strip().lower()
+                # Default to vision whenever a bundled/running VLM is available (the
+                # shipped exe carries dist/vlm); the old plugin is the fallback.
+                use_vision = backend_choice == "vision" or (
+                    backend_choice != "plugin" and vision_runtime_available(vlm_host)
+                )
+                if use_vision:
+                    from ocr_from2xlsx.cli import _build_vision_backend
+
+                    ensure_server(vlm_host)
                     backend = _build_vision_backend(image_path)
                 elif env_overrides is None:
                     backend = PluginOcrBackend.resolve()

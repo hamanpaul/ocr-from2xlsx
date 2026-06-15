@@ -33,3 +33,28 @@ def test_resolve_returns_none_when_absent(tmp_path, monkeypatch):
     got_exe, got_models = resolve_ollama(roots=[tmp_path / "nope"])
     assert got_exe is None
     assert got_models is None
+
+
+def test_vision_available_when_server_up(monkeypatch):
+    from ocr_from2xlsx.recognition import vlm_server
+
+    monkeypatch.setattr(vlm_server, "server_is_up", lambda host, timeout=1.0: True)
+    assert vlm_server.vision_runtime_available("http://x") is True
+
+
+def test_vision_available_via_bundle(tmp_path, monkeypatch):
+    from ocr_from2xlsx.recognition import vlm_server
+
+    monkeypatch.setattr(vlm_server, "server_is_up", lambda host, timeout=1.0: False)
+    vlm, exe = _fake_bundle(tmp_path)
+    monkeypatch.setenv("OCR_VLM_OLLAMA_EXE", str(exe))
+    monkeypatch.setenv("OCR_VLM_OLLAMA_MODELS", str(vlm / "models"))
+    assert vlm_server.vision_runtime_available("http://x") is True
+
+
+def test_vision_unavailable_without_server_or_bundle(monkeypatch):
+    from ocr_from2xlsx.recognition import vlm_server
+
+    monkeypatch.setattr(vlm_server, "server_is_up", lambda host, timeout=1.0: False)
+    monkeypatch.setattr(vlm_server, "resolve_ollama", lambda roots=None: (None, None))
+    assert vlm_server.vision_runtime_available("http://x") is False

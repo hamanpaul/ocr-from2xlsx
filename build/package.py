@@ -54,10 +54,17 @@ def _normalize_help_output(output: str) -> str:
 
 def main() -> int:
     try:
-        _clean_dir(DIST_DIR)
+        _clean_dir(DIST_DIR, keep={"vlm"})  # keep the portable model bundle if present
         _clean_dir(
             BUILD_DIR,
-            keep={"package.py", "ocr-from2xlsx.spec", "build_paddle_plugin.py", "splash.png"},
+            keep={
+                "package.py",
+                "ocr-from2xlsx.spec",
+                "build_paddle_plugin.py",
+                "build_vlm_runtime.py",
+                "phase0_vlm_bakeoff.py",
+                "splash.png",
+            },
         )
         _clean_egg_info(ROOT)
         subprocess.run(

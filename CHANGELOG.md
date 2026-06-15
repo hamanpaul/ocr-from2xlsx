@@ -21,6 +21,9 @@
   plugin 時改報明確訊息（提示先 `python build/build_paddle_plugin.py`）。
 
 ### Fixed
+- (#29) 「確認並寫入」被 validation 擋下時不再靜默：原本缺必填（vision 預填常缺 service_date/來源等）會回
+  `blocked` 但只在狀態列一行帶過，使用者誤以為沒寫入。現在 blocked 會跳明確對話框列出缺/錯欄位並提示
+  「補齊後再確認，或用『強制寫入』」；成功寫入則於狀態列顯示工作檔路徑與列號。
 - app 關閉視窗後不再殘留 zombie 進程：cv2/DirectShow 會留下非 daemon 擷取執行緒，使 one-file exe
   關窗後仍存活、佔住相機並鎖住 exe 檔。`_on_close` 完成 teardown 後改為強制結束程序，關窗即乾淨退出
   （子程序與 one-file bootloader 父程序皆退出，實測關窗 5 秒後殘留 0）。

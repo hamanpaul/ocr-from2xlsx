@@ -565,12 +565,20 @@ class ReviewApp(tk.Tk):
             return
         self._push_status(f"{result.record_id}: {result.status} row={result.row_number} blockers={result.blockers}")
         if result.status == "blocked":
+            messagebox.showwarning(
+                "未寫入工作檔",
+                "此筆未寫入，因為有缺少或不合法的必填欄位：\n\n"
+                + "\n".join(result.blockers)
+                + "\n\n請在右側補齊後再按「確認並寫入」，或改用「強制寫入」。",
+            )
             return
         if result.status in {"forced", "written"}:
             if human_confirmed:
                 self._persist_confirmed_name_after_write(record)
             self.written_indices.add(self.current_index)
             self.editing = False
+            working = getattr(getattr(self.session, "writer", None), "working_path", "")
+            self._push_status(f"已寫入工作檔 {working} 第 {result.row_number} 列")
             self._next_record()
 
     def _force_write(self) -> None:

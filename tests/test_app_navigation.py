@@ -1267,6 +1267,33 @@ def test_confirm_current_blocked_does_not_advance_or_persist_unconfirmed_name(
     assert load_corrections(app.correction_store_path) == []
 
 
+def test_confirm_current_blocked_warns_user_with_blockers(
+    app: ReviewApp, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    record = make_record("scan-0001")
+    app.records = [record]
+    app.current_index = 0
+    app.correction_store_path = tmp_path / "name_corrections.jsonl"
+    app.session = StubSession(
+        AcceptResult(
+            record_id=record.record_id,
+            status="blocked",
+            row_number=None,
+            blockers=["service_date.invalid", "patient.source.required"],
+            warnings=[],
+        )
+    )
+    app._show_record(record)
+    shown: list = []
+    monkeypatch.setattr("ocr_from2xlsx.app.messagebox.showwarning", lambda *a, **k: shown.append(a))
+
+    ReviewApp._confirm_current(app)
+
+    assert app.written_indices == set()
+    assert shown, "a blocked confirm must warn the user it was not written"
+    assert any("service_date.invalid" in str(a) for a in shown)
+
+
 def test_force_write_failure_does_not_persist_unconfirmed_name(app: ReviewApp, tmp_path: Path) -> None:
     record = make_record("scan-0001")
     record.ocr.warnings = ["name.unconfirmed"]

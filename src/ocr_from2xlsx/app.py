@@ -23,6 +23,19 @@ from ocr_from2xlsx.name_suggestion import NAME_UNCONFIRMED, confirm_name
 from ocr_from2xlsx.session import ImportSession
 
 
+def _wheel_scroll_units(delta: int) -> int:
+    """Map a Windows mouse-wheel delta to canvas scroll units (one notch = 120).
+
+    Wheel up (positive delta) scrolls toward the top (negative units). Small
+    touchpad deltas still move one unit so the wheel always responds."""
+    if not delta:
+        return 0
+    units = int(-delta / 120)
+    if units == 0:
+        return -1 if delta > 0 else 1
+    return units
+
+
 class ConfirmForm:
     def __init__(
         self,
@@ -301,6 +314,15 @@ class ReviewApp(tk.Tk):
             lambda event: canvas.itemconfigure(canvas_window, width=event.width),
         )
 
+        def _on_mousewheel(event: "tk.Event") -> str:
+            canvas.yview_scroll(_wheel_scroll_units(int(event.delta)), "units")
+            return "break"
+
+        # Bind the wheel on the canvas AND every form widget: child widgets cover the
+        # canvas, so without per-widget binds the wheel does nothing over the options.
+        canvas.bind("<MouseWheel>", _on_mousewheel)
+        self._bind_mousewheel_recursive(self.confirm_form.frame, _on_mousewheel)
+
         self.fields = {
             "record_id": tk.StringVar(),
             "service_date": self.confirm_form.text_fields["service_date"],
@@ -311,6 +333,12 @@ class ReviewApp(tk.Tk):
         }
 
         self._init_camera()
+
+    @staticmethod
+    def _bind_mousewheel_recursive(widget: tk.Misc, handler) -> None:
+        widget.bind("<MouseWheel>", handler)
+        for child in widget.winfo_children():
+            ReviewApp._bind_mousewheel_recursive(child, handler)
 
     def _choose_template(self) -> None:
         template = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx")])

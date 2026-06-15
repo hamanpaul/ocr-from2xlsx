@@ -21,6 +21,8 @@
   plugin 時改報明確訊息（提示先 `python build/build_paddle_plugin.py`）。
 
 ### Fixed
+- (#32) 右側審核選項區現可用滑鼠滾輪上下捲動：原本 canvas 只綁了捲軸、沒綁 `<MouseWheel>`，且表單子
+  widget 蓋住 canvas，導致滑鼠在選項上滾動無效。現在 wheel handler 遞迴綁到表單每個 widget，滑鼠在哪都能捲。
 - (#29) 「確認並寫入」被 validation 擋下時不再靜默：原本缺必填（vision 預填常缺 service_date/來源等）會回
   `blocked` 但只在狀態列一行帶過，使用者誤以為沒寫入。現在 blocked 會跳明確對話框列出缺/錯欄位並提示
   「補齊後再確認，或用『強制寫入』」；成功寫入則於狀態列顯示工作檔路徑與列號。

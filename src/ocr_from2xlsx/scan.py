@@ -132,3 +132,52 @@ def prepare_records_from_images(
         ),
         records=records,
     )
+
+
+_BATCH_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff"}
+
+
+def prepare_records_from_folder(
+    folder: Path | str,
+    output_dir: Path | str,
+    template: FormTemplate,
+    backend: OcrBackend,
+    created_at: str | None = None,
+    on_progress: "Callable[[int, int, str], None] | None" = None,
+) -> Batch:
+    """Batch-recognise every image/PDF in ``folder`` into one normalized Batch.
+
+    Routes each file through the existing image / PDF preparers, merges the
+    records with unique ids, and reports progress via ``on_progress(done, total,
+    name)``. The per-record source PNGs the preparers emit let the review UI show
+    the original page on the left.
+    """
+    from ocr_from2xlsx.prepare_records import prepare_records_from_paths
+
+    folder = Path(folder)
+    created_at = created_at or datetime.now().astimezone().isoformat(timespec="seconds")
+    files = sorted(
+        path
+        for path in folder.iterdir()
+        if path.is_file() and path.suffix.lower() in _BATCH_IMAGE_SUFFIXES | {".pdf"}
+    )
+    records: list = []
+    total = len(files)
+    for index, path in enumerate(files, start=1):
+        if on_progress is not None:
+            on_progress(index, total, path.name)
+        if path.suffix.lower() == ".pdf":
+            sub = prepare_records_from_paths([path], output_dir, template, backend, created_at=created_at)
+        else:
+            sub = prepare_records_from_images([path], output_dir, template, backend, created_at=created_at)
+        records.extend(sub.records)
+    for index, record in enumerate(records, start=1):
+        record.record_id = f"batch-{index:04d}"
+    return Batch(
+        source_batch=SourceBatch(
+            created_at=created_at,
+            source_type="batch_folder",
+            template_name=template.template_id,
+        ),
+        records=records,
+    )

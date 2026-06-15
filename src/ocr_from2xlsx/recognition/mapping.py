@@ -41,17 +41,23 @@ def empty_record_fields() -> dict[str, Any]:
     }
 
 
+def _resolve_parent(fields: dict[str, Any], dotted: str) -> tuple[dict[str, Any], str]:
+    """Walk a dotted path (any depth), creating intermediate dicts; return (parent, leaf)."""
+    parts = dotted.split(".")
+    node = fields
+    for part in parts[:-1]:
+        node = node.setdefault(part, {})
+    return node, parts[-1]
+
+
 def _set_dotted(fields: dict[str, Any], dotted: str, value: Any) -> None:
-    head, _, tail = dotted.partition(".")
-    if not tail:
-        fields[head] = value
-        return
-    fields.setdefault(head, {})[tail] = value
+    parent, leaf = _resolve_parent(fields, dotted)
+    parent[leaf] = value
 
 
 def _append_dotted(fields: dict[str, Any], dotted: str, value: Any) -> None:
-    head, _, tail = dotted.partition(".")
-    target = fields[head][tail] if tail else fields[head]
+    parent, leaf = _resolve_parent(fields, dotted)
+    target = parent.setdefault(leaf, [])
     if value not in target:
         target.append(value)
 

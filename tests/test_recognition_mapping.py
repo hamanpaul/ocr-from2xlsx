@@ -72,6 +72,33 @@ def test_empty_value_text_is_skipped():
     assert fields["service_date"] == ""
 
 
+def test_nested_consultation_three_level_path():
+    from ocr_from2xlsx.recognition.layout import Option, Section
+
+    layout = (
+        Section(
+            "svc",
+            (0.0, 0.0, 1.0, 1.0),
+            options=(
+                Option(
+                    "hm.screening",
+                    "1.癌症篩檢與預防",
+                    "services.consultation.health_medical",
+                    "screening_prevention",
+                    "multi",
+                ),
+            ),
+        ),
+    )
+    fields = empty_record_fields()
+    apply_tile_result(
+        fields,
+        layout,
+        {"options": [{"id": "hm.screening", "marked": True}], "values": []},
+    )
+    assert fields["services"]["consultation"]["health_medical"] == ["screening_prevention"]
+
+
 def test_parse_roc_date_variants():
     assert parse_roc_date("114.06.25") == "2025-06-25"
     assert parse_roc_date("114、06、25") == "2025-06-25"

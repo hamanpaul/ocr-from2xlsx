@@ -65,6 +65,19 @@ def _options(prefix: str, field: str, labels: dict[str, str], kind: str = "singl
     return tuple(Option(f"{prefix}.{code}", label, field, code, kind) for code, label in labels.items())
 
 
+_CANCER_ITEMS = list(CANCER_LABELS.items())  # ordered by code, 1..25
+
+
+def _cancer_column(column: int) -> tuple[Option, ...]:
+    # The 癌別 grid is a row-major 5x5: column c (1..5) holds cancers c, c+5, c+10, c+15, c+20.
+    # Splitting the full-width grid into per-column crops gives the small VLM enough resolution.
+    indices = [column - 1 + 5 * row for row in range(5)]
+    return tuple(
+        Option(f"cancer.{code}", label, "patient_fields.cancers", code, "multi")
+        for code, label in (_CANCER_ITEMS[i] for i in indices)
+    )
+
+
 # Bands calibrated against output/reg/filled_upright.png (upright 2448x3264) in
 # Phase 0 by cropping + inspecting each region. Section groupings follow the
 # physical layout: the 身分 row spans full width; 性別/國籍/年齡 stack in a narrow
@@ -106,9 +119,49 @@ SERVICE_RECORD_V1_LAYOUT: tuple[Section, ...] = (
             *_options("source", "patient_fields.source", SOURCE_LABELS),
         ),
     ),
-    Section(
-        "cancers",
-        (0.0, 0.74, 1.0, 0.87),
-        options=_options("cancer", "patient_fields.cancers", CANCER_LABELS, kind="multi"),
-    ),
+    # 癌別 grid split into 5 per-column crops (row-major 5x5) — the full-width
+    # crop was too wide for the 2B model; narrow columns restore the resolution.
+    Section("cancers_c1", (0.13, 0.735, 0.274, 0.875), options=_cancer_column(1)),
+    Section("cancers_c2", (0.274, 0.735, 0.418, 0.875), options=_cancer_column(2)),
+    Section("cancers_c3", (0.418, 0.735, 0.562, 0.875), options=_cancer_column(3)),
+    Section("cancers_c4", (0.562, 0.735, 0.706, 0.875), options=_cancer_column(4)),
+    Section("cancers_c5", (0.706, 0.735, 0.85, 0.875), options=_cancer_column(5)),
 )
+
+
+# --- Section A 服務評估統計 (consultation grid) ----------------------------------
+# Labels/codes are reused from form_layout (the review-UI source of truth) so they
+# never drift. Each consultation category is one full-width row; bands calibrated
+# against filled_upright.png. supplies / referrals / outcomes rows are a follow-up.
+_SECTION_A_BANDS: dict[str, tuple[float, float, float, float]] = {
+    "services.consultation.health_medical": (0.13, 0.138, 1.0, 0.168),
+    "services.consultation.symptom_side_effect": (0.13, 0.168, 1.0, 0.196),
+    "services.consultation.nutrition_diet": (0.13, 0.196, 1.0, 0.216),
+    "services.consultation.psychosocial_emotion": (0.13, 0.216, 1.0, 0.246),
+    "services.consultation.financial_social": (0.13, 0.246, 1.0, 0.278),
+    "services.consultation.care_support": (0.13, 0.288, 1.0, 0.318),
+    "services.supplies": (0.13, 0.322, 1.0, 0.344),
+    "services.internal_referrals": (0.13, 0.344, 1.0, 0.376),
+    "services.external_referrals": (0.13, 0.376, 1.0, 0.399),
+    "services.referral_outcomes": (0.13, 0.399, 1.0, 0.420),
+}
+
+
+def _section_a_sections() -> tuple[Section, ...]:
+    from ocr_from2xlsx.form_layout import service_record_layout
+
+    section_a = next(s for s in service_record_layout().sections if s.id == "A")
+    sections: list[Section] = []
+    for field in section_a.fields:
+        band = _SECTION_A_BANDS.get(field.record_path or "")
+        if band is None:
+            continue
+        options = tuple(
+            Option(f"{field.key}.{opt.code}", opt.label, field.record_path, opt.code, "multi")
+            for opt in field.options
+        )
+        sections.append(Section(field.key.replace(".", "_"), band, options=options))
+    return tuple(sections)
+
+
+SERVICE_RECORD_V1_LAYOUT = SERVICE_RECORD_V1_LAYOUT + _section_a_sections()

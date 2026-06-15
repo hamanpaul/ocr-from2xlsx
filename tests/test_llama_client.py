@@ -77,6 +77,57 @@ def test_vlm_fn_chunks_large_option_lists(tmp_path):
     assert max(calls["sizes"]) <= MAX_OPTIONS_PER_CALL
 
 
+def test_vlm_fn_rejects_all_marked_hallucination(tmp_path):
+    # the 2B model sometimes marks every option in a column — almost certainly a
+    # hallucination, so a tile with all options marked (>=3) is dropped.
+    options = tuple(
+        Option(f"cancer.{i}", f"癌{i}", "patient_fields.cancers", f"c{i}", "multi") for i in range(5)
+    )
+    section = Section("cancers_c", (0.0, 0.0, 1.0, 1.0), options=options)
+
+    def all_marked(url, payload):
+        marked = [{"id": o.id, "marked": True} for o in options]
+        return {"message": {"content": __import__("json").dumps({"options": marked})}}
+
+    vlm = make_ollama_vlm_fn("http://host", "m", post_fn=all_marked)
+    result = vlm(_crop(tmp_path), section)
+    assert [o for o in result["options"] if o.get("marked")] == []
+
+
+def test_vlm_fn_keeps_partial_marks(tmp_path):
+    options = tuple(
+        Option(f"cancer.{i}", f"癌{i}", "patient_fields.cancers", f"c{i}", "multi") for i in range(5)
+    )
+    section = Section("cancers_c", (0.0, 0.0, 1.0, 1.0), options=options)
+
+    def one_marked(url, payload):
+        return {"message": {"content": '{"options":[{"id":"cancer.2","marked":true}]}'}}
+
+    vlm = make_ollama_vlm_fn("http://host", "m", post_fn=one_marked)
+    result = vlm(_crop(tmp_path), section)
+    assert [o["id"] for o in result["options"] if o.get("marked")] == ["cancer.2"]
+
+
+def test_vlm_fn_remaps_bare_number_ids(tmp_path):
+    # the model sometimes returns just the label's leading number ("1") instead of
+    # the full option id; remap it back via the label number.
+    section = Section(
+        "svc",
+        (0.0, 0.0, 1.0, 1.0),
+        options=(
+            Option("c.support", "1.心理情緒支持", "services.consultation.psy", "emotional_support", "multi"),
+            Option("c.adapt", "2.疾病認知與適應", "services.consultation.psy", "disease_adaptation", "multi"),
+        ),
+    )
+
+    def bare(url, payload):
+        return {"message": {"content": '{"options":[{"id":"1","marked":true}]}'}}
+
+    vlm = make_ollama_vlm_fn("http://host", "m", post_fn=bare)
+    result = vlm(_crop(tmp_path), section)
+    assert [o["id"] for o in result["options"] if o.get("marked")] == ["c.support"]
+
+
 def test_vlm_fn_degrades_on_connection_error(tmp_path):
     def boom(url, payload):
         raise ConnectionError("no server")

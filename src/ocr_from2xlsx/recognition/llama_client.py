@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 import urllib.request
 from pathlib import Path
 from typing import Any, Callable
@@ -80,6 +81,34 @@ def _chunks(items: list[Any], size: int) -> list[list[Any]]:
     return [items[i : i + size] for i in range(0, len(items), size)]
 
 
+def _remap_ids(options: list[dict], chunk: list) -> list[dict]:
+    """Repair ids the model abbreviated to the label's leading number (e.g. ``"1"``)."""
+    valid = {opt.id for opt in chunk}
+    by_number: dict[str, str] = {}
+    for opt in chunk:
+        match = re.match(r"\s*(\d+)", opt.label)
+        if match:
+            by_number.setdefault(match.group(1), opt.id)
+    repaired: list[dict] = []
+    for entry in options:
+        eid = str(entry.get("id", ""))
+        if eid in valid:
+            repaired.append(entry)
+        elif eid in by_number:
+            repaired.append({**entry, "id": by_number[eid]})
+    return repaired
+
+
+def _reject_all_marked(options: list[dict], chunk: list) -> list[dict]:
+    """Drop a chunk whose every option came back marked — the 2B model occasionally
+    marks an entire column, which is almost never a real form state."""
+    chunk_ids = {opt.id for opt in chunk}
+    marked = [e for e in options if e.get("marked") and e.get("id") in chunk_ids]
+    if len(chunk) >= 3 and len(marked) == len(chunk):
+        return []
+    return options
+
+
 def make_ollama_vlm_fn(
     host: str, model: str, *, post_fn: PostFn = _default_post
 ) -> Callable[[str, Section], dict[str, Any]]:
@@ -106,7 +135,8 @@ def make_ollama_vlm_fn(
             image_b64 = base64.b64encode(Path(crop_path).read_bytes()).decode("ascii")
             for chunk in _chunks(list(section.options), MAX_OPTIONS_PER_CALL):
                 parsed = _ask(image_b64, build_options_prompt(tuple(chunk)))
-                result["options"].extend(parsed.get("options", []) or [])
+                remapped = _remap_ids(parsed.get("options", []) or [], chunk)
+                result["options"].extend(_reject_all_marked(remapped, chunk))
             if section.values:
                 parsed = _ask(image_b64, build_values_prompt(section.values))
                 result["values"].extend(parsed.get("values", []) or [])

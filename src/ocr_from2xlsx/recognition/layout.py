@@ -140,6 +140,10 @@ _SECTION_A_BANDS: dict[str, tuple[float, float, float, float]] = {
     "services.consultation.psychosocial_emotion": (0.13, 0.216, 1.0, 0.246),
     "services.consultation.financial_social": (0.13, 0.246, 1.0, 0.278),
     "services.consultation.care_support": (0.13, 0.288, 1.0, 0.318),
+    "services.supplies": (0.13, 0.322, 1.0, 0.344),
+    "services.internal_referrals": (0.13, 0.344, 1.0, 0.376),
+    "services.external_referrals": (0.13, 0.376, 1.0, 0.399),
+    "services.referral_outcomes": (0.13, 0.399, 1.0, 0.420),
 }
 
 

@@ -40,9 +40,10 @@
   `docs/superpowers/specs/2026-06-14-offline-vlm-assisted-recognition-design.md`。
 - 辨識覆蓋強化：`癌別` grid 改為 **5 直欄子切片**（整格太寬、2B 讀不到 → 分欄後正確讀出，含 ✓肝癌），並加
   「整片全勾即視為幻覺丟棄」守則，去除某欄全 marked 的 false positive。
-- 辨識覆蓋：新增 **Section A 服務評估統計（諮詢 6 類別）**——標籤/code 重用 `form_layout`（DRY），mapper 支援
-  三層 dotted（`services.consultation.<category>`），並把模型回的裸編號（如 `"1"`）依 label 開頭數字 remap 回
-  完整 code。實測讀出 心理情緒支持/失落與悲傷關懷 等。supplies/院內外轉介/成果列為後續。
+- 辨識覆蓋：新增 **Section A 服務評估統計（全 10 服務欄：諮詢 6 類別＋用品＋院內/院外轉介＋成果）**——標籤/code
+  重用 `form_layout`（DRY），mapper 支援三層 dotted（`services.consultation.<category>`），並把模型回的裸編號
+  （如 `"1"`）依 label 開頭數字 remap 回完整 code。諮詢類別實測讀出 心理情緒支持/失落與悲傷關懷/照顧者支持 等；
+  院內/院外轉介為又寬又薄的 10 項密集列，2B 偏弱、主要交人工核對（同癌別格病灶，子切片回報低不划算）。
 - webcam 掃描 Phase A：新增清晰度量測/門檻、原生高解析 still capture、`scan` CLI、still-image OCR bridge，
   以及 app「擷取並辨識」按鈕，可把相機拍照直接送入既有 JSON review flow。
 - webcam 掃描 Phase B：新增 opt-in `document_condition.enhance()` OpenCV 文件影像增強，以及

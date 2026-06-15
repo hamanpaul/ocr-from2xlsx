@@ -446,7 +446,14 @@ class ReviewApp(tk.Tk):
         )
         try:
             try:
-                if env_overrides is None:
+                if os.environ.get("OCR_BACKEND", "").strip().lower() == "vision":
+                    from ocr_from2xlsx.cli import _build_vision_backend
+                    from ocr_from2xlsx.recognition.factory import vision_config_from_env
+                    from ocr_from2xlsx.recognition.vlm_server import ensure_server
+
+                    ensure_server(vision_config_from_env()[0])
+                    backend = _build_vision_backend(image_path)
+                elif env_overrides is None:
                     backend = PluginOcrBackend.resolve()
                 else:
                     backend = PluginOcrBackend.resolve(env_overrides=env_overrides)

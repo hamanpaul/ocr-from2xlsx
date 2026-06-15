@@ -48,7 +48,7 @@ class ConfirmForm:
         self.frame = ttk.Frame(parent)
         self.text_fields: dict[str, tk.StringVar] = {}
         self.single_choice_fields: dict[str, tk.StringVar] = {}
-        self.single_choice_clear_buttons: dict[str, ttk.Button] = {}
+        self._single_choice_option_vars: dict[str, dict[str, tk.BooleanVar]] = {}
         self.multi_choice_fields: dict[str, dict[str, tk.BooleanVar]] = {}
         # Field-title labels keyed by record_path, so recognition can flag
         # low-confidence / unfilled fields for the reviewer.
@@ -75,31 +75,40 @@ class ConfirmForm:
                     entry.bind("<Key>", self._mark_changed)
                     self.text_fields[field.key] = var
                 elif field.kind == "single_choice":
+                    # Single-choice rendered as mutually-exclusive checkboxes (per the
+                    # UI request: no radios, no "清除" button). A StringVar holds the
+                    # selected code; one BooleanVar per option drives the checkbox.
+                    # Clicking an option selects it (clearing the rest); clicking the
+                    # selected one clears the field — replacing the clear button.
                     var = tk.StringVar(value="")
+                    option_vars: dict[str, tk.BooleanVar] = {}
                     options = ttk.Frame(group)
                     options.grid(row=field_row, column=1, sticky="w", pady=3)
-                    clear_button = ttk.Button(
-                        options,
-                        text="清除",
-                        command=lambda v=var: self._clear_single_choice(v),
-                    )
-                    clear_button.grid(row=0, column=0, sticky="w", padx=(0, 8), pady=2)
-                    self.single_choice_clear_buttons[field.key] = clear_button
+
+                    def _select(code: str, _var=var, _opts=option_vars) -> None:
+                        chosen = "" if _var.get() == code else code
+                        _var.set(chosen)
+                        for option_code, option_var in _opts.items():
+                            option_var.set(option_code == chosen)
+                        self._notify_change()
+
                     for option_index, option in enumerate(field.options):
-                        ttk.Radiobutton(
+                        bvar = tk.BooleanVar(value=False)
+                        option_vars[option.code] = bvar
+                        ttk.Checkbutton(
                             options,
                             text=option.label,
-                            value=option.code,
-                            variable=var,
-                            command=self._notify_change,
+                            variable=bvar,
+                            command=lambda code=option.code: _select(code),
                         ).grid(
                             row=option_index // 4,
-                            column=(option_index % 4) + 1,
+                            column=option_index % 4,
                             sticky="w",
                             padx=(0, 8),
                             pady=2,
                         )
                     self.single_choice_fields[field.key] = var
+                    self._single_choice_option_vars[field.key] = option_vars
                 elif field.kind == "multi_choice":
                     options = ttk.Frame(group)
                     options.grid(row=field_row, column=1, sticky="w", pady=3)
@@ -122,10 +131,6 @@ class ConfirmForm:
                     self.multi_choice_fields[field.key] = code_vars
                 else:
                     raise TypeError(f"Unsupported field kind: {field.kind!r}")
-
-    def _clear_single_choice(self, var: tk.StringVar) -> None:
-        var.set("")
-        self._notify_change()
 
     def _mark_changed(self, _event: tk.Event | None = None) -> None:
         self._notify_change()
@@ -150,7 +155,10 @@ class ConfirmForm:
             var.set("" if value is None else str(value))
         for key, var in self.single_choice_fields.items():
             value = state.get(key, "")
-            var.set("" if value is None else str(value))
+            chosen = "" if value is None else str(value)
+            var.set(chosen)
+            for code, bvar in self._single_choice_option_vars.get(key, {}).items():
+                bvar.set(code == chosen)
         for key, code_vars in self.multi_choice_fields.items():
             selected = state.get(key, set())
             selected_codes = set() if selected is None else set(selected)

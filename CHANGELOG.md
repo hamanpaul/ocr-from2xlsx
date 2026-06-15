@@ -46,6 +46,11 @@
   院內/院外轉介為又寬又薄的 10 項密集列，2B 偏弱、主要交人工核對（同癌別格病灶，子切片回報低不划算）。
 - 辨識：把「已服務病人確認名單」接進 vision backend——CLI `--ocr-backend vision` 現會從 `name_corrections.jsonl`
   載入 roster，VLM 讀到的手寫姓名自動 snap 到既有病人（先前 roster 是空的、形同未比對）。
+- 可攜 release 打包（release stage）：新增 `build/build_vlm_runtime.py`，把本機 Ollama runtime ＋**僅預設模型**
+  （qwen3-vl:2b）的 blobs 組成 `dist/vlm/` 可攜 bundle（本機複製、不重抓）；新增 `recognition/vlm_server.py`
+  解析 runtime（env→user→bundle）並在需要時起 bundled `ollama serve`；**app 預設**在偵測到 bundle/既存 server
+  時即自動起 server 並走 vision 預填（`OCR_BACKEND=plugin` 可退回舊路徑、`=vision` 可強制），讓出貨 exe 雙擊即用
+  自帶模型。實測 bundle 以自帶模型在獨立 port 辨識成功（identity→patient），完全不依賴系統 Ollama。模型/runtime 不進 git。
 - webcam 掃描 Phase A：新增清晰度量測/門檻、原生高解析 still capture、`scan` CLI、still-image OCR bridge，
   以及 app「擷取並辨識」按鈕，可把相機拍照直接送入既有 JSON review flow。
 - webcam 掃描 Phase B：新增 opt-in `document_condition.enhance()` OpenCV 文件影像增強，以及

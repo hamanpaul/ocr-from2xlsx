@@ -15,6 +15,7 @@ build/*
 !build/ocr-from2xlsx.spec
 !build/build_paddle_plugin.py
 !build/phase0_vlm_bakeoff.py
+!build/build_vlm_runtime.py
 !build/splash.png
 *.egg-info/
 .eggs/

@@ -1109,6 +1109,7 @@ def test_recognize_capture_writes_json_and_loads_review_flow(
     monkeypatch.setattr(
         "ocr_from2xlsx.app.filedialog.askdirectory", lambda **kwargs: str(output_dir)
     )
+    monkeypatch.setenv("OCR_BACKEND", "plugin")
     monkeypatch.setattr(
         "ocr_from2xlsx.plugin_backend.PluginOcrBackend.resolve",
         lambda explicit_dir=None, default_dir=None: _FakeBackend(),
@@ -1168,6 +1169,7 @@ def test_recognize_capture_explicitly_passes_scan_docpre_opt_in(
     monkeypatch.setattr(
         "ocr_from2xlsx.app.filedialog.askdirectory", lambda **kwargs: str(output_dir)
     )
+    monkeypatch.setenv("OCR_BACKEND", "plugin")
     monkeypatch.setattr(
         "ocr_from2xlsx.plugin_backend.PluginOcrBackend.resolve",
         fake_resolve,
@@ -1215,6 +1217,7 @@ def test_recognize_capture_uses_unique_names_when_output_dir_has_existing_scan_f
     monkeypatch.setattr(
         "ocr_from2xlsx.app.filedialog.askdirectory", lambda **kwargs: str(output_dir)
     )
+    monkeypatch.setenv("OCR_BACKEND", "plugin")
     monkeypatch.setattr(
         "ocr_from2xlsx.plugin_backend.PluginOcrBackend.resolve",
         lambda explicit_dir=None, default_dir=None: _FakeBackend(),

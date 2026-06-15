@@ -41,6 +41,10 @@
   動輒十餘秒。改後列舉 ~0.9s 並穩定找到相機；`capture_still` 仍保留跨 backend 解析度協商（取最高解析度）。
 
 ### Added
+- (#30) 圖片/PDF 批次處理模式：新增 app「匯入資料夾批次」鈕——選一個含圖片/PDF 的資料夾，**批次辨識完所有檔**
+  後載入審核流**逐筆人工確認**；審核時左側面板自動改顯示該筆的**原始圖/PDF 頁**（停用 webcam）。新增
+  `scan.prepare_records_from_folder`（glob 圖片/PDF、逐檔走既有 image/PDF 準備流程、合併成單一 batch、record_id
+  重編唯一、進度回呼），批次期間 modal 顯示 `done/total` 進度。辨識後端沿用 vision 預設（缺則 plugin）。
 - 離線 VLM 輔助辨識（進行中，change `replace-recognition-with-local-vlm`）：新增 `recognition` 模組——
   `service_record.v1` 版面 layout（identity/gender/國籍/年齡組/管道/疾病狀態/來源/癌別 對應官方代碼）與純
   band 幾何。將以本機 Vision-LLM 預填整張表＋人工核對，取代既有不準的 OCR/幾何/heuristic 辨識路徑。設計見

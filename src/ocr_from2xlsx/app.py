@@ -276,6 +276,9 @@ class ReviewApp(tk.Tk):
         ttk.Button(toolbar, text="擷取並辨識", command=self._capture_and_recognize).pack(
             side=tk.LEFT, padx=4
         )
+        ttk.Button(toolbar, text="匯入資料夾批次", command=self._import_folder_batch).pack(
+            side=tk.LEFT, padx=4
+        )
         ttk.Button(toolbar, text="旋轉", command=self._rotate_preview).pack(
             side=tk.LEFT, padx=4
         )
@@ -482,28 +485,7 @@ class ReviewApp(tk.Tk):
         )
         try:
             try:
-                from ocr_from2xlsx.recognition.factory import vision_config_from_env
-                from ocr_from2xlsx.recognition.vlm_server import (
-                    ensure_server,
-                    vision_runtime_available,
-                )
-
-                vlm_host = vision_config_from_env()[0]
-                backend_choice = os.environ.get("OCR_BACKEND", "").strip().lower()
-                # Default to vision whenever a bundled/running VLM is available (the
-                # shipped exe carries dist/vlm); the old plugin is the fallback.
-                use_vision = backend_choice == "vision" or (
-                    backend_choice != "plugin" and vision_runtime_available(vlm_host)
-                )
-                if use_vision:
-                    from ocr_from2xlsx.cli import _build_vision_backend
-
-                    ensure_server(vlm_host)
-                    backend = _build_vision_backend(image_path)
-                elif env_overrides is None:
-                    backend = PluginOcrBackend.resolve()
-                else:
-                    backend = PluginOcrBackend.resolve(env_overrides=env_overrides)
+                backend = self._resolve_recognition_backend(image_path, env_overrides)
             except Exception as exc:
                 raise RuntimeError(
                     "找不到可用的 OCR plugin。請先建置 plugin bundle："
@@ -521,6 +503,69 @@ class ReviewApp(tk.Tk):
         self._set_loaded_records(records, json_path)
         return True
 
+    def _resolve_recognition_backend(self, roster_path, env_overrides):
+        # Shared by single-capture and batch import: default to the local vision
+        # backend when a bundled/running VLM is available; fall back to the plugin.
+        from ocr_from2xlsx.recognition.factory import vision_config_from_env
+        from ocr_from2xlsx.recognition.vlm_server import ensure_server, vision_runtime_available
+
+        vlm_host = vision_config_from_env()[0]
+        backend_choice = os.environ.get("OCR_BACKEND", "").strip().lower()
+        if backend_choice == "vision" or (
+            backend_choice != "plugin" and vision_runtime_available(vlm_host)
+        ):
+            from ocr_from2xlsx.cli import _build_vision_backend
+
+            ensure_server(vlm_host)
+            return _build_vision_backend(roster_path)
+        from ocr_from2xlsx.plugin_backend import PluginOcrBackend
+
+        if env_overrides is None:
+            return PluginOcrBackend.resolve()
+        return PluginOcrBackend.resolve(env_overrides=env_overrides)
+
+    def _import_folder_batch(self) -> None:
+        from ocr_from2xlsx.cli import _resolve_template
+        from ocr_from2xlsx.json_io import dump_batch
+        from ocr_from2xlsx.plugin_backend import scan_doc_preprocess_env_overrides
+        from ocr_from2xlsx.scan import next_output_artifact_path, prepare_records_from_folder
+
+        input_dir = filedialog.askdirectory(title="選擇含圖片/PDF 的資料夾")
+        if not input_dir:
+            return
+        selected_out = filedialog.askdirectory(title="選擇辨識輸出資料夾")
+        if not selected_out:
+            return
+        output_dir = Path(selected_out)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        json_path = next_output_artifact_path(output_dir, "batch-prepared.json")
+        modal = self._open_processing_modal("批次辨識中…")
+        try:
+            backend = self._resolve_recognition_backend(
+                json_path, scan_doc_preprocess_env_overrides()
+            )
+            template = _resolve_template("service_record.v1")
+
+            def _progress(done: int, total: int, name: str) -> None:
+                self._set_modal_message(modal, f"批次辨識中… {done}/{total}\n{name}")
+
+            batch = prepare_records_from_folder(
+                Path(input_dir), output_dir, template, backend, on_progress=_progress
+            )
+            dump_batch(batch, json_path)
+        except Exception as exc:  # noqa: BLE001 - surface any failure to the user
+            self._close_processing_modal(modal)
+            messagebox.showerror("批次辨識失敗", str(exc))
+            return
+        else:
+            self._close_processing_modal(modal)
+        records = list(JsonRecordSource(json_path).records())
+        if not records:
+            messagebox.showwarning("沒有可辨識的檔案", "所選資料夾沒有圖片或 PDF。")
+            return
+        self._set_loaded_records(records, json_path)
+        self._push_status(f"批次辨識完成：{len(records)} 筆，請逐筆確認後寫入。")
+
     def _open_processing_modal(self, message: str):
         # Global modal "processing" indicator during the blocking OCR call. Defensive: returns
         # None when there is no real Tk root (e.g. unit-test fixtures), so callers stay testable.
@@ -532,13 +577,24 @@ class ReviewApp(tk.Tk):
             modal.title("處理中")
             modal.transient(self)
             modal.resizable(False, False)
-            ttk.Label(modal, text=message, padding=24, justify="center").pack()
+            label = ttk.Label(modal, text=message, padding=24, justify="center")
+            label.pack()
+            modal._message_label = label
             modal.update_idletasks()
             modal.grab_set()  # global input lock while recognizing
             modal.update()  # force a draw before the blocking OCR call
         except Exception:
             pass
         return modal
+
+    def _set_modal_message(self, modal, message: str) -> None:
+        if modal is None:
+            return
+        try:
+            modal._message_label.configure(text=message)
+            modal.update()
+        except Exception:
+            pass
 
     def _close_processing_modal(self, modal) -> None:
         if modal is None:

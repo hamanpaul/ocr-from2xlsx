@@ -187,6 +187,11 @@ class ReviewApp(tk.Tk):
     _camera_index: int | None = None
     _preview_rotation: int = 0
     _preview_zoom: float = 1.0
+    _autocapture_active: bool = False
+    _autocapture_detector: object | None = None
+    _autocapture_output_dir: object | None = None
+    _autocapture_prev_gray: object | None = None
+    _autocapture_ref_gray: object | None = None
     _splash_closed: bool = False
     _status_var: object | None = None
     _status_log_path: object | None = None
@@ -247,6 +252,12 @@ class ReviewApp(tk.Tk):
         self._camera_index = None
         self._preview_rotation = self._load_preview_rotation()
         self._preview_zoom = 1.0
+        self._autocapture_active = False
+        self._autocapture_detector = None
+        self._autocapture_output_dir = None
+        self._autocapture_prev_gray = None
+        self._autocapture_ref_gray = None
+        self._autocapture_stills: list[Path] = []
         self._splash_closed = False
         self._status_log: list[str] = []
         self._status_var = None
@@ -277,6 +288,18 @@ class ReviewApp(tk.Tk):
             side=tk.LEFT, padx=4
         )
         ttk.Button(toolbar, text="匯入資料夾批次", command=self._import_folder_batch).pack(
+            side=tk.LEFT, padx=4
+        )
+        ttk.Button(toolbar, text="連續拍照", command=self._start_continuous_capture).pack(
+            side=tk.LEFT, padx=4
+        )
+        ttk.Button(toolbar, text="完成辨識", command=self._finish_continuous_capture).pack(
+            side=tk.LEFT, padx=4
+        )
+        ttk.Button(toolbar, text="復原上一張", command=self._undo_last_continuous_capture).pack(
+            side=tk.LEFT, padx=4
+        )
+        ttk.Button(toolbar, text="取消連拍", command=self._cancel_continuous_capture).pack(
             side=tk.LEFT, padx=4
         )
         ttk.Button(toolbar, text="旋轉", command=self._rotate_preview).pack(
@@ -1025,6 +1048,72 @@ class ReviewApp(tk.Tk):
                 winsound.PlaySound(str(path), winsound.SND_FILENAME | winsound.SND_ASYNC)
             else:
                 winsound.MessageBeep(winsound.MB_OK)
+        except Exception:
+            pass
+
+    def _start_continuous_capture(self) -> None:
+        from ocr_from2xlsx.autocapture import AutoCaptureConfig, AutoCaptureDetector
+        from ocr_from2xlsx.capture import CameraDependencyError, require_camera_support
+
+        if self._autocapture_active:
+            return
+        if self.editing:
+            messagebox.showerror(
+                "尚未保存", "目前資料已修改，請先使用「確認並寫入」或「強制寫入」。"
+            )
+            return
+        if self._camera_index is None:
+            try:
+                require_camera_support()
+            except CameraDependencyError as exc:
+                self._clear_inactive_camera_selection()
+                messagebox.showerror("連續拍照", str(exc))
+                return
+            self._clear_inactive_camera_selection()
+            messagebox.showwarning("連續拍照", "請先選擇可用的攝影機。")
+            return
+        selected_dir = filedialog.askdirectory(title="選擇辨識輸出資料夾")
+        if not selected_dir:
+            return
+        output_dir = Path(selected_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        self._autocapture_output_dir = output_dir
+        self._autocapture_stills = []
+        self._autocapture_prev_gray = None
+        self._autocapture_ref_gray = None
+        self._autocapture_detector = AutoCaptureDetector(AutoCaptureConfig.from_env())
+        self._autocapture_active = True
+        self._push_status("連續拍照中｜已擷取 0 張｜請放上表單…")
+        if not self._has_live_camera_preview():
+            self._start_camera(self._camera_index)
+
+    def _cancel_continuous_capture(self) -> None:
+        if not self._autocapture_active:
+            return
+        self._stop_camera()
+        self._autocapture_active = False
+        count = len(self._autocapture_stills)
+        self._push_status(f"已取消連續拍照（保留 {count} 張於輸出資料夾，未辨識）。")
+
+    def _undo_last_continuous_capture(self) -> None:
+        if not self._autocapture_active or not self._autocapture_stills:
+            self._push_status("沒有可復原的擷取。")
+            return
+        last = self._autocapture_stills.pop()
+        try:
+            Path(last).unlink()
+        except OSError:
+            pass
+        self._push_status(f"已復原上一張｜已擷取 {len(self._autocapture_stills)} 張")
+
+    def _finish_continuous_capture(self) -> None:
+        # Stub — full implementation comes in the next task (Task 7/8).
+        pass
+
+    def _flash_preview(self) -> None:
+        try:
+            self.preview.configure(background="#d0ffd0")
+            self.preview.after(120, lambda: self.preview.configure(background="white"))
         except Exception:
             pass
 

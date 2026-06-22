@@ -56,3 +56,98 @@ class AutoCaptureConfig:
             cooldown_frames=_env_int("AUTOCAPTURE_COOLDOWN_FRAMES", cls.cooldown_frames),
             retry_limit=_env_int("AUTOCAPTURE_RETRY_LIMIT", cls.retry_limit),
         )
+
+
+ARMED = "armed"
+DISARMED = "disarmed"
+
+NONE = "none"
+CAPTURE = "capture"
+REARMED = "rearmed"
+STALLED = "stalled"
+
+
+@dataclass(frozen=True, slots=True)
+class FrameMetrics:
+    motion: float            # mean abs gray diff vs the previous preview frame
+    change_from_ref: float   # mean abs gray diff vs the last captured frame (inf when no ref)
+    sharpness: float         # variance-of-Laplacian of the preview frame
+
+
+class AutoCaptureDetector:
+    """Hands-free auto-capture state machine. Fed scalar FrameMetrics per preview
+    frame; returns an action string. The app performs the real capture on CAPTURE and
+    reports the outcome via mark_captured() / note_failed_capture(). No OpenCV here."""
+
+    def __init__(self, config: AutoCaptureConfig | None = None) -> None:
+        self.config = config or AutoCaptureConfig()
+        self._state = ARMED
+        self._stable_count = 0
+        self._clear_count = 0
+        self._cooldown = 0
+        self._failed = 0
+        self._last_sharpness: float | None = None
+        self._has_ref = False  # no capture yet → first page is always "new"
+
+    @property
+    def state(self) -> str:
+        return self._state
+
+    def observe(self, metrics: FrameMetrics) -> str:
+        cfg = self.config
+        if self._cooldown > 0:
+            self._cooldown -= 1
+            self._last_sharpness = metrics.sharpness
+            return NONE
+
+        if self._state == DISARMED:
+            if metrics.change_from_ref >= cfg.clear_thresh:
+                self._clear_count += 1
+            else:
+                self._clear_count = 0
+            self._last_sharpness = metrics.sharpness
+            if self._clear_count >= cfg.clear_frames:
+                self._state = ARMED
+                self._stable_count = 0
+                self._clear_count = 0
+                return REARMED
+            return NONE
+
+        # ARMED: wait for a stationary, in-focus, converged, new page.
+        stationary = metrics.motion < cfg.motion_thresh
+        in_focus = metrics.sharpness >= cfg.preview_min_sharpness
+        converged = (
+            self._last_sharpness is not None
+            and (metrics.sharpness - self._last_sharpness) <= cfg.sharpness_rise_tol
+        )
+        is_new = (not self._has_ref) or metrics.change_from_ref >= cfg.newpage_thresh
+        self._last_sharpness = metrics.sharpness
+
+        if stationary and in_focus and converged and is_new:
+            self._stable_count += 1
+        else:
+            self._stable_count = 0
+
+        if self._stable_count >= cfg.stable_frames:
+            self._stable_count = 0
+            return CAPTURE
+        return NONE
+
+    def mark_captured(self) -> None:
+        """App reports a successful capture → disarm until the scene clears."""
+        self._has_ref = True
+        self._state = DISARMED
+        self._stable_count = 0
+        self._clear_count = 0
+        self._cooldown = self.config.cooldown_frames
+        self._failed = 0
+
+    def note_failed_capture(self) -> str:
+        """App reports a blurry/failed capture. Returns STALLED when retries exhausted."""
+        self._failed += 1
+        self._stable_count = 0
+        self._cooldown = self.config.cooldown_frames
+        if self._failed >= self.config.retry_limit:
+            self._failed = 0
+            return STALLED
+        return NONE

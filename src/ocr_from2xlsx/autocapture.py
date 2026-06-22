@@ -151,3 +151,38 @@ class AutoCaptureDetector:
             self._failed = 0
             return STALLED
         return NONE
+
+
+def to_metric_gray(frame: object, *, target_width: int = 320):
+    """Downscale + grayscale a BGR/gray frame to a small float array for cheap diffing.
+    Uses cv2 for color conversion when available; falls back to a NumPy channel mean."""
+    import numpy as np
+
+    arr = np.asarray(frame)
+    if arr.ndim == 3:
+        try:
+            import cv2
+
+            arr = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        except Exception:
+            arr = arr.mean(axis=2)
+    arr = np.asarray(arr, dtype="float64")
+    width = arr.shape[1] if arr.ndim >= 2 else 0
+    if width > target_width:
+        step = max(1, width // target_width)
+        arr = arr[::step, ::step]
+    return arr
+
+
+def mean_abs_diff(a: object, b: object) -> float:
+    """Mean absolute difference of two equal-shaped arrays. Returns +inf when either
+    is None (no reference yet) or shapes differ (treated as 'maximally different')."""
+    import numpy as np
+
+    if a is None or b is None:
+        return float("inf")
+    a = np.asarray(a, dtype="float64")
+    b = np.asarray(b, dtype="float64")
+    if a.shape != b.shape:
+        return float("inf")
+    return float(np.abs(a - b).mean())

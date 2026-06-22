@@ -85,3 +85,24 @@ def test_failed_capture_retries_then_stalls():
     assert d.note_failed_capture() == NONE
     assert d.note_failed_capture() == NONE
     assert d.note_failed_capture() == STALLED  # retry_limit=3
+
+
+import numpy as np
+
+from ocr_from2xlsx.autocapture import mean_abs_diff, to_metric_gray
+
+
+def test_to_metric_gray_downscales_wide_frames():
+    frame = np.zeros((480, 1280, 3), dtype="uint8")
+    gray = to_metric_gray(frame, target_width=320)
+    assert gray.ndim == 2
+    assert gray.shape[1] <= 320
+
+
+def test_mean_abs_diff_values_and_guards():
+    a = np.zeros((4, 4), dtype="float64")
+    b = np.full((4, 4), 10.0)
+    assert mean_abs_diff(a, b) == 10.0
+    assert mean_abs_diff(a, a) == 0.0
+    assert mean_abs_diff(a, None) == float("inf")        # no reference yet
+    assert mean_abs_diff(a, np.zeros((2, 2))) == float("inf")  # shape mismatch

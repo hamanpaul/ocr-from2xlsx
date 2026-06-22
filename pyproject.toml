@@ -29,6 +29,9 @@ ocr-from2xlsx = "ocr_from2xlsx.cli:main"
 [tool.setuptools.dynamic]
 version = { file = ["VERSION"] }
 
+[tool.setuptools.package-data]
+ocr_from2xlsx = ["assets/*.wav"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]

@@ -1007,6 +1007,27 @@ class ReviewApp(tk.Tk):
         self._preview_zoom = min(8.0, max(1.0, self._preview_zoom * factor))
         self._push_status(f"預覽縮放 {self._preview_zoom:.2f}×")
 
+    @staticmethod
+    def _shutter_sound_path() -> Path | None:
+        # app.py lives in src/ocr_from2xlsx/, and the PyInstaller spec bundles the wav
+        # under ocr_from2xlsx/assets/, so this resolves for both source runs and the exe.
+        path = Path(__file__).resolve().parent / "assets" / "shutter.wav"
+        return path if path.is_file() else None
+
+    def _play_shutter(self) -> None:
+        try:
+            import winsound
+        except Exception:
+            return  # non-Windows / no audio module: silent no-op
+        path = self._shutter_sound_path()
+        try:
+            if path is not None and path.is_file():
+                winsound.PlaySound(str(path), winsound.SND_FILENAME | winsound.SND_ASYNC)
+            else:
+                winsound.MessageBeep(winsound.MB_OK)
+        except Exception:
+            pass
+
     def _zoom_crop(self, frame: object):
         # Zoom by cropping a centered region (then the fit-resize scales it up to the pane).
         if self._preview_zoom <= 1.0:

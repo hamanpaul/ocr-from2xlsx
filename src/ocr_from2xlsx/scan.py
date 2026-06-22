@@ -3,6 +3,7 @@ from __future__ import annotations
 import shutil
 from datetime import datetime
 from pathlib import Path
+from typing import Callable
 
 import fitz
 
@@ -79,13 +80,18 @@ def prepare_records_from_images(
     template: FormTemplate,
     backend: OcrBackend,
     created_at: str | None = None,
+    on_progress: "Callable[[int, int, str], None] | None" = None,
 ) -> Batch:
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     created_at = created_at or datetime.now().astimezone().isoformat(timespec="seconds")
     records = []
 
-    for sequence, image_path in enumerate((Path(path) for path in image_paths), start=1):
+    paths = [Path(path) for path in image_paths]
+    total = len(paths)
+    for sequence, image_path in enumerate(paths, start=1):
+        if on_progress is not None:
+            on_progress(sequence, total, image_path.name)
         local_image = _copy_image_to_output(image_path, output_dir)
         preview_image = _copy_preview_to_output(local_image)
         prepared = PreparedPage(

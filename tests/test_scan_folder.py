@@ -54,3 +54,32 @@ def test_prepare_records_from_folder_empty_folder(tmp_path):
     template = SimpleNamespace(template_id="service_record.v1")
     batch = scan.prepare_records_from_folder(folder, tmp_path / "out", template, backend=object())
     assert batch.records == []
+
+
+def test_prepare_records_from_images_reports_progress(tmp_path, monkeypatch):
+    from ocr_from2xlsx.domain import SourceInfo
+
+    class _Backend:
+        def extract(self, prepared):
+            return {"ocr": {"backend": "fake", "raw_text": "", "warnings": []}}
+
+    # avoid PNG preview conversion: pre-create .png inputs
+    images = []
+    for name in ("p1.png", "p2.png"):
+        path = tmp_path / name
+        path.write_bytes(b"\x89PNG\r\n")
+        images.append(path)
+
+    monkeypatch.setattr(
+        scan, "normalize_raw_record", lambda raw: SimpleNamespace(
+            record_id=raw.get("record_id"), name="", ocr=SimpleNamespace(warnings=[]),
+        )
+    )
+
+    progress: list[tuple[int, int, str]] = []
+    template = SimpleNamespace(template_id="service_record.v1")
+    scan.prepare_records_from_images(
+        images, tmp_path / "out", template, backend=_Backend(),
+        on_progress=lambda done, total, name: progress.append((done, total, name)),
+    )
+    assert progress == [(1, 2, "p1.png"), (2, 2, "p2.png")]

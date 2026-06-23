@@ -243,3 +243,84 @@ def test_finish_with_no_captures_warns_and_skips(monkeypatch, tmp_path):
     ReviewApp._finish_continuous_capture(app)
     assert app._autocapture_active is False
     assert warnings and "沒有可辨識" in warnings[0][1]
+
+
+# ---------------------------------------------------------------------------
+# Carried-over branch tests: STALLED and imwrite-failure paths
+# ---------------------------------------------------------------------------
+
+
+def test_perform_autocapture_stalled_after_retry_limit(monkeypatch, tmp_path):
+    """After retry_limit (3) blurry captures the detector reaches STALLED and the
+    status message contains the stalled/too-blurry text."""
+    import ocr_from2xlsx.capture as capture_module
+    from ocr_from2xlsx.autocapture import AutoCaptureDetector, AutoCaptureConfig
+    from ocr_from2xlsx.capture import CaptureResult
+
+    app = _bare_app()
+    app._autocapture_active = True
+    app._autocapture_output_dir = tmp_path
+    app._autocapture_detector = AutoCaptureDetector()
+    retry_limit = app._autocapture_detector.config.retry_limit  # 3
+
+    monkeypatch.setattr(
+        capture_module,
+        "capture_still",
+        lambda *a, **k: CaptureResult(
+            frame="frame",
+            resolution=(1920, 1080),
+            sharpness=12.0,
+            brightness=128.0,
+            passed=False,
+        ),
+    )
+    monkeypatch.setattr(app, "_stop_camera", lambda: None)
+    monkeypatch.setattr(app, "_start_camera", lambda i: None)
+
+    for _ in range(retry_limit):
+        ReviewApp._perform_autocapture(app)
+
+    assert app._autocapture_stills == []
+    # The last status message must contain the STALLED text
+    assert any("連續多張太模糊" in msg for msg in app._status_log)
+
+
+def test_perform_autocapture_imwrite_failure_restarts_camera(monkeypatch, tmp_path):
+    """When capture_still passes but cv2.imwrite returns False, no still is
+    appended and the camera preview is restarted (_start_camera called)."""
+    import ocr_from2xlsx.capture as capture_module
+    from ocr_from2xlsx.autocapture import AutoCaptureDetector
+    from ocr_from2xlsx.capture import CaptureResult
+
+    app = _bare_app()
+    app._autocapture_active = True
+    app._autocapture_output_dir = tmp_path
+    app._autocapture_detector = AutoCaptureDetector()
+    app._autocapture_prev_gray = None
+
+    monkeypatch.setattr(
+        capture_module,
+        "capture_still",
+        lambda *a, **k: CaptureResult(
+            frame="frame",
+            resolution=(1920, 1080),
+            sharpness=180.0,
+            brightness=128.0,
+            passed=True,
+        ),
+    )
+    # cv2.imwrite returns False to simulate a write failure
+    monkeypatch.setitem(
+        sys.modules,
+        "cv2",
+        SimpleNamespace(imwrite=lambda p, f: False),
+    )
+    monkeypatch.setattr(app, "_stop_camera", lambda: None)
+    camera_starts = []
+    monkeypatch.setattr(app, "_start_camera", lambda i: camera_starts.append(i))
+
+    ReviewApp._perform_autocapture(app)
+
+    assert app._autocapture_stills == []
+    assert camera_starts, "_start_camera must be called to restart the preview"
+    assert any("無法寫入擷取影像" in msg for msg in app._status_log)

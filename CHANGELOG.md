@@ -41,6 +41,10 @@
   動輒十餘秒。改後列舉 ~0.9s 並穩定找到相機；`capture_still` 仍保留跨 backend 解析度協商（取最高解析度）。
 
 ### Added
+- 連續拍照（hands-free 自動掃描）：app 新增「連續拍照」，相機偵測到畫面穩定且合焦即自動拍照（快門聲＋計數回授）、
+  「拿開再放」換頁不重複拍同一張；累積整疊後「完成辨識」走既有批次辨識＋逐筆審核，另含「復原上一張」/「取消連拍」。
+  新增純狀態機 `autocapture`（可單元測試）、`prepare_records_from_images` 進度回呼、bundled 快門音。偵測門檻
+  以 `AUTOCAPTURE_*` 環境變數調校。
 - (#30) 圖片/PDF 批次處理模式：新增 app「匯入資料夾批次」鈕——選一個含圖片/PDF 的資料夾，**批次辨識完所有檔**
   後載入審核流**逐筆人工確認**；審核時左側面板自動改顯示該筆的**原始圖/PDF 頁**（停用 webcam）。新增
   `scan.prepare_records_from_folder`（glob 圖片/PDF、逐檔走既有 image/PDF 準備流程、合併成單一 batch、record_id

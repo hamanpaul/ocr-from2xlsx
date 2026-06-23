@@ -62,6 +62,7 @@ def main() -> int:
                 "ocr-from2xlsx.spec",
                 "build_paddle_plugin.py",
                 "build_vlm_runtime.py",
+                "make_shutter_wav.py",
                 "phase0_vlm_bakeoff.py",
                 "splash.png",
             },

@@ -42,6 +42,10 @@ Note: The packaged exe is windowed (no console). CLI users who need stdout shoul
 
 On startup the app auto-detects webcams: if exactly one camera is found it auto-connects and shows a preview; if multiple cameras are present it prompts to select one; if none are present or OpenCV is unavailable it gracefully falls back to the existing JSON-driven flow and the preview placeholder is used. A `選擇攝影機` button is provided in the UI to switch cameras.
 
+### 連續拍照（hands-free 自動掃描）
+
+App 工具列「連續拍照」可現場連續掃一疊紙本：把表單一張張放到鏡頭下，系統偵測到畫面**穩定且合焦**後自動拍照（會發出快門聲），請拿開換下一張即可再拍。按「完成辨識」一次批次辨識全部、進逐筆審核；「復原上一張」可丟掉誤拍，「取消連拍」放棄整批。偵測門檻可用 `AUTOCAPTURE_*` 環境變數對相機/光線微調。
+
 ```powershell
 ocr-from2xlsx
 ```

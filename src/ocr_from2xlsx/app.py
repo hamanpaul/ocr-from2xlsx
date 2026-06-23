@@ -873,6 +873,9 @@ class ReviewApp(tk.Tk):
                 self._retry_camera_preview("攝影機畫面連續讀取失敗，已停止預覽")
                 return
 
+            if self._autocapture_active and self._observe_autocapture_frame(frame):
+                return
+
             if self._preview_rotation:
                 from ocr_from2xlsx.capture import rotate_frame
 
@@ -1090,10 +1093,13 @@ class ReviewApp(tk.Tk):
     def _cancel_continuous_capture(self) -> None:
         if not self._autocapture_active:
             return
+        restore = self._has_live_camera_preview()
         self._stop_camera()
         self._autocapture_active = False
         count = len(self._autocapture_stills)
         self._push_status(f"已取消連續拍照（保留 {count} 張於輸出資料夾，未辨識）。")
+        if restore:
+            self._start_camera(self._camera_index)
 
     def _undo_last_continuous_capture(self) -> None:
         if not self._autocapture_active or not self._autocapture_stills:
@@ -1106,9 +1112,134 @@ class ReviewApp(tk.Tk):
             pass
         self._push_status(f"已復原上一張｜已擷取 {len(self._autocapture_stills)} 張")
 
+    def _observe_autocapture_frame(self, frame: object) -> bool:
+        """Feed one preview frame to the detector. Returns True when it took over the
+        camera (a capture/restart happened) so the poll loop should stop for this tick."""
+        from ocr_from2xlsx.autocapture import (
+            CAPTURE,
+            REARMED,
+            FrameMetrics,
+            mean_abs_diff,
+            to_metric_gray,
+        )
+        from ocr_from2xlsx.capture import measure_sharpness
+
+        gray = to_metric_gray(frame)
+        motion = mean_abs_diff(gray, self._autocapture_prev_gray)
+        change = mean_abs_diff(gray, self._autocapture_ref_gray)
+        self._autocapture_prev_gray = gray
+        try:
+            sharpness = measure_sharpness(frame)
+        except Exception:
+            sharpness = 0.0
+        action = self._autocapture_detector.observe(
+            FrameMetrics(motion=motion, change_from_ref=change, sharpness=sharpness)
+        )
+        if action == CAPTURE:
+            return self._perform_autocapture()
+        if action == REARMED:
+            self._push_status(
+                f"連續拍照中｜已擷取 {len(self._autocapture_stills)} 張｜請放上下一張…"
+            )
+        return False
+
+    def _perform_autocapture(self) -> bool:
+        from ocr_from2xlsx.autocapture import STALLED
+        from ocr_from2xlsx.capture import DEFAULT_MIN_SHARPNESS, capture_still, rotate_frame
+        from ocr_from2xlsx.scan import next_output_artifact_path
+
+        index = self._camera_index
+        self._stop_camera()
+        result = None
+        try:
+            result = capture_still(index, min_sharpness=DEFAULT_MIN_SHARPNESS)
+        except Exception as exc:  # noqa: BLE001 - surface and keep the session recoverable
+            self._push_status(f"連續拍照擷取失敗：{exc}")
+        if result is None:
+            self._push_status("連續拍照：找不到可用的攝影機，已停止。")
+            self._autocapture_active = False
+            return True
+        if not result.passed:
+            outcome = self._autocapture_detector.note_failed_capture()
+            if outcome == STALLED:
+                self._push_status(
+                    f"連續拍照：連續多張太模糊（清晰度 {result.sharpness:.0f}），"
+                    "請調整對焦/光線後再放紙。"
+                )
+            else:
+                self._push_status(
+                    f"連續拍照：太模糊（清晰度 {result.sharpness:.0f}），自動重試…"
+                )
+            self._start_camera(index)
+            return True
+
+        import cv2
+
+        frame = result.frame
+        if self._preview_rotation:
+            frame = rotate_frame(frame, self._preview_rotation)
+        output_dir = self._autocapture_output_dir
+        image_path = next_output_artifact_path(output_dir, "scan-capture.png")
+        if not cv2.imwrite(str(image_path), frame):
+            self._push_status(f"連續拍照：無法寫入擷取影像 {image_path}")
+            self._start_camera(index)
+            return True
+        self._autocapture_stills.append(image_path)
+        # Reference for "scene cleared" detection is the triggering PREVIEW frame's gray
+        # (same resolution as later preview frames), not the full-res capture_still frame.
+        self._autocapture_ref_gray = self._autocapture_prev_gray
+        self._autocapture_prev_gray = None
+        self._autocapture_detector.mark_captured()
+        self._play_shutter()
+        self._flash_preview()
+        self._push_status(
+            f"連續拍照中｜已擷取 {len(self._autocapture_stills)} 張｜請拿開換下一張…"
+        )
+        self._start_camera(index)
+        return True
+
     def _finish_continuous_capture(self) -> None:
-        # Stub — full implementation comes in the next task (Task 7/8).
-        pass
+        from ocr_from2xlsx.cli import _resolve_template
+        from ocr_from2xlsx.json_io import dump_batch
+        from ocr_from2xlsx.plugin_backend import scan_doc_preprocess_env_overrides
+        from ocr_from2xlsx.scan import next_output_artifact_path, prepare_records_from_images
+
+        if not self._autocapture_active:
+            return
+        self._stop_camera()
+        self._autocapture_active = False
+        stills = list(self._autocapture_stills)
+        output_dir = self._autocapture_output_dir
+        if not stills:
+            messagebox.showwarning("連續拍照", "尚未擷取任何影像，沒有可辨識的內容。")
+            return
+        json_path = next_output_artifact_path(output_dir, "scan-prepared.json")
+        modal = self._open_processing_modal("批次辨識中…")
+        try:
+            backend = self._resolve_recognition_backend(
+                json_path, scan_doc_preprocess_env_overrides()
+            )
+            template = _resolve_template("service_record.v1")
+
+            def _progress(done: int, total: int, name: str) -> None:
+                self._set_modal_message(modal, f"批次辨識中… {done}/{total}\n{name}")
+
+            batch = prepare_records_from_images(
+                stills, output_dir, template, backend, on_progress=_progress
+            )
+            dump_batch(batch, json_path)
+        except Exception as exc:  # noqa: BLE001 - surface any failure to the user
+            self._close_processing_modal(modal)
+            messagebox.showerror("批次辨識失敗", str(exc))
+            return
+        else:
+            self._close_processing_modal(modal)
+        records = list(JsonRecordSource(json_path).records())
+        if not records:
+            messagebox.showwarning("沒有可辨識的影像", "辨識結果沒有任何紀錄。")
+            return
+        self._set_loaded_records(records, json_path)
+        self._push_status(f"連續拍照完成：{len(records)} 筆，請逐筆確認後寫入。")
 
     def _flash_preview(self) -> None:
         try:

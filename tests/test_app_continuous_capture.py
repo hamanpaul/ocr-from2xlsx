@@ -101,3 +101,145 @@ def test_undo_last_capture_deletes_and_decrements(tmp_path):
     assert app._autocapture_stills == [f1]
     assert not f2.exists()
     assert f1.exists()
+
+
+# ---------------------------------------------------------------------------
+# Task 7: Auto-capture observe + perform (camera wiring)
+# ---------------------------------------------------------------------------
+import sys
+
+from ocr_from2xlsx.autocapture import CAPTURE, DISARMED, AutoCaptureDetector
+
+
+def test_observe_delegates_to_perform_on_capture(monkeypatch):
+    app = _bare_app()
+    app._autocapture_active = True
+    app._autocapture_detector = SimpleNamespace(observe=lambda m: CAPTURE)
+    monkeypatch.setattr("ocr_from2xlsx.capture.measure_sharpness", lambda f: 100.0)
+    called = []
+    monkeypatch.setattr(app, "_perform_autocapture", lambda: called.append(True) or True)
+    import numpy as np
+    took_over = ReviewApp._observe_autocapture_frame(app, np.zeros((48, 64), dtype="uint8"))
+    assert took_over is True
+    assert called == [True]
+
+
+def test_perform_autocapture_saves_still_and_marks_captured(monkeypatch, tmp_path):
+    import ocr_from2xlsx.capture as capture_module
+    from ocr_from2xlsx.capture import CaptureResult
+
+    app = _bare_app()
+    app._autocapture_active = True
+    app._autocapture_output_dir = tmp_path
+    app._autocapture_detector = AutoCaptureDetector()
+    app._autocapture_prev_gray = None
+    shutters = []
+    monkeypatch.setattr(
+        capture_module, "capture_still",
+        lambda *a, **k: CaptureResult(frame="frame", resolution=(1920, 1080), sharpness=180.0, brightness=128.0, passed=True),
+    )
+    monkeypatch.setitem(sys.modules, "cv2", SimpleNamespace(imwrite=lambda p, f: Path(p).write_bytes(b"\x89PNG") or True))
+    monkeypatch.setattr(app, "_stop_camera", lambda: None)
+    monkeypatch.setattr(app, "_start_camera", lambda i: None)
+    monkeypatch.setattr(app, "_play_shutter", lambda: shutters.append(True))
+    monkeypatch.setattr(app, "_flash_preview", lambda: None)
+
+    took_over = ReviewApp._perform_autocapture(app)
+
+    assert took_over is True
+    assert len(app._autocapture_stills) == 1
+    assert app._autocapture_stills[0].is_file()
+    assert app._autocapture_detector.state == DISARMED
+    assert shutters == [True]
+
+
+def test_perform_autocapture_skips_blurry(monkeypatch, tmp_path):
+    import ocr_from2xlsx.capture as capture_module
+    from ocr_from2xlsx.capture import CaptureResult
+
+    app = _bare_app()
+    app._autocapture_active = True
+    app._autocapture_output_dir = tmp_path
+    app._autocapture_detector = AutoCaptureDetector()
+    monkeypatch.setattr(
+        capture_module, "capture_still",
+        lambda *a, **k: CaptureResult(frame="frame", resolution=(1920, 1080), sharpness=12.0, brightness=128.0, passed=False),
+    )
+    monkeypatch.setattr(app, "_stop_camera", lambda: None)
+    monkeypatch.setattr(app, "_start_camera", lambda i: None)
+
+    ReviewApp._perform_autocapture(app)
+
+    assert app._autocapture_stills == []
+
+
+def test_perform_autocapture_stops_session_when_no_camera(monkeypatch, tmp_path):
+    import ocr_from2xlsx.capture as capture_module
+
+    app = _bare_app()
+    app._autocapture_active = True
+    app._autocapture_output_dir = tmp_path
+    app._autocapture_detector = AutoCaptureDetector()
+    monkeypatch.setattr(capture_module, "capture_still", lambda *a, **k: None)
+    monkeypatch.setattr(app, "_stop_camera", lambda: None)
+
+    ReviewApp._perform_autocapture(app)
+
+    assert app._autocapture_active is False
+
+
+# ---------------------------------------------------------------------------
+# Task 8: Finish session → batch recognize → review
+# ---------------------------------------------------------------------------
+def test_finish_routes_stills_to_batch_and_loads_review(monkeypatch, tmp_path):
+    import ocr_from2xlsx.scan as scan
+    from ocr_from2xlsx.domain import Batch, SourceBatch
+
+    app = _bare_app()
+    app._autocapture_active = True
+    app._autocapture_output_dir = tmp_path
+    s1 = tmp_path / "scan-capture.png"
+    s2 = tmp_path / "scan-capture-2.png"
+    s1.write_bytes(b"x"); s2.write_bytes(b"y")
+    app._autocapture_stills = [s1, s2]
+
+    seen = {}
+    def fake_prepare(stills, out, template, backend, on_progress=None):
+        seen["stills"] = list(stills)
+        if on_progress:
+            on_progress(2, 2, "scan-capture-2.png")
+        return Batch(source_batch=SourceBatch(created_at="t", source_type="scan_records", template_name="service_record.v1"), records=[])
+    monkeypatch.setattr(scan, "prepare_records_from_images", fake_prepare)
+    monkeypatch.setattr("ocr_from2xlsx.cli._resolve_template", lambda name: SimpleNamespace(template_id=name))
+    monkeypatch.setattr(app, "_resolve_recognition_backend", lambda *a, **k: object())
+    monkeypatch.setattr(app, "_open_processing_modal", lambda msg: None)
+    monkeypatch.setattr(app, "_set_modal_message", lambda m, msg: None)
+    monkeypatch.setattr(app, "_close_processing_modal", lambda m: None)
+    monkeypatch.setattr(app, "_stop_camera", lambda: None)
+    monkeypatch.setattr("ocr_from2xlsx.json_io.dump_batch", lambda batch, path: Path(path).write_text("{}"))
+    loaded = {}
+    monkeypatch.setattr(app, "_set_loaded_records", lambda records, path: loaded.update(path=path))
+    monkeypatch.setattr("ocr_from2xlsx.app.JsonRecordSource", lambda path: SimpleNamespace(records=lambda: iter([SimpleNamespace(record_id="batch-0001")])))
+
+    ReviewApp._finish_continuous_capture(app)
+
+    assert seen["stills"] == [s1, s2]
+    assert app._autocapture_active is False
+    assert loaded.get("path") == tmp_path / "scan-prepared.json"
+
+
+def test_finish_with_no_captures_warns_and_skips(monkeypatch, tmp_path):
+    app = _bare_app()
+    app._autocapture_active = True
+    app._autocapture_output_dir = tmp_path
+    app._autocapture_stills = []
+    warnings = []
+    monkeypatch.setattr(app, "_stop_camera", lambda: None)
+    monkeypatch.setattr("ocr_from2xlsx.app.messagebox.showwarning", lambda t, m: warnings.append((t, m)))
+    monkeypatch.setattr(
+        "ocr_from2xlsx.scan.prepare_records_from_images",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not recognize")),
+    )
+    ReviewApp._finish_continuous_capture(app)
+    assert app._autocapture_active is False
+    assert warnings and "沒有可辨識" in warnings[0][1]

@@ -2,72 +2,64 @@
 
 **Change ID:** `add-continuous-capture`
 
-All implementation uses TDD with fail-first tests before production code. Phase 1 (the pure detector)
-is the foundation and lands first; the state machine must be testable with no camera and no OpenCV.
+> Reflects the 2026-06-24 detection redesign (baseline-diff). The first implementation already landed on
+> the branch (autocapture.py, scan on_progress, shutter asset, app session/wiring/finish, docs); these
+> tasks **rework** detection to baseline-diff and fold in the adversarial-review fixes. TDD throughout;
+> the detector stays camera-free and OpenCV-free for unit tests.
 
-## Phase 1: Auto-capture detector (pure state machine + cv2-guarded metrics)
+## Phase 1: Detector rework — empty-desk baseline + central ROI (pure)
 
-- [ ] Add fail-first tests for `autocapture` driven by scalar `FrameMetrics` sequences (no cv2):
-  arm → CAPTURE only when stationary (`motion < thresh` for `stable_frames`) AND focus converged
-  (`sharpness ≥ preview_min_sharpness` and not still rising) AND new (`change_from_ref ≥ newpage_thresh`
-  or first); no capture while sharpness is still rising; `mark_captured()` → DISARMED; re-arm only on
-  scene clear (`change_from_ref ≥ clear_thresh` for `clear_frames`); `note_failed_capture()` cooldown +
-  `retry_limit` → STALLED; cooldown suppresses re-fire; env threshold overrides parsed.
-- [ ] Implement `src/ocr_from2xlsx/autocapture.py`: the pure `AutoCaptureDetector` (states ARMED /
-  DISARMED, actions CAPTURE / REARMED / STALLED / none), config dataclass with defaults +
-  `AUTOCAPTURE_*` env overrides, and cv2-guarded frame-metric helpers (`motion`, `change_from_ref`,
-  `sharpness` on a downscaled grayscale copy) kept separate from the state machine.
+- [ ] Fail-first tests (no cv2) for the reworked `autocapture`: `FrameMetrics(motion, diff_from_baseline,
+  sharpness)`; states NEED_BASELINE → ARMED → DISARMED → ARMED and PAUSED; no capture before
+  `set_baseline`; CAPTURE when `diff_from_baseline ≥ present_thresh` + stationary + `abs(Δsharpness) ≤
+  settle_tol` for `stable_frames`; re-arm when `diff_from_baseline ≤ clear_thresh` (< present_thresh) for
+  `clear_frames`; **regression: a 2nd near-identical form (high diff vs empty baseline) IS captured after
+  a clear-cycle**; repeated `note_failed_capture` → PAUSED and observe stops capturing; `abs()`
+  convergence (a falling sharpness is not "settled"); env overrides incl. `roi_fraction`.
+- [ ] Rework `src/ocr_from2xlsx/autocapture.py`: replace `change_from_ref` with `diff_from_baseline`;
+  add NEED_BASELINE/PAUSED + `set_baseline`; central-ROI metric helper (`to_metric_gray` honoring an ROI
+  fraction) + `mean_abs_diff`; `present_thresh`/`clear_thresh`/`settle_tol`/`roi_fraction` defaults +
+  `AUTOCAPTURE_*` env.
 
-**Quality Gate:**
-- [ ] State-machine tests pass with neither a camera nor OpenCV imported.
+**Quality Gate:** state-machine + ROI/metric tests pass with no camera and no OpenCV.
 
-## Phase 2: Batch-from-stills progress + shutter sound asset
+## Phase 2: App detection wiring — baseline capture + reset
 
-- [ ] Add a fail-first test that `prepare_records_from_images` calls an optional
-  `on_progress(done, total, name)` once per still, in order.
-- [ ] Implement the optional `on_progress` param on `prepare_records_from_images` (mirrors
-  `prepare_records_from_folder`); default `None` keeps current behavior.
-- [ ] Add `assets/shutter.wav` (short, mono, license-clean CC0) and an `app._play_shutter()` helper:
-  `winsound.PlaySound(path, SND_FILENAME | SND_ASYNC)` on Windows, safe no-op / fallback tone when
-  winsound, the asset, or audio is unavailable. Add a test that the unavailable path is a silent no-op.
+- [ ] Fail-first app tests (bare `ReviewApp.__new__`, fakes): starting a session prompts to clear desk
+  and sets the detector baseline; "reset baseline" re-captures; `_observe` computes `diff_from_baseline`
+  (vs baseline ROI) and `motion` (vs prev ROI) and drives the detector; no `ref_gray` remains.
+- [ ] Implement in `app.py`: baseline capture on start (clear-desk prompt → central-ROI gray →
+  `set_baseline`), "重設空桌基準" button, reworked `_observe_autocapture_frame`; remove ref_gray
+  management.
 
-**Quality Gate:**
-- [ ] `on_progress` test green; `_play_shutter` degrade path test green (no audio in CI).
+**Quality Gate:** app detection tests pass headless.
 
-## Phase 3: App continuous-capture session
+## Phase 3: App robustness — CJK write, pause, data recovery, completion dialog
 
-- [ ] Add fail-first app-level tests (inject fake `capture_still`, fake detector, fake camera; mirror
-  `test_scan_folder` / `test_app_navigation`): a session accumulates N stills; **Complete** routes to
-  `prepare_records_from_images` and loads the records into review; **Undo last** deletes the last still
-  and decrements the count; **Cancel** runs no recognition; starting a session while `editing` is
-  blocked; **Complete** with zero captures warns and runs no recognition.
-- [ ] Implement the session in `app.py`: a "連續拍照" toolbar button (toggle), gated by
-  `require_camera_support()` + a selected camera + not-`editing`; pick the output dir once; drive the
-  detector from `_poll_camera_frame` (compute `FrameMetrics`, act on CAPTURE/REARMED/STALLED) only when
-  a session is active; on CAPTURE run `capture_still`, apply `self._preview_rotation`, save
-  `scan-capture-NNNN.png`, increment count, play shutter + flash, `mark_captured`; status/count line
-  states (place form / focusing / captured-lift / waiting / too-blurry); Complete (modal `done/total`
-  via `on_progress` → `prepare_records_from_images` → `_set_loaded_records`), Cancel, Undo-last.
+- [ ] Fail-first tests: still saves to a **non-ASCII (CJK) output dir** (assert file exists); repeated
+  full-res blur pauses the session (no further capture / no loop); camera lost mid-session keeps stills
+  and `完成辨識` still recognizes them; recognition error preserves stills and is retryable; completion
+  shows a "辨識完成" dialog before review.
+- [ ] Implement: `_imwrite_unicode` (`cv2.imencode` + `Path.write_bytes`) in `_perform_autocapture`
+  (continuous path only); STALLED → pause session + guidance; `_finish` works whenever stills exist
+  (camera-loss) and preserves stills on error (retry); add the "辨識完成" messagebox before
+  `_set_loaded_records`.
 
-**Quality Gate:**
-- [ ] App-level session tests pass headless with injected fakes.
+**Quality Gate:** robustness tests pass; no regression in existing app tests.
 
-## Phase 4: Integration, packaging & verification
+## Phase 4: Integration, docs & verification
 
-- [ ] `build/package.py`: include `assets/shutter.wav` in the PyInstaller datas so the one-file exe can
-  play it; add/extend the bundle-content test if applicable.
-- [ ] README continuous-capture section (next to the webcam docs); CHANGELOG `[Unreleased]` `### Added`
-  entry; base OpenSpec spec (`openspec/specs/record-preparation/spec.md`) synced on archive. (No new CLI
-  subcommand → CLI help unchanged.)
-- [ ] `python -W error -m pytest -q` and `python -m policy_check --repo .` green; manually verify a real
-  webcam continuous session (place → auto-capture → lift → repeat → Complete → batch recognize →
-  review) and record the behavior/thresholds used in the PR.
+- [ ] CHANGELOG `[Unreleased]` updated for the redesign; README continuous-capture note adjusted to the
+  baseline workflow ("先擷取空桌基準"); base OpenSpec spec synced on archive.
+- [ ] `python -W error -m pytest -q` and `python -m policy_check --repo .` green.
+- [ ] Adversarial review re-run focused on detection (must include the same-template-stack regression);
+  manual real-camera verify (clear desk → baseline → place/lift a few same-template forms → Complete →
+  recognition-complete dialog → review), recording thresholds used.
 
-**Quality Gate:**
-- [ ] Full suite + policy green; `shutter.wav` present in the built bundle; manual run recorded.
+**Quality Gate:** full suite + policy green; adversarial pass clean; manual run recorded.
 
 ## Completion Checklist
 
 - [ ] All phases complete and quality gates green
-- [ ] CHANGELOG `[Unreleased]`, README, and PR-template checklist done
+- [ ] CHANGELOG `[Unreleased]`, README, PR-template checklist done
 - [ ] Ready for `/openspec-archive add-continuous-capture`

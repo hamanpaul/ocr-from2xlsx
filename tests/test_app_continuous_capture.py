@@ -45,6 +45,7 @@ def _bare_app():
     app._autocapture_baseline_gray = None
     app._autocapture_need_baseline = False
     app._autocapture_stills = []
+    app._autocapture_baseline_samples = []
     return app
 
 
@@ -100,7 +101,16 @@ def test_observe_grabs_baseline_then_arms(monkeypatch):
     app._autocapture_active = True
     app._autocapture_need_baseline = True
     app._autocapture_detector = AutoCaptureDetector()
-    took = ReviewApp._observe_autocapture_frame(app, np.zeros((48, 64), dtype="uint8"))
+    still_frame = np.zeros((48, 64), dtype="uint8")
+    need = app._autocapture_detector.config.baseline_stable_frames  # 3
+    # Feed need-1 frames → still in baseline mode
+    for i in range(need - 1):
+        took = ReviewApp._observe_autocapture_frame(app, still_frame)
+        assert took is False, f"frame {i+1} should return False (still collecting baseline)"
+        assert app._autocapture_need_baseline is True, f"should still need baseline after frame {i+1}"
+        assert app._autocapture_detector.state == "need_baseline"
+    # Feed the Nth frame → baseline established, detector armed
+    took = ReviewApp._observe_autocapture_frame(app, still_frame)
     assert took is False
     assert app._autocapture_need_baseline is False
     assert app._autocapture_baseline_gray is not None
@@ -452,3 +462,95 @@ def test_finish_recognition_error_preserves_stills_for_retry(monkeypatch, tmp_pa
     ReviewApp._finish_continuous_capture(app)
     assert app._autocapture_stills == [s1]  # preserved → retryable
     assert errors and errors[0][0] == "批次辨識失敗"
+
+
+# ---------------------------------------------------------------------------
+# R6 hardening tests: stability gate, illumination-robust diff, no-records clear
+# ---------------------------------------------------------------------------
+
+
+def test_baseline_gate_restarts_on_motion(monkeypatch):
+    """Feed 2 still frames, then a spatially different (motion) frame → samples reset;
+    then 3 still frames → detector arms.
+
+    Note: mean_normalized_diff removes DC (mean), so a uniform brightness shift alone
+    does NOT count as motion — that is correct illumination-robust behavior. This test
+    uses a frame with a different spatial pattern (not just a DC offset) to trigger the
+    motion gate.
+    """
+    import numpy as np
+    from ocr_from2xlsx.autocapture import AutoCaptureDetector
+
+    app = _bare_app()
+    app._autocapture_active = True
+    app._autocapture_need_baseline = True
+    app._autocapture_detector = AutoCaptureDetector()
+
+    still_frame = np.zeros((48, 64), dtype="float64")
+    # A frame with non-uniform content whose AC component differs from still_frame by
+    # more than motion_thresh (2.0). Use alternating rows so AC ≠ 0.
+    motion_frame = np.zeros((48, 64), dtype="float64")
+    motion_frame[::2, :] = 10.0   # alternating rows → AC diff ≈ 5.0 > 2.0
+
+    # Feed 2 still frames
+    ReviewApp._observe_autocapture_frame(app, still_frame)
+    ReviewApp._observe_autocapture_frame(app, still_frame)
+    assert app._autocapture_need_baseline is True  # still collecting
+
+    # Feed motion frame → samples should reset
+    ReviewApp._observe_autocapture_frame(app, motion_frame)
+    assert app._autocapture_need_baseline is True  # motion reset the run
+
+    # Feed 3 still frames again (same content as motion_frame to be "still" vs prev)
+    for _ in range(3):
+        ReviewApp._observe_autocapture_frame(app, motion_frame)
+
+    assert app._autocapture_need_baseline is False
+    assert app._autocapture_baseline_gray is not None
+    assert app._autocapture_detector.state == "armed"
+
+
+def test_finish_zero_records_clears_stills(monkeypatch, tmp_path):
+    """When prepare_records_from_images returns records=[] and JsonRecordSource also
+    yields nothing, _finish_continuous_capture must clear _autocapture_stills."""
+    import ocr_from2xlsx.scan as scan
+    from ocr_from2xlsx.domain import Batch, SourceBatch
+
+    app = _bare_app()
+    app._autocapture_active = True
+    app._autocapture_output_dir = tmp_path
+    s1 = tmp_path / "scan-capture.png"
+    s1.write_bytes(b"x")
+    app._autocapture_stills = [s1]
+
+    monkeypatch.setattr(
+        scan,
+        "prepare_records_from_images",
+        lambda *a, **k: Batch(
+            source_batch=SourceBatch(
+                created_at="t",
+                source_type="scan_records",
+                template_name="service_record.v1",
+            ),
+            records=[],
+        ),
+    )
+    monkeypatch.setattr("ocr_from2xlsx.cli._resolve_template", lambda name: SimpleNamespace(template_id=name))
+    monkeypatch.setattr(app, "_resolve_recognition_backend", lambda *a, **k: object())
+    monkeypatch.setattr(app, "_open_processing_modal", lambda msg: None)
+    monkeypatch.setattr(app, "_set_modal_message", lambda m, msg: None)
+    monkeypatch.setattr(app, "_close_processing_modal", lambda m: None)
+    monkeypatch.setattr(app, "_stop_camera", lambda: None)
+    monkeypatch.setattr("ocr_from2xlsx.json_io.dump_batch", lambda batch, path: Path(path).write_text("{}"))
+    warnings = []
+    monkeypatch.setattr("ocr_from2xlsx.app.messagebox.showwarning", lambda t, m: warnings.append((t, m)))
+    # JsonRecordSource yields no records
+    monkeypatch.setattr(
+        "ocr_from2xlsx.app.JsonRecordSource",
+        lambda path: SimpleNamespace(records=lambda: iter([])),
+    )
+
+    ReviewApp._finish_continuous_capture(app)
+
+    assert app._autocapture_stills == []
+    assert any("沒有可辨識" in t or "沒有可辨識" in m for t, m in warnings)

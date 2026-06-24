@@ -193,6 +193,7 @@ class ReviewApp(tk.Tk):
     _autocapture_prev_gray: object | None = None
     _autocapture_baseline_gray: object | None = None
     _autocapture_need_baseline: bool = False
+    _autocapture_baseline_samples: list | None = None
     _splash_closed: bool = False
     _status_var: object | None = None
     _status_log_path: object | None = None
@@ -260,6 +261,7 @@ class ReviewApp(tk.Tk):
         self._autocapture_baseline_gray = None
         self._autocapture_need_baseline = False
         self._autocapture_stills: list[Path] = []
+        self._autocapture_baseline_samples: list = []
         self._splash_closed = False
         self._status_log: list[str] = []
         self._status_var = None
@@ -1107,6 +1109,7 @@ class ReviewApp(tk.Tk):
         self._autocapture_prev_gray = None
         self._autocapture_baseline_gray = None
         self._autocapture_need_baseline = True
+        self._autocapture_baseline_samples = []
         self._autocapture_detector = AutoCaptureDetector(AutoCaptureConfig.from_env())
         self._autocapture_active = True
         self._push_status("連續拍照：擷取空桌基準中…請保持桌面淨空。")
@@ -1143,16 +1146,18 @@ class ReviewApp(tk.Tk):
             return
         self._autocapture_need_baseline = True
         self._autocapture_prev_gray = None
+        self._autocapture_baseline_samples = []
         self._push_status("連續拍照：重新擷取空桌基準中…請保持桌面淨空。")
 
     def _observe_autocapture_frame(self, frame: object) -> bool:
         """Feed one preview frame to the detector. Returns True when it took over the
         camera (a capture/restart happened) so the poll loop should stop for this tick."""
+        import numpy as np
         from ocr_from2xlsx.autocapture import (
             CAPTURE,
             REARMED,
             FrameMetrics,
-            mean_abs_diff,
+            mean_normalized_diff,
             to_metric_gray,
         )
         from ocr_from2xlsx.capture import measure_sharpness
@@ -1160,14 +1165,26 @@ class ReviewApp(tk.Tk):
         roi = self._autocapture_detector.config.roi_fraction
         gray = to_metric_gray(frame, roi_fraction=roi)
         if self._autocapture_need_baseline:
-            self._autocapture_baseline_gray = gray
+            cfg = self._autocapture_detector.config
+            samples = self._autocapture_baseline_samples
+            if samples and mean_normalized_diff(gray, samples[-1]) >= cfg.motion_thresh:
+                samples.clear()  # moved → restart the stable run
+            samples.append(gray)
             self._autocapture_prev_gray = gray
-            self._autocapture_need_baseline = False
-            self._autocapture_detector.set_baseline()
-            self._push_status("連續拍照：已設定空桌基準｜請放上表單…")
+            need = cfg.baseline_stable_frames
+            if len(samples) >= need:
+                self._autocapture_baseline_gray = np.mean(np.stack(samples[-need:]), axis=0)
+                self._autocapture_baseline_samples = []
+                self._autocapture_need_baseline = False
+                self._autocapture_detector.set_baseline()
+                self._push_status("連續拍照：已設定空桌基準｜請放上表單…")
+            else:
+                self._push_status(
+                    f"連續拍照：擷取空桌基準中…（{len(samples)}/{need}）請保持桌面淨空。"
+                )
             return False
-        motion = mean_abs_diff(gray, self._autocapture_prev_gray)
-        diff_from_baseline = mean_abs_diff(gray, self._autocapture_baseline_gray)
+        motion = mean_normalized_diff(gray, self._autocapture_prev_gray)
+        diff_from_baseline = mean_normalized_diff(gray, self._autocapture_baseline_gray)
         self._autocapture_prev_gray = gray
         try:
             sharpness = measure_sharpness(frame)
@@ -1288,6 +1305,7 @@ class ReviewApp(tk.Tk):
             self._close_processing_modal(modal)
         records = list(JsonRecordSource(json_path).records())
         if not records:
+            self._autocapture_stills = []
             messagebox.showwarning("沒有可辨識的影像", "辨識結果沒有任何紀錄。")
             return
         self._autocapture_stills = []  # consumed

@@ -39,6 +39,7 @@ class AutoCaptureConfig:
     settle_tol: float = 5.0             # abs frame-to-frame sharpness change <= this == focus settled
     cooldown_frames: int = 8            # frames to ignore right after a capture / failed capture
     retry_limit: int = 3                # consecutive blurry/failed captures before PAUSED
+    baseline_stable_frames: int = 3     # consecutive still frames required to lock the empty-desk baseline
 
     @classmethod
     def from_env(cls) -> "AutoCaptureConfig":
@@ -55,6 +56,9 @@ class AutoCaptureConfig:
             settle_tol=_env_float("AUTOCAPTURE_SETTLE_TOL", cls.settle_tol),
             cooldown_frames=_env_int("AUTOCAPTURE_COOLDOWN_FRAMES", cls.cooldown_frames),
             retry_limit=_env_int("AUTOCAPTURE_RETRY_LIMIT", cls.retry_limit),
+            baseline_stable_frames=_env_int(
+                "AUTOCAPTURE_BASELINE_STABLE_FRAMES", cls.baseline_stable_frames
+            ),
         )
 
 
@@ -206,3 +210,18 @@ def mean_abs_diff(a: object, b: object) -> float:
     if a.shape != b.shape:
         return float("inf")
     return float(np.abs(a - b).mean())
+
+
+def mean_normalized_diff(a: object, b: object) -> float:
+    """Mean absolute difference after removing each array's mean (DC/brightness level).
+    Robust to uniform illumination/exposure shifts. Returns +inf when either is None or
+    shapes differ."""
+    import numpy as np
+
+    if a is None or b is None:
+        return float("inf")
+    a = np.asarray(a, dtype="float64")
+    b = np.asarray(b, dtype="float64")
+    if a.shape != b.shape:
+        return float("inf")
+    return float(np.abs((a - a.mean()) - (b - b.mean())).mean())

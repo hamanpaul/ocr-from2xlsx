@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from ocr_from2xlsx.autocapture import (
     ARMED,
@@ -15,6 +16,7 @@ from ocr_from2xlsx.autocapture import (
     AutoCaptureDetector,
     FrameMetrics,
     mean_abs_diff,
+    mean_normalized_diff,
     to_metric_gray,
 )
 
@@ -31,6 +33,7 @@ def test_config_defaults():
     assert cfg.settle_tol == 5.0
     assert cfg.cooldown_frames == 8
     assert cfg.retry_limit == 3
+    assert cfg.baseline_stable_frames == 3
 
 
 def test_config_from_env_overrides_and_ignores_garbage(monkeypatch):
@@ -147,3 +150,17 @@ def test_mean_abs_diff_values_and_guards():
     assert mean_abs_diff(a, b) == 10.0
     assert mean_abs_diff(a, None) == float("inf")
     assert mean_abs_diff(a, np.zeros((2, 2))) == float("inf")
+
+
+def test_mean_normalized_diff_ignores_uniform_shift():
+    a = np.array([[10.0, 20.0], [30.0, 40.0]])
+    # uniform brightness shift → zero AC difference
+    assert mean_normalized_diff(a, a + 50) == pytest.approx(0, abs=1e-9)
+    # content change → non-zero
+    b = np.array([[10.0, 20.0], [30.0, 90.0]])
+    assert mean_normalized_diff(a, b) > 0
+    # None guard
+    assert mean_normalized_diff(None, a) == float("inf")
+    assert mean_normalized_diff(a, None) == float("inf")
+    # shape mismatch guard
+    assert mean_normalized_diff(a, np.zeros((3, 3))) == float("inf")

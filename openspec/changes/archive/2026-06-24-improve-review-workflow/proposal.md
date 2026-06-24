@@ -117,3 +117,29 @@ Name-crop display reuses the existing preview-image scaling; the roster list reu
 | Mode toggle hides a control the operator still needs mid-task | Low | Med | Mode is driven by session state with an explicit toggle; both modes keep 確認並寫入/強制寫入 reachable where it matters; documented. |
 | Name crop path missing / unreadable | Med | Low | Fall back to the full source image (existing behavior) when `name_crop` is absent or unreadable. |
 | Per-record badge drifts from actual workbook state after overwrite | Low | Med | Badge derived from `written_indices` + last result in one pure helper; updated on every write/overwrite; unit-tested. |
+
+---
+
+## Archive Information
+
+**Archived:** 2026-06-24
+**Outcome:** Successfully implemented (#44, #45, #46, #48)
+
+### Files Modified
+- `src/ocr_from2xlsx/review_workflow.py` (new — pure mode/badge/roster-ranking helpers)
+- `src/ocr_from2xlsx/workbook.py` (`write_record(row=)` + `_clear_row` row-targeted overwrite)
+- `src/ocr_from2xlsx/session.py` (`accept_scan(overwrite_row=)`)
+- `src/ocr_from2xlsx/app.py` (`ReviewApp`: scan/correction modes, progress + badge, name-crop+roster panel,
+  re-open/overwrite flow)
+- `tests/test_review_workflow.py`, `tests/test_app_workflow.py` (new); `tests/test_workbook.py`,
+  `tests/test_session.py`, `tests/test_app_navigation.py`, `tests/test_app_shortcuts.py` (extended)
+- `CHANGELOG.md`, `README.md`
+
+### Specs Updated
+- `openspec/specs/record-confirmation/spec.md` — added: switchable scan/correction modes; persistent
+  progress + per-record status badge; name-crop + roster-candidate aids; re-open & overwrite a written row.
+
+### Verification
+- `python -W error -m pytest -q`: 617 passed, 4 skipped. `python -m policy_check --repo .`: 16 pass / 0 fail.
+- TDD per task (fail-first → implement → green); a final whole-PR code review ("Ready to merge, with fixes")
+  with all flagged fixes addressed. Manual interactive GUI session deferred (behavior covered by tests).

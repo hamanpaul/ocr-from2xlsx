@@ -59,6 +59,7 @@ Review/correction is keyboard-first: when a record opens, focus lands on the fir
 - **Progress + per-record status** — the footer shows `已寫入 X / 共 N` and the current row, plus a per-record badge (`已寫入` / `待處理` / `被擋下`); navigating back to a written record shows its badge and row.
 - **Handwritten-name aids** — a `姓名校正` panel shows a zoomed name crop (`record.ocr.name_crop`, falling back to a placeholder when absent) and a list of roster suggestions from the confirmed-name store; clicking a suggestion fills the name and clears its `⚠`.
 - **Write recovery (re-open & overwrite)** — confirming/force-writing a record that was already written prompts `將覆寫第 N 列`; confirming overwrites that exact row (no duplicate), cancelling writes nothing.
+- **Image verification (pan / zoom / field framing)** — the source-image preview is a Canvas viewer: drag to pan, scroll the mouse wheel to zoom (integer-step magnification, zoom remembered for the session), and focusing a field frames the image to that field's area (recognition-layout section band). The live camera preview stays fit-to-pane.
 
 ```powershell
 ocr-from2xlsx

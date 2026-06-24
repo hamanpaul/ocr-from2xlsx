@@ -113,3 +113,26 @@ widgets so it never steals digits from text entries.
 | Number-key selection steals digits needed in text fields (病歷號/日期) | Med | High | Bind digit keys only on single-choice option widgets, never globally or on text entries; covered by an explicit "digits stay text" test. |
 | Tab/focus order surprises (option frames vs. entries) | Med | Low | Navigable order derived from the layout's field order via a pure helper and asserted in tests; focus targets a defined widget per field. |
 | Auto-focus/scroll throws when there is no real Tk root (unit fixtures) | Low | Low | Focus/scroll guarded so headless fixtures (`ReviewApp.__new__`) stay testable, matching existing modal/preview guards. |
+
+---
+
+## Archive Information
+
+**Archived:** 2026-06-24
+**Outcome:** Successfully implemented (#42, #43)
+
+### Files Modified
+- `src/ocr_from2xlsx/review_nav.py` (new — pure next/prev-flagged + digit→option helpers)
+- `src/ocr_from2xlsx/app.py` (`ConfirmForm` keyboard surface + `ReviewApp` shortcuts / exception-first load)
+- `tests/test_review_nav.py`, `tests/test_confirm_form_keyboard.py`, `tests/test_app_shortcuts.py` (new)
+- `tests/test_app_navigation.py` (shared fake/fixture extension)
+- `CHANGELOG.md`, `README.md`
+
+### Specs Updated
+- `openspec/specs/record-confirmation/spec.md` — added: keyboard-driven review loop; open at first field
+  needing attention; jump between only flagged fields; keyboard option entry.
+
+### Verification
+- `python -W error -m pytest -q`: 598 passed, 5 skipped. `python -m policy_check --repo .`: 16 pass / 0 fail.
+- Two-stage subagent review (spec + quality) per task + a final whole-branch code review ("Ready to merge");
+  all review findings addressed. Manual interactive GUI session deferred (behavior covered by real-Tk tests).

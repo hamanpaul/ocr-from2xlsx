@@ -53,6 +53,13 @@ Review/correction is keyboard-first: when a record opens, focus lands on the fir
 - `Ctrl+Tab` / `Ctrl+Shift+Tab` — jump to the next / previous field needing confirmation (cycles only `⚠` fields)
 - On a focused single-choice field, number keys `1`–`N` pick that option; on a focused multi-choice option, the spacebar toggles it. Digits typed into a text field stay text.
 
+### Correction workflow aids
+
+- **Scan vs. correction modes** — the `掃描/校正` button toggles the toolbar between a correction mode (上一筆 / 下一筆 / 確認並寫入 / 強制寫入 only) and a scan mode (擷取並辨識 / 匯入資料夾批次 / 選擇攝影機 / 旋轉 / 放大 / 縮小), so correction is uncluttered and you can't mis-click a scan-station action mid-review.
+- **Progress + per-record status** — the footer shows `已寫入 X / 共 N` and the current row, plus a per-record badge (`已寫入` / `待處理` / `被擋下`); navigating back to a written record shows its badge and row.
+- **Handwritten-name aids** — a `姓名校正` panel shows a zoomed name crop (`record.ocr.name_crop`, falling back to a placeholder when absent) and a list of roster suggestions from the confirmed-name store; clicking a suggestion fills the name and clears its `⚠`.
+- **Write recovery (re-open & overwrite)** — confirming/force-writing a record that was already written prompts `將覆寫第 N 列`; confirming overwrites that exact row (no duplicate), cancelling writes nothing.
+
 ```powershell
 ocr-from2xlsx
 ```

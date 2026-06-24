@@ -202,7 +202,7 @@ def test_writer_failure_does_not_reserve_duplicate_key() -> None:
         def existing_duplicate_keys(self) -> set[tuple[str, str, str, str]]:
             return set()
 
-        def write_record(self, record) -> int:
+        def write_record(self, record, row: int | None = None) -> int:
             return 2
 
         def save(self) -> None:

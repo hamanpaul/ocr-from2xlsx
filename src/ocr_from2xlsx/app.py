@@ -187,6 +187,13 @@ class ReviewApp(tk.Tk):
     _camera_index: int | None = None
     _preview_rotation: int = 0
     _preview_zoom: float = 1.0
+    _autocapture_active: bool = False
+    _autocapture_detector: object | None = None
+    _autocapture_output_dir: object | None = None
+    _autocapture_prev_gray: object | None = None
+    _autocapture_baseline_gray: object | None = None
+    _autocapture_need_baseline: bool = False
+    _autocapture_baseline_samples: list | None = None
     _splash_closed: bool = False
     _status_var: object | None = None
     _status_log_path: object | None = None
@@ -247,6 +254,14 @@ class ReviewApp(tk.Tk):
         self._camera_index = None
         self._preview_rotation = self._load_preview_rotation()
         self._preview_zoom = 1.0
+        self._autocapture_active = False
+        self._autocapture_detector = None
+        self._autocapture_output_dir = None
+        self._autocapture_prev_gray = None
+        self._autocapture_baseline_gray = None
+        self._autocapture_need_baseline = False
+        self._autocapture_stills: list[Path] = []
+        self._autocapture_baseline_samples: list = []
         self._splash_closed = False
         self._status_log: list[str] = []
         self._status_var = None
@@ -277,6 +292,21 @@ class ReviewApp(tk.Tk):
             side=tk.LEFT, padx=4
         )
         ttk.Button(toolbar, text="匯入資料夾批次", command=self._import_folder_batch).pack(
+            side=tk.LEFT, padx=4
+        )
+        ttk.Button(toolbar, text="連續拍照", command=self._start_continuous_capture).pack(
+            side=tk.LEFT, padx=4
+        )
+        ttk.Button(toolbar, text="完成辨識", command=self._finish_continuous_capture).pack(
+            side=tk.LEFT, padx=4
+        )
+        ttk.Button(toolbar, text="復原上一張", command=self._undo_last_continuous_capture).pack(
+            side=tk.LEFT, padx=4
+        )
+        ttk.Button(toolbar, text="取消連拍", command=self._cancel_continuous_capture).pack(
+            side=tk.LEFT, padx=4
+        )
+        ttk.Button(toolbar, text="重設空桌基準", command=self._reset_baseline).pack(
             side=tk.LEFT, padx=4
         )
         ttk.Button(toolbar, text="旋轉", command=self._rotate_preview).pack(
@@ -850,6 +880,9 @@ class ReviewApp(tk.Tk):
                 self._retry_camera_preview("攝影機畫面連續讀取失敗，已停止預覽")
                 return
 
+            if self._autocapture_active and self._observe_autocapture_frame(frame):
+                return
+
             if self._preview_rotation:
                 from ocr_from2xlsx.capture import rotate_frame
 
@@ -1006,6 +1039,286 @@ class ReviewApp(tk.Tk):
     def _zoom_preview(self, factor: float) -> None:
         self._preview_zoom = min(8.0, max(1.0, self._preview_zoom * factor))
         self._push_status(f"預覽縮放 {self._preview_zoom:.2f}×")
+
+    @staticmethod
+    def _shutter_sound_path() -> Path | None:
+        # app.py lives in src/ocr_from2xlsx/, and the PyInstaller spec bundles the wav
+        # under ocr_from2xlsx/assets/, so this resolves for both source runs and the exe.
+        path = Path(__file__).resolve().parent / "assets" / "shutter.wav"
+        return path if path.is_file() else None
+
+    @staticmethod
+    def _imwrite_unicode(path: Path, frame: object) -> bool:
+        """Write an image to a possibly non-ASCII path. cv2.imwrite silently fails on
+        non-ASCII (e.g. CJK) paths on Windows; imencode + write_bytes does not."""
+        import cv2
+
+        try:
+            ok, buf = cv2.imencode(".png", frame)
+            if not ok:
+                return False
+            Path(path).write_bytes(buf.tobytes())
+            return True
+        except Exception:
+            return False
+
+    def _play_shutter(self) -> None:
+        try:
+            import winsound
+        except Exception:
+            return  # non-Windows / no audio module: silent no-op
+        path = self._shutter_sound_path()
+        try:
+            if path is not None and path.is_file():
+                winsound.PlaySound(str(path), winsound.SND_FILENAME | winsound.SND_ASYNC)
+            else:
+                winsound.MessageBeep(winsound.MB_OK)
+        except Exception:
+            pass
+
+    def _start_continuous_capture(self) -> None:
+        from ocr_from2xlsx.autocapture import AutoCaptureConfig, AutoCaptureDetector
+        from ocr_from2xlsx.capture import CameraDependencyError, require_camera_support
+
+        if self._autocapture_active:
+            return
+        if self.editing:
+            messagebox.showerror(
+                "尚未保存", "目前資料已修改，請先使用「確認並寫入」或「強制寫入」。"
+            )
+            return
+        if self._camera_index is None:
+            try:
+                require_camera_support()
+            except CameraDependencyError as exc:
+                self._clear_inactive_camera_selection()
+                messagebox.showerror("連續拍照", str(exc))
+                return
+            self._clear_inactive_camera_selection()
+            messagebox.showwarning("連續拍照", "請先選擇可用的攝影機。")
+            return
+        selected_dir = filedialog.askdirectory(title="選擇辨識輸出資料夾")
+        if not selected_dir:
+            return
+        if not messagebox.askokcancel("連續拍照", "請清空桌面，確定後擷取『空桌基準』。"):
+            return
+        output_dir = Path(selected_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        self._autocapture_output_dir = output_dir
+        self._autocapture_stills = []
+        self._autocapture_prev_gray = None
+        self._autocapture_baseline_gray = None
+        self._autocapture_need_baseline = True
+        self._autocapture_baseline_samples = []
+        self._autocapture_detector = AutoCaptureDetector(AutoCaptureConfig.from_env())
+        self._autocapture_active = True
+        self._push_status("連續拍照：擷取空桌基準中…請保持桌面淨空。")
+        if not self._has_live_camera_preview():
+            self._start_camera(self._camera_index)
+
+    def _cancel_continuous_capture(self) -> None:
+        if not self._autocapture_active:
+            return
+        restore = self._has_live_camera_preview()
+        self._stop_camera()
+        self._autocapture_active = False
+        count = len(self._autocapture_stills)
+        self._push_status(f"已取消連續拍照（保留 {count} 張於輸出資料夾，未辨識）。")
+        if restore:
+            self._start_camera(self._camera_index)
+
+    def _undo_last_continuous_capture(self) -> None:
+        if not self._autocapture_active or not self._autocapture_stills:
+            self._push_status("沒有可復原的擷取。")
+            return
+        last = self._autocapture_stills.pop()
+        try:
+            Path(last).unlink()
+        except OSError:
+            pass
+        self._push_status(f"已復原上一張｜已擷取 {len(self._autocapture_stills)} 張")
+
+    def _reset_baseline(self) -> None:
+        if not self._autocapture_active:
+            self._push_status("尚未開始連續拍照。")
+            return
+        if not messagebox.askokcancel("重設空桌基準", "請清空桌面，確定後重抓『空桌基準』。"):
+            return
+        self._autocapture_need_baseline = True
+        self._autocapture_prev_gray = None
+        self._autocapture_baseline_samples = []
+        self._push_status("連續拍照：重新擷取空桌基準中…請保持桌面淨空。")
+
+    def _observe_autocapture_frame(self, frame: object) -> bool:
+        """Feed one preview frame to the detector. Returns True when it took over the
+        camera (a capture/restart happened) so the poll loop should stop for this tick."""
+        import numpy as np
+        from ocr_from2xlsx.autocapture import (
+            CAPTURE,
+            REARMED,
+            FrameMetrics,
+            mean_normalized_diff,
+            to_metric_gray,
+        )
+        from ocr_from2xlsx.capture import measure_sharpness
+
+        roi = self._autocapture_detector.config.roi_fraction
+        gray = to_metric_gray(frame, roi_fraction=roi)
+        if self._autocapture_need_baseline:
+            cfg = self._autocapture_detector.config
+            samples = self._autocapture_baseline_samples
+            if samples and mean_normalized_diff(gray, samples[-1]) >= cfg.motion_thresh:
+                samples.clear()  # moved → restart the stable run
+            samples.append(gray)
+            self._autocapture_prev_gray = gray
+            need = cfg.baseline_stable_frames
+            if len(samples) >= need:
+                self._autocapture_baseline_gray = np.mean(np.stack(samples[-need:]), axis=0)
+                self._autocapture_baseline_samples = []
+                self._autocapture_need_baseline = False
+                self._autocapture_detector.set_baseline()
+                self._push_status("連續拍照：已設定空桌基準｜請放上表單…")
+            else:
+                self._push_status(
+                    f"連續拍照：擷取空桌基準中…（{len(samples)}/{need}）請保持桌面淨空。"
+                )
+            return False
+        motion = mean_normalized_diff(gray, self._autocapture_prev_gray)
+        diff_from_baseline = mean_normalized_diff(gray, self._autocapture_baseline_gray)
+        self._autocapture_prev_gray = gray
+        try:
+            sharpness = measure_sharpness(frame)
+        except Exception:
+            sharpness = 0.0
+        action = self._autocapture_detector.observe(
+            FrameMetrics(
+                motion=motion, diff_from_baseline=diff_from_baseline, sharpness=sharpness
+            )
+        )
+        if action == CAPTURE:
+            return self._perform_autocapture()
+        if action == REARMED:
+            self._push_status(
+                f"連續拍照中｜已擷取 {len(self._autocapture_stills)} 張｜請放上下一張…"
+            )
+        return False
+
+    def _perform_autocapture(self) -> bool:
+        from ocr_from2xlsx.autocapture import STALLED
+        from ocr_from2xlsx.capture import DEFAULT_MIN_SHARPNESS, capture_still, rotate_frame
+        from ocr_from2xlsx.scan import next_output_artifact_path
+
+        index = self._camera_index
+        self._stop_camera()
+        result = None
+        try:
+            result = capture_still(index, min_sharpness=DEFAULT_MIN_SHARPNESS)
+        except Exception as exc:  # noqa: BLE001 - surface and keep the session recoverable
+            self._push_status(f"連續拍照擷取失敗：{exc}")
+        if result is None:
+            self._autocapture_active = False
+            self._push_status(
+                f"連續拍照：相機中斷，已擷取 {len(self._autocapture_stills)} 張；"
+                "可按『完成辨識』辨識，或『取消連拍』放棄。"
+            )
+            return True
+        if not result.passed:
+            outcome = self._autocapture_detector.note_failed_capture()
+            if outcome == STALLED:
+                self._push_status(
+                    f"連續拍照：連續多張太模糊（清晰度 {result.sharpness:.0f}），已暫停；"
+                    "請調整對焦/光線後按『重設空桌基準』。"
+                )
+            else:
+                self._push_status(
+                    f"連續拍照：太模糊（清晰度 {result.sharpness:.0f}），自動重試…"
+                )
+            self._start_camera(index)
+            return True
+
+        frame = result.frame
+        if self._preview_rotation:
+            frame = rotate_frame(frame, self._preview_rotation)
+        output_dir = self._autocapture_output_dir
+        image_path = next_output_artifact_path(output_dir, "scan-capture.png")
+        if not self._imwrite_unicode(image_path, frame):
+            outcome = self._autocapture_detector.note_failed_capture()
+            if outcome == STALLED:
+                self._push_status(
+                    f"連續拍照：連續無法寫入影像（{image_path}），已暫停；"
+                    "請檢查輸出資料夾後按『重設空桌基準』。"
+                )
+            else:
+                self._push_status(
+                    f"連續拍照：無法寫入擷取影像 {image_path}，自動重試…"
+                )
+            self._start_camera(index)
+            return True
+        self._autocapture_stills.append(image_path)
+        # Baseline stays the empty desk; reset only the motion reference after the reopen.
+        self._autocapture_prev_gray = None
+        self._autocapture_detector.mark_captured()
+        self._play_shutter()
+        self._flash_preview()
+        self._push_status(
+            f"連續拍照中｜已擷取 {len(self._autocapture_stills)} 張｜請拿開換下一張…"
+        )
+        self._start_camera(index)
+        return True
+
+    def _finish_continuous_capture(self) -> None:
+        from ocr_from2xlsx.cli import _resolve_template
+        from ocr_from2xlsx.json_io import dump_batch
+        from ocr_from2xlsx.plugin_backend import scan_doc_preprocess_env_overrides
+        from ocr_from2xlsx.scan import next_output_artifact_path, prepare_records_from_images
+
+        stills = list(self._autocapture_stills)
+        if not self._autocapture_active and not stills:
+            return
+        self._stop_camera()
+        self._autocapture_active = False
+        if not stills:
+            messagebox.showwarning("連續拍照", "尚未擷取任何影像，沒有可辨識的內容。")
+            return
+        json_path = next_output_artifact_path(self._autocapture_output_dir, "scan-prepared.json")
+        modal = self._open_processing_modal("批次辨識中…")
+        try:
+            backend = self._resolve_recognition_backend(
+                json_path, scan_doc_preprocess_env_overrides()
+            )
+            template = _resolve_template("service_record.v1")
+
+            def _progress(done: int, total: int, name: str) -> None:
+                self._set_modal_message(modal, f"批次辨識中… {done}/{total}\n{name}")
+
+            batch = prepare_records_from_images(
+                stills, self._autocapture_output_dir, template, backend, on_progress=_progress
+            )
+            dump_batch(batch, json_path)
+        except Exception as exc:  # noqa: BLE001 - keep the stills for a retry
+            self._close_processing_modal(modal)
+            messagebox.showerror(
+                "批次辨識失敗", f"{exc}\n（已擷取的影像保留，可再次按『完成辨識』重試。）"
+            )
+            return
+        else:
+            self._close_processing_modal(modal)
+        records = list(JsonRecordSource(json_path).records())
+        if not records:
+            self._autocapture_stills = []
+            messagebox.showwarning("沒有可辨識的影像", "辨識結果沒有任何紀錄。")
+            return
+        self._autocapture_stills = []  # consumed
+        messagebox.showinfo("辨識完成", f"已辨識 {len(records)} 筆，進入逐張人工校正。")
+        self._set_loaded_records(records, json_path)
+        self._push_status(f"連續拍照完成：{len(records)} 筆，請逐筆確認後寫入。")
+
+    def _flash_preview(self) -> None:
+        try:
+            self.preview.configure(background="#d0ffd0")
+            self.preview.after(120, lambda: self.preview.configure(background="white"))
+        except Exception:
+            pass
 
     def _zoom_crop(self, frame: object):
         # Zoom by cropping a centered region (then the fit-resize scales it up to the pane).

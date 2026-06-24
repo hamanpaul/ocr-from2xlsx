@@ -98,3 +98,30 @@ together and covered by the existing camera/preview tests.
 | Field→region framing imprecise (section band, not per-field) | High | Low | Scope the link to section-band granularity (+ `name_crop`); document it as "frames the field's area," not a tight per-field box; it still beats hunting the whole page. |
 | Wheel-zoom / pan math off (image jumps, escapes bounds) | Med | Med | Pure, unit-tested transform with clamped zoom and pan bounds; zoom anchored at the cursor. |
 | Canvas image scaling performance on large source pages | Low | Low | Downscale to a display copy as the current preview does; zoom works on the display copy. |
+
+---
+
+## Archive Information
+
+**Archived:** 2026-06-24
+**Outcome:** Successfully implemented (#47)
+
+### Files Modified
+- `src/ocr_from2xlsx/image_viewer.py` (new — pure clamp_zoom / anchored_origin / clamp_origin / field_region)
+- `src/ocr_from2xlsx/app.py` (new `ImageViewer` Canvas widget; `_poll_camera_frame` / `_show_source_image` /
+  `_show_placeholder_preview` migrated to it; `_frame_field_region` + `ConfirmForm.on_field_region` wiring)
+- `tests/test_image_viewer.py`, `tests/test_app_image_viewer.py` (new); `tests/test_app_navigation.py`
+  (`FakePreview` migrated to the viewer interface)
+- `CHANGELOG.md`, `README.md`
+
+### Specs Updated
+- `openspec/specs/record-confirmation/spec.md` — added: pan + wheel-zoom the source image (remembered zoom,
+  live/placeholder still render); frame the source image to a focused field's region.
+
+### Verification
+- `python -W error -m pytest -q`: 628 passed, 4 skipped. `python -m policy_check --repo .`: 16 pass / 0 fail.
+- TDD per task (fail-first → implement → green); final whole-PR code review ("With fixes") — the flagged
+  `frame_region` fractional-zoom defect was fixed (floor to an integer factor) with a regression test. Manual
+  interactive GUI session deferred (behavior covered by automated tests). KNOWN: zoom magnifies the
+  fit-to-pane display copy via integer `PhotoImage.zoom`; a pixel-accurate re-subsample from the original is a
+  possible follow-up.

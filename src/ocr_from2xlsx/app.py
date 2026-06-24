@@ -16,6 +16,11 @@ from ocr_from2xlsx.capture import (
 from ocr_from2xlsx.confirm_form import apply_form_state, record_to_form_state
 from ocr_from2xlsx.recognition.layout import SERVICE_RECORD_V1_LAYOUT
 from ocr_from2xlsx.recognition.review_flags import flagged_fields
+from ocr_from2xlsx.review_nav import (
+    next_flagged_key,
+    option_index_for_digit,
+    prev_flagged_key,
+)
 from ocr_from2xlsx.correction_store import default_correction_store_path
 from ocr_from2xlsx.domain import Record
 from ocr_from2xlsx.form_layout import FormLayout, service_record_layout
@@ -42,9 +47,11 @@ class ConfirmForm:
         parent: tk.Misc,
         layout: FormLayout,
         on_change: Callable[[], None] | None = None,
+        on_field_focused: Callable[[tk.Misc], None] | None = None,
     ) -> None:
         self.layout = layout
         self._on_change = on_change
+        self._on_field_focused = on_field_focused
         self.frame = ttk.Frame(parent)
         self.text_fields: dict[str, tk.StringVar] = {}
         self.single_choice_fields: dict[str, tk.StringVar] = {}
@@ -54,6 +61,14 @@ class ConfirmForm:
         # low-confidence / unfilled fields for the reviewer.
         self._field_labels: dict[str, ttk.Label] = {}
         self._field_titles: dict[str, str] = {}
+        # Keyboard-first review surface (#42/#43): the ordered list of navigable
+        # fields (by record_path), the focus widget per field, the current flagged
+        # set + last-focused field for cycling, and per-field digit-select handlers.
+        self._nav_order: list[str] = []
+        self._focus_widgets: dict[str, tk.Misc] = {}
+        self._flagged: dict[str, str] = {}
+        self._current_focus: str | None = None
+        self._single_choice_select_by_digit: dict[str, Callable[[str], bool]] = {}
         self.frame.columnconfigure(0, weight=1)
 
         for section_row, section in enumerate(layout.sections):
@@ -74,6 +89,9 @@ class ConfirmForm:
                     )
                     entry.bind("<Key>", self._mark_changed)
                     self.text_fields[field.key] = var
+                    if field.record_path:
+                        self._focus_widgets[field.record_path] = entry
+                        self._nav_order.append(field.record_path)
                 elif field.kind == "single_choice":
                     # Single-choice rendered as mutually-exclusive checkboxes (per the
                     # UI request: no radios, no "清除" button). A StringVar holds the
@@ -92,43 +110,84 @@ class ConfirmForm:
                             option_var.set(option_code == chosen)
                         self._notify_change()
 
+                    option_codes = [option.code for option in field.options]
+                    first_checkbox: ttk.Checkbutton | None = None
                     for option_index, option in enumerate(field.options):
                         bvar = tk.BooleanVar(value=False)
                         option_vars[option.code] = bvar
-                        ttk.Checkbutton(
+                        checkbox = ttk.Checkbutton(
                             options,
                             text=option.label,
                             variable=bvar,
                             command=lambda code=option.code: _select(code),
-                        ).grid(
+                        )
+                        checkbox.grid(
                             row=option_index // 4,
                             column=option_index % 4,
                             sticky="w",
                             padx=(0, 8),
                             pady=2,
                         )
+                        if first_checkbox is None:
+                            first_checkbox = checkbox
+
+                    def _digit_select(char: str, _codes=option_codes, _select=_select) -> bool:
+                        index = option_index_for_digit(char, len(_codes))
+                        if index is None:
+                            return False
+                        _select(_codes[index])
+                        return True
+
+                    # Number-key option entry is bound ONLY on this field's option
+                    # checkboxes, so digits never get stolen from text entries.
+                    for checkbox in options.winfo_children():
+                        checkbox.bind(
+                            "<Key>",
+                            lambda event, handler=_digit_select: (
+                                "break" if handler(event.char) else None
+                            ),
+                        )
                     self.single_choice_fields[field.key] = var
                     self._single_choice_option_vars[field.key] = option_vars
+                    self._single_choice_select_by_digit[field.key] = _digit_select
+                    if field.record_path and first_checkbox is not None:
+                        self._focus_widgets[field.record_path] = first_checkbox
+                        self._nav_order.append(field.record_path)
                 elif field.kind == "multi_choice":
                     options = ttk.Frame(group)
                     options.grid(row=field_row, column=1, sticky="w", pady=3)
                     code_vars: dict[str, tk.BooleanVar] = {}
+                    first_checkbox = None
                     for option_index, option in enumerate(field.options):
                         bvar = tk.BooleanVar(value=False)
-                        ttk.Checkbutton(
+                        checkbox = ttk.Checkbutton(
                             options,
                             text=option.label,
                             variable=bvar,
                             command=self._notify_change,
-                        ).grid(
+                        )
+                        checkbox.grid(
                             row=option_index // 4,
                             column=option_index % 4,
                             sticky="w",
                             padx=(0, 8),
                             pady=2,
                         )
+                        # Explicit space-toggle (deterministic + testable); "break"
+                        # suppresses the native toggle so the option flips exactly once.
+                        checkbox.bind(
+                            "<space>",
+                            lambda event, key=field.key, code=option.code: (
+                                self.toggle_multi_choice_option(key, code) or "break"
+                            ),
+                        )
                         code_vars[option.code] = bvar
+                        if first_checkbox is None:
+                            first_checkbox = checkbox
                     self.multi_choice_fields[field.key] = code_vars
+                    if field.record_path and first_checkbox is not None:
+                        self._focus_widgets[field.record_path] = first_checkbox
+                        self._nav_order.append(field.record_path)
                 else:
                     raise TypeError(f"Unsupported field kind: {field.kind!r}")
 
@@ -141,13 +200,65 @@ class ConfirmForm:
 
     def set_flagged_fields(self, flagged: dict[str, str]) -> None:
         """Mark fields needing the reviewer's attention (low-confidence / empty /
-        unconfirmed) and clear marks on the rest. ``flagged`` maps record_path -> reason."""
+        unconfirmed) and de-emphasize the rest. ``flagged`` maps record_path -> reason.
+        When at least one field is flagged, high-confidence fields are greyed so the
+        flagged ones stand out (#43)."""
+        self._flagged = dict(flagged)
+        any_flagged = bool(flagged)
         for record_path, label in self._field_labels.items():
             title = self._field_titles[record_path]
             if record_path in flagged:
                 label.configure(text=f"⚠ {title}", foreground="#b00020")
+            elif any_flagged:
+                label.configure(text=title, foreground="#9aa0a6")
             else:
                 label.configure(text=title, foreground="")
+
+    def flagged_keys(self) -> list[str]:
+        """Flagged fields in layout (navigable) order."""
+        return [key for key in self._nav_order if key in self._flagged]
+
+    def flagged_count(self) -> int:
+        return len(self.flagged_keys())
+
+    def _focus(self, record_path: str | None) -> str | None:
+        if record_path is None:
+            return None
+        widget = self._focus_widgets.get(record_path)
+        if widget is None:
+            return None
+        self._current_focus = record_path
+        try:
+            widget.focus_set()
+        except Exception:
+            pass
+        if self._on_field_focused is not None:
+            try:
+                self._on_field_focused(widget)
+            except Exception:
+                pass
+        return record_path
+
+    def focus_first_flagged(self) -> str | None:
+        """Focus the first flagged field, or the first editable field if none are
+        flagged. Returns the focused field's record_path (or ``None``)."""
+        flagged = self.flagged_keys()
+        target = flagged[0] if flagged else (self._nav_order[0] if self._nav_order else None)
+        return self._focus(target)
+
+    def focus_next_flagged(self) -> str | None:
+        return self._focus(next_flagged_key(self._nav_order, self._flagged, self._current_focus))
+
+    def focus_prev_flagged(self) -> str | None:
+        return self._focus(prev_flagged_key(self._nav_order, self._flagged, self._current_focus))
+
+    def toggle_multi_choice_option(self, field_key: str, code: str) -> None:
+        """Flip one multi-choice option (the spacebar action) and notify change."""
+        bvar = self.multi_choice_fields.get(field_key, {}).get(code)
+        if bvar is None:
+            return
+        bvar.set(not bvar.get())
+        self._notify_change()
 
     def prefill(self, state: dict[str, object]) -> None:
         for key, var in self.text_fields.items():

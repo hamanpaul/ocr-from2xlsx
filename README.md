@@ -42,6 +42,17 @@ Note: The packaged exe is windowed (no console). CLI users who need stdout shoul
 
 On startup the app auto-detects webcams: if exactly one camera is found it auto-connects and shows a preview; if multiple cameras are present it prompts to select one; if none are present or OpenCV is unavailable it gracefully falls back to the existing JSON-driven flow and the preview placeholder is used. A `選擇攝影機` button is provided in the UI to switch cameras.
 
+### Correction keyboard shortcuts
+
+Review/correction is keyboard-first: when a record opens, focus lands on the first field that needs a human (the first `⚠` flagged field, otherwise the first editable field) and scrolls it into view, high-confidence fields are dimmed, and the footer shows `待確認 N` (how many fields still need confirmation). Shortcuts (fire from anywhere in the window):
+
+- `Enter` / `Ctrl+Enter` — 確認並寫入 (confirm and write, then advance)
+- `F2` / `Ctrl+Shift+Enter` — 強制寫入 (force write)
+- `PgDn` / `PgUp` (or `Ctrl+→` / `Ctrl+←`) — 下一筆 / 上一筆 (next / previous record)
+- `Esc` — cancel the current record's edits (re-show stored values)
+- `Ctrl+Tab` / `Ctrl+Shift+Tab` — jump to the next / previous field needing confirmation (cycles only `⚠` fields)
+- On a focused single-choice field, number keys `1`–`N` pick that option; on a focused multi-choice option, the spacebar toggles it. Digits typed into a text field stay text.
+
 ```powershell
 ocr-from2xlsx
 ```

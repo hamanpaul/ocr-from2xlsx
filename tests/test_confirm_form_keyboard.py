@@ -43,6 +43,7 @@ def test_focus_first_flagged_falls_back_to_first_editable_when_none_flagged():
     try:
         form.set_flagged_fields({})
         assert form.focus_first_flagged() == "service_date"
+        assert form._current_focus == "service_date"
     finally:
         root.destroy()
 
@@ -84,7 +85,8 @@ def test_no_flag_keeps_labels_normal():
     try:
         form.set_flagged_fields({})
         assert form._field_labels["name"].cget("text") == "姓名"
-        assert str(form._field_labels["name"].cget("foreground")) in ("", "#000000")
+        # set_flagged_fields({}) resets foreground to "" (no de-emphasis when nothing flagged).
+        assert str(form._field_labels["name"].cget("foreground")) == ""
     finally:
         root.destroy()
 

@@ -111,7 +111,7 @@ class ConfirmForm:
                         self._notify_change()
 
                     option_codes = [option.code for option in field.options]
-                    first_checkbox: ttk.Checkbutton | None = None
+                    option_checkboxes: list[ttk.Checkbutton] = []
                     for option_index, option in enumerate(field.options):
                         bvar = tk.BooleanVar(value=False)
                         option_vars[option.code] = bvar
@@ -128,8 +128,7 @@ class ConfirmForm:
                             padx=(0, 8),
                             pady=2,
                         )
-                        if first_checkbox is None:
-                            first_checkbox = checkbox
+                        option_checkboxes.append(checkbox)
 
                     def _digit_select(char: str, _codes=option_codes, _select=_select) -> bool:
                         index = option_index_for_digit(char, len(_codes))
@@ -139,8 +138,10 @@ class ConfirmForm:
                         return True
 
                     # Number-key option entry is bound ONLY on this field's option
-                    # checkboxes, so digits never get stolen from text entries.
-                    for checkbox in options.winfo_children():
+                    # checkboxes, so digits never get stolen from text entries. Bind on
+                    # the checkboxes we just built (not winfo_children()) so the digit→
+                    # option index never drifts if the options frame gains other widgets.
+                    for checkbox in option_checkboxes:
                         checkbox.bind(
                             "<Key>",
                             lambda event, handler=_digit_select: (
@@ -150,8 +151,8 @@ class ConfirmForm:
                     self.single_choice_fields[field.key] = var
                     self._single_choice_option_vars[field.key] = option_vars
                     self._single_choice_select_by_digit[field.key] = _digit_select
-                    if field.record_path and first_checkbox is not None:
-                        self._focus_widgets[field.record_path] = first_checkbox
+                    if field.record_path and option_checkboxes:
+                        self._focus_widgets[field.record_path] = option_checkboxes[0]
                         self._nav_order.append(field.record_path)
                 elif field.kind == "multi_choice":
                     options = ttk.Frame(group)
@@ -219,7 +220,9 @@ class ConfirmForm:
         return [key for key in self._nav_order if key in self._flagged]
 
     def flagged_count(self) -> int:
-        return len(self.flagged_keys())
+        # _flagged is only mutated in set_flagged_fields and its keys are exactly the
+        # navigable field paths, so this matches len(flagged_keys()) without re-scanning.
+        return len(self._flagged)
 
     def _focus(self, record_path: str | None) -> str | None:
         if record_path is None:

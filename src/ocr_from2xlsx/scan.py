@@ -148,9 +148,10 @@ def prepare_records_from_folder(
     """Batch-recognise every image/PDF in ``folder`` into one normalized Batch.
 
     Routes each file through the existing image / PDF preparers, merges the
-    records with unique ids, and reports progress via ``on_progress(done, total,
-    name)``. The per-record source PNGs the preparers emit let the review UI show
-    the original page on the left.
+    records with unique ids, and reports progress via ``on_progress(current,
+    total, name)`` as each file begins (``current`` is the 1-based index of the
+    file being processed, not a completed count). The per-record source PNGs the
+    preparers emit let the review UI show the original page on the left.
     """
     from ocr_from2xlsx.prepare_records import prepare_records_from_paths
 

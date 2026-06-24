@@ -27,7 +27,7 @@ class VisionOcrBackend:
         tiler: TilerFn,
         roster: list[str] | None = None,
         layout: tuple[Section, ...] = SERVICE_RECORD_V1_LAYOUT,
-        model_name: str = "qwen3.5-vl-2b",
+        model_name: str = "qwen3-vl:2b",
     ) -> None:
         self.vlm_fn = vlm_fn
         self.tiler = tiler

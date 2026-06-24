@@ -15,7 +15,7 @@ SCORED_FIELDS = ("service_date", "identity", "gender", "name", "medical_record_n
 
 def _norm(value: object) -> object:
     """Treat empty string and None as the same 'absent' value."""
-    return value or None
+    return None if value in (None, "") else value
 
 
 def score_fields(predicted: dict, expected: dict) -> dict:

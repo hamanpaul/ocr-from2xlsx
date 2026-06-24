@@ -7,6 +7,13 @@
 
 ## [Unreleased]
 
+### Fixed
+- 修正 PR #40 程式碼審查指出的 4 處：`recognition/backend.py` `VisionOcrBackend` 預設 `model_name` 對齊
+  `qwen3-vl:2b`（與 `factory.DEFAULT_MODEL` 一致，避免漏進 `ocr.model`）；`training/eval_scan._norm` 改為明確
+  `None`/`""` 判斷（不再把 `0`/`False` 誤當缺值）；`plugins/paddleocr/name_crop._trim_top_right_bleed` 改為只裁頂端
+  **連續**暗列（遇第一個乾淨列即停，不再過度裁切到姓名）；`scan.prepare_records_from_folder` docstring 修正
+  `on_progress` 語意（傳入的是處理中檔案的 1-based index，非已完成數）。
+
 ### Changed
 - (#31) 審核表單單選欄改用 checkbox：原本的 radio + 「清除」按鈕改為**互斥 checkbox**——點選一項即選取（自動取消
   其他），再點已選的即清除，因此不再需要清除按鈕。資料仍是單一值（StringVar 不變），collect/寫回語意不變。

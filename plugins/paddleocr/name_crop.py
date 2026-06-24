@@ -79,10 +79,13 @@ def _trim_top_right_bleed(
     search_rows = min(_TOP_RIGHT_BLEED_SEARCH_ROWS, crop.height - 1)
     trim_rows = 0
     for row in range(search_rows):
-        for column in range(probe_left, crop.width):
-            if crop.getpixel((column, row)) < _TOP_RIGHT_BLEED_THRESHOLD:
-                trim_rows = row + 1
-                break
+        row_has_bleed = any(
+            crop.getpixel((column, row)) < _TOP_RIGHT_BLEED_THRESHOLD
+            for column in range(probe_left, crop.width)
+        )
+        if not row_has_bleed:
+            break  # only trim the contiguous bleed at the top, never into the name below
+        trim_rows = row + 1
     if trim_rows == 0:
         return box
     trimmed_top = y0 + trim_rows

@@ -80,9 +80,11 @@ class FakePreview:
     def reset_view(self) -> None:
         self.reset_called = True
 
-    def show_image(self, image) -> None:
+    def show_image(self, image, original=None, base_scale=1) -> None:
         self.mode = "static"
         self.image = image
+        self.original = original
+        self.base_scale = base_scale
 
     def show_frame(self, image) -> None:
         self.mode = "live"
@@ -1352,6 +1354,30 @@ def test_confirm_current_blocked_warns_user_with_blockers(
     assert app.written_indices == set()
     assert shown, "a blocked confirm must warn the user it was not written"
     assert any("service_date.invalid" in str(a) for a in shown)
+
+
+def test_confirm_blocks_empty_unconfirmed_name(
+    app: ReviewApp, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    record = make_record("scan-0001")
+    record.ocr.warnings = ["name.unconfirmed"]
+    app.records = [record]
+    app.current_index = 0
+    app.session = StubSession(
+        AcceptResult(record_id=record.record_id, status="written", row_number=2, blockers=[], warnings=[])
+    )
+    app._show_record(record)
+    app.fields["name"].set("")  # operator left the待確認 name blank
+    warned: list = []
+    monkeypatch.setattr("ocr_from2xlsx.app.messagebox.showwarning", lambda *a, **k: warned.append(a))
+
+    ReviewApp._confirm_current(app)
+
+    # Empty + unconfirmed must NOT be written or silently marked confirmed.
+    assert app.session.calls == []
+    assert app.written_indices == set()
+    assert record.ocr.warnings == ["name.unconfirmed"]
+    assert warned
 
 
 def test_force_write_failure_does_not_persist_unconfirmed_name(app: ReviewApp, tmp_path: Path) -> None:

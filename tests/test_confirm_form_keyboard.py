@@ -86,6 +86,29 @@ def test_focus_bolds_active_field_label_and_reverts_previous():
         root.destroy()
 
 
+def test_image_viewer_resamples_from_original_when_zoomed():
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        pytest.skip(f"no display available for Tk: {exc}")
+    root.withdraw()
+    try:
+        viewer = app_module.ImageViewer(root)
+        original = tk.PhotoImage(master=root, width=40, height=40)
+        fit = original.subsample(2, 2)  # 20x20 fit, base_scale 2 (#47)
+        viewer.canvas.configure(width=20, height=20)
+        viewer.show_image(fit, original=original, base_scale=2)
+
+        # With a retained original, zooming re-samples a real crop (not None -> thumbnail).
+        out = viewer._render_static(2)
+        assert out is not None and out.width() >= 1
+        # Without an original (or base_scale 1) it returns None so the caller uses thumbnail zoom.
+        viewer._original = None
+        assert viewer._render_static(2) is None
+    finally:
+        root.destroy()
+
+
 def test_clean_record_clears_active_field_bold():
     import tkinter.font as tkfont
 

@@ -119,7 +119,14 @@ class ConfirmForm:
         self.frame.columnconfigure(0, weight=1)
 
         for section_row, section in enumerate(layout.sections):
-            group = ttk.LabelFrame(self.frame, text=f"{section.id} {section.title}")
+            # Keep the A/B/C prefixes (they match the paper form) but don't leak an internal
+            # lowercase id like "top" into the operator UI.
+            prefix = (
+                f"{section.id} "
+                if section.id and section.id.isalpha() and section.id.isupper() and len(section.id) <= 2
+                else ""
+            )
+            group = ttk.LabelFrame(self.frame, text=f"{prefix}{section.title}")
             group.grid(row=section_row, column=0, sticky="ew", padx=4, pady=4)
             group.columnconfigure(1, weight=1)
             for field_row, field in enumerate(section.fields):
@@ -149,6 +156,8 @@ class ConfirmForm:
                     option_vars: dict[str, tk.BooleanVar] = {}
                     options = ttk.Frame(group)
                     options.grid(row=field_row, column=1, sticky="w", pady=3)
+                    for _col in range(4):  # even, aligned option columns for ragged grids
+                        options.columnconfigure(_col, uniform="opt", minsize=120)
 
                     def _select(code: str, _var=var, _opts=option_vars) -> None:
                         chosen = "" if _var.get() == code else code
@@ -204,6 +213,8 @@ class ConfirmForm:
                 elif field.kind == "multi_choice":
                     options = ttk.Frame(group)
                     options.grid(row=field_row, column=1, sticky="w", pady=3)
+                    for _col in range(4):  # even, aligned option columns for ragged grids
+                        options.columnconfigure(_col, uniform="opt", minsize=120)
                     code_vars: dict[str, tk.BooleanVar] = {}
                     first_checkbox = None
                     for option_index, option in enumerate(field.options):
@@ -405,6 +416,11 @@ class ImageViewer:
         self._placeholder = ""
         self._image: tk.PhotoImage | None = None
         self._display_image: tk.PhotoImage | None = None
+        # Full-resolution source kept alongside the fit thumbnail (#47): zooming re-samples
+        # the visible window from these real pixels instead of magnifying the thumbnail, so
+        # handwriting stays legible. ``_base_scale`` = the subsample factor fit = original/base.
+        self._original: tk.PhotoImage | None = None
+        self._base_scale = 1
         self._image_size = (0, 0)
         self._view_size = (1, 1)
         self._drag_anchor: tuple[int, int] | None = None
@@ -429,9 +445,15 @@ class ImageViewer:
         ]
         self._redraw()
 
-    def show_image(self, image: "tk.PhotoImage") -> None:
+    def show_image(
+        self, image: "tk.PhotoImage", original: "tk.PhotoImage | None" = None, base_scale: int = 1
+    ) -> None:
         self.mode = "static"
         self._image = image
+        # _image_size stays the FIT dimensions so all pan/zoom math is unchanged; the original
+        # + base_scale only feed the high-detail re-sample in _render_static.
+        self._original = original
+        self._base_scale = max(1, int(base_scale))
         self._image_size = (image.width(), image.height())
         self._refresh_view_size()
         self.pan_to(self.origin[0], self.origin[1])  # re-clamp + redraw at session zoom
@@ -530,6 +552,12 @@ class ImageViewer:
                 self.canvas.create_image(0, 0, anchor="nw", image=self._image)
                 return
             factor = max(1, int(round(self.zoom)))
+            detailed = self._render_static(factor)
+            if detailed is not None:
+                # Visible window already cropped from the full-res original — draw at the origin.
+                self._display_image = detailed
+                self.canvas.create_image(0, 0, anchor="nw", image=detailed)
+                return
             display = self._image if factor == 1 else self._image.zoom(factor, factor)
             self._display_image = display  # hold a reference so Tk does not GC it
             self.canvas.create_image(
@@ -541,9 +569,39 @@ class ImageViewer:
         except tk.TclError:
             pass
 
+    def _render_static(self, factor: int) -> "tk.PhotoImage | None":
+        """Re-sample the visible window from the full-resolution original (#47): crop the
+        window in original pixels, then scale to the canvas with a single integer zoom or
+        subsample so detail comes from real pixels, not the magnified thumbnail. Returns
+        ``None`` (caller falls back to thumbnail zoom) when no original is held or on error."""
+        original = self._original
+        base = self._base_scale
+        if original is None or base <= 1:
+            return None
+        try:
+            view_w, view_h = self._view_size
+            orig_w, orig_h = original.width(), original.height()
+            x0 = max(0, int(self.origin[0] * base))
+            y0 = max(0, int(self.origin[1] * base))
+            x1 = min(orig_w, int((self.origin[0] + view_w / factor) * base))
+            y1 = min(orig_h, int((self.origin[1] + view_h / factor) * base))
+            if x1 - x0 < 1 or y1 - y0 < 1:
+                return None
+            dest = tk.PhotoImage(master=self.canvas)
+            if factor >= base:
+                z = max(1, round(factor / base))
+                dest.tk.call(str(dest), "copy", str(original), "-from", x0, y0, x1, y1, "-zoom", z, z)
+            else:
+                s = max(1, round(base / factor))
+                dest.tk.call(str(dest), "copy", str(original), "-from", x0, y0, x1, y1, "-subsample", s, s)
+            return dest
+        except Exception:
+            return None
+
 
 class ReviewApp(tk.Tk):
     _PREVIEW_PLACEHOLDER = "攝影機或圖片預覽區\n第一版可用 JSON 模擬連續掃描。"
+    _ROSTER_EMPTY_HINT = "（無建議名單）"
     _CAMERA_POLL_INTERVAL_MS = 33
     _CAMERA_RETRY_INTERVAL_MS = 100
     _CAMERA_FAILURE_LIMIT = 3
@@ -568,6 +626,7 @@ class ReviewApp(tk.Tk):
     # Mode-gated shortcuts read this on headless instances, so it needs a class default
     # to avoid the tk.Tk.__getattr__ recursion; __init__/_set_review_mode set the instance.
     _review_mode: str = "correction"
+    _mode_buttons: object | None = None  # set to a dict in _build_ui; default for headless getattr
 
     @staticmethod
     def _runtime_base_dir() -> Path:
@@ -660,6 +719,9 @@ class ReviewApp(tk.Tk):
             "rotate": ("旋轉", self._rotate_preview),
             "zoom_in": ("放大", lambda: self._zoom_preview(1.25)),
             "zoom_out": ("縮小", lambda: self._zoom_preview(1 / 1.25)),
+            "zoom_in_static": ("放大", self._zoom_in_static),
+            "zoom_out_static": ("縮小", self._zoom_out_static),
+            "zoom_reset_static": ("符合視窗", self._reset_static_view),
         }
         for key, (label, command) in button_specs.items():
             self._mode_buttons[key] = ttk.Button(toolbar, text=label, command=command)
@@ -697,14 +759,11 @@ class ReviewApp(tk.Tk):
         ttk.Label(footer, textvariable=self._status_var, anchor="w", relief="sunken").pack(
             side=tk.LEFT, fill=tk.X, expand=True
         )
+        # Right-side group, packed right-to-left so the visual L→R is: progress (batch) |
+        # badge (record) | 待確認 (record). A separator divides batch- from record-scope (#45).
         # Exception-first review (#43): how many fields on this record still need a human.
         self._pending_var = tk.StringVar(value="")
         ttk.Label(footer, textvariable=self._pending_var, anchor="e", relief="sunken").pack(
-            side=tk.RIGHT, padx=(8, 0)
-        )
-        # Persistent batch progress baseline (#45): always show a count, even before load.
-        self._progress_var = tk.StringVar(value="尚未載入資料")
-        ttk.Label(footer, textvariable=self._progress_var, anchor="e", relief="sunken").pack(
             side=tk.RIGHT, padx=(8, 0)
         )
         # Colored per-record status badge (#45): 已寫入/被擋下/待處理 read at a glance via
@@ -714,6 +773,12 @@ class ReviewApp(tk.Tk):
             footer, textvariable=self._badge_var, anchor="e", relief="sunken", padx=6
         )
         self._badge_label.pack(side=tk.RIGHT, padx=(8, 0))
+        # Persistent batch progress baseline (#45): always show a count, even before load.
+        self._progress_var = tk.StringVar(value="尚未載入資料")
+        ttk.Label(footer, textvariable=self._progress_var, anchor="e", relief="sunken").pack(
+            side=tk.RIGHT, padx=(8, 0)
+        )
+        ttk.Separator(footer, orient=tk.VERTICAL).pack(side=tk.RIGHT, fill=tk.Y, padx=4)
 
         # Two maximized panes: webcam/source preview on the left, the review form on the right.
         body = ttk.PanedWindow(self, orient=tk.HORIZONTAL)
@@ -982,7 +1047,7 @@ class ReviewApp(tk.Tk):
         pending_var = getattr(self, "_pending_var", None)
         if pending_var is not None:
             try:
-                pending_var.set(f"待確認 {count}" if count else "")
+                pending_var.set(f"待確認 {count}（Ctrl+Tab 跳轉）" if count else "本筆已確認 ✓")
             except Exception:
                 pass
 
@@ -1067,7 +1132,7 @@ class ReviewApp(tk.Tk):
     def _apply_roster_choice(self, name: str) -> None:
         # Fill the name field from a roster pick and clear the unconfirmed-name marker (#46).
         chosen = (name or "").strip()
-        if not chosen:
+        if not chosen or chosen == self._ROSTER_EMPTY_HINT:
             return
         self.fields["name"].set(chosen)
         if 0 <= self.current_index < len(self.records):
@@ -1150,8 +1215,13 @@ class ReviewApp(tk.Tk):
         if listbox is not None:
             try:
                 listbox.delete(0, tk.END)
-                for candidate in self._roster_candidates_for(record):
+                candidates = self._roster_candidates_for(record)
+                for candidate in candidates:
                     listbox.insert(tk.END, candidate)
+                if not candidates:
+                    # Explicit hint instead of a blank box that looks broken; the commit
+                    # paths ignore this row so it can't be applied as a name.
+                    listbox.insert(tk.END, self._ROSTER_EMPTY_HINT)
             except tk.TclError:
                 pass
         self._show_name_crop(record)
@@ -1234,6 +1304,10 @@ class ReviewApp(tk.Tk):
         self._push_status(f"已載入 {len(self.records)} 筆 JSON")
         if self.records:
             self._next_record()
+            # A freshly-loaded batch is for correcting: drop back to correction mode if the
+            # operator left the toolbar in scan mode (#44). Guarded for headless fixtures.
+            if getattr(self, "_mode_buttons", None) is not None and self._review_mode != "correction":
+                self._set_review_mode("correction")
         else:
             self._show_placeholder_preview()
             self._update_progress()  # show the 尚未載入資料 baseline, not a blank corner (#45)
@@ -1495,6 +1569,17 @@ class ReviewApp(tk.Tk):
             return
         record = self.records[self.current_index]
         self._apply_form_to_record(record)
+        # Data-integrity guard (#46): 確認並寫入 sends human_confirmed=True, which clears the
+        # name.unconfirmed flag — so a reflexive confirm with the name still blank would write
+        # an empty name and silently mark it confirmed. Refuse it here; 強制寫入 stays the override.
+        if NAME_UNCONFIRMED in record.ocr.warnings and not record.name.strip():
+            messagebox.showwarning(
+                "姓名未填",
+                "此筆姓名待確認且目前為空。請先填入姓名（或按 F8 從候選挑選）再「確認並寫入」；"
+                "若確定要留空，請改用「強制寫入」。",
+            )
+            self._focus_name_field()
+            return
         human_confirmed = self._needs_name_confirmation(record)
         try:
             result = self.session.accept_scan(
@@ -1868,7 +1953,7 @@ class ReviewApp(tk.Tk):
                 self._show_placeholder_preview()
                 return
 
-            image = tk.PhotoImage(file=str(image_path))
+            original = tk.PhotoImage(file=str(image_path))
             self.preview.canvas.update_idletasks()
             target_width = self.preview.canvas.winfo_width()
             target_height = self.preview.canvas.winfo_height()
@@ -1877,15 +1962,17 @@ class ReviewApp(tk.Tk):
             if target_height <= 1:
                 target_height = 640
 
-            scale_x = max(1, (image.width() + target_width - 1) // target_width)
-            scale_y = max(1, (image.height() + target_height - 1) // target_height)
+            scale_x = max(1, (original.width() + target_width - 1) // target_width)
+            scale_y = max(1, (original.height() + target_height - 1) // target_height)
             scale = max(scale_x, scale_y)
-            if scale > 1:
-                image = image.subsample(scale, scale)
+            fit = original.subsample(scale, scale) if scale > 1 else original
 
             self._stop_camera()
-            self._preview_image = image
-            self.preview.show_image(image)  # static: drag-pan + wheel-zoom, remembered zoom
+            self._preview_image = fit
+            # Keep the full-res original alive (Tk GCs unreferenced PhotoImages) so zoom can
+            # re-sample real pixels rather than the downscaled fit thumbnail (#47).
+            self._source_original = original
+            self.preview.show_image(fit, original=original, base_scale=scale)
         except Exception:
             self._show_placeholder_preview()
 
@@ -1921,6 +2008,17 @@ class ReviewApp(tk.Tk):
     def _zoom_preview(self, factor: float) -> None:
         self._preview_zoom = min(8.0, max(1.0, self._preview_zoom * factor))
         self._push_status(f"預覽縮放 {self._preview_zoom:.2f}×")
+
+    def _zoom_in_static(self) -> None:
+        # Correction-mode buttons drive the static source-image viewer (#47), matching the
+        # mouse-wheel step, so zoom is discoverable without knowing about the wheel.
+        self.preview.set_zoom(self.preview.zoom + 1)
+
+    def _zoom_out_static(self) -> None:
+        self.preview.set_zoom(self.preview.zoom - 1)
+
+    def _reset_static_view(self) -> None:
+        self.preview.reset_view()
 
     def _zoom_crop(self, frame: object):
         # Zoom by cropping a centered region (then the fit-resize scales it up to the pane).

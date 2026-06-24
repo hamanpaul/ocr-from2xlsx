@@ -12,6 +12,11 @@ CORRECTION_CONTROLS: tuple[str, ...] = (
     "next_record",
     "confirm",
     "force_write",
+    # Static source-image zoom (correction mode drives the ImageViewer, not the camera);
+    # distinct ids from the scan-mode camera zoom so the corr/scan sets stay disjoint.
+    "zoom_in_static",
+    "zoom_out_static",
+    "zoom_reset_static",
     "progress",
 )
 SCAN_CONTROLS: tuple[str, ...] = (

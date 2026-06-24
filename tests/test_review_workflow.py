@@ -11,7 +11,10 @@ from ocr_from2xlsx.review_workflow import (
 def test_modes_are_correct_and_disjoint():
     corr = set(correction_mode_controls())
     scan = set(scan_mode_controls())
-    assert corr == {"prev_record", "next_record", "confirm", "force_write", "progress"}
+    assert corr == {
+        "prev_record", "next_record", "confirm", "force_write",
+        "zoom_in_static", "zoom_out_static", "zoom_reset_static", "progress",
+    }
     assert {"capture_recognize", "import_folder_batch", "choose_camera", "rotate"} <= scan
     assert corr.isdisjoint(scan)
 

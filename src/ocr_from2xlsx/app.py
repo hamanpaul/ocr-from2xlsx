@@ -1045,6 +1045,21 @@ class ReviewApp(tk.Tk):
         path = Path(__file__).resolve().parent / "assets" / "shutter.wav"
         return path if path.is_file() else None
 
+    @staticmethod
+    def _imwrite_unicode(path: Path, frame: object) -> bool:
+        """Write an image to a possibly non-ASCII path. cv2.imwrite silently fails on
+        non-ASCII (e.g. CJK) paths on Windows; imencode + write_bytes does not."""
+        import cv2
+
+        try:
+            ok, buf = cv2.imencode(".png", frame)
+            if not ok:
+                return False
+            Path(path).write_bytes(buf.tobytes())
+            return True
+        except Exception:
+            return False
+
     def _play_shutter(self) -> None:
         try:
             import winsound
@@ -1184,15 +1199,18 @@ class ReviewApp(tk.Tk):
         except Exception as exc:  # noqa: BLE001 - surface and keep the session recoverable
             self._push_status(f"連續拍照擷取失敗：{exc}")
         if result is None:
-            self._push_status("連續拍照：找不到可用的攝影機，已停止。")
             self._autocapture_active = False
+            self._push_status(
+                f"連續拍照：相機中斷，已擷取 {len(self._autocapture_stills)} 張；"
+                "可按『完成辨識』辨識，或『取消連拍』放棄。"
+            )
             return True
         if not result.passed:
             outcome = self._autocapture_detector.note_failed_capture()
             if outcome == STALLED:
                 self._push_status(
-                    f"連續拍照：連續多張太模糊（清晰度 {result.sharpness:.0f}），"
-                    "請調整對焦/光線後再放紙。"
+                    f"連續拍照：連續多張太模糊（清晰度 {result.sharpness:.0f}），已暫停；"
+                    "請調整對焦/光線後按『重設空桌基準』。"
                 )
             else:
                 self._push_status(
@@ -1201,21 +1219,26 @@ class ReviewApp(tk.Tk):
             self._start_camera(index)
             return True
 
-        import cv2
-
         frame = result.frame
         if self._preview_rotation:
             frame = rotate_frame(frame, self._preview_rotation)
         output_dir = self._autocapture_output_dir
         image_path = next_output_artifact_path(output_dir, "scan-capture.png")
-        if not cv2.imwrite(str(image_path), frame):
-            self._push_status(f"連續拍照：無法寫入擷取影像 {image_path}")
+        if not self._imwrite_unicode(image_path, frame):
+            outcome = self._autocapture_detector.note_failed_capture()
+            if outcome == STALLED:
+                self._push_status(
+                    f"連續拍照：連續無法寫入影像（{image_path}），已暫停；"
+                    "請檢查輸出資料夾後按『重設空桌基準』。"
+                )
+            else:
+                self._push_status(
+                    f"連續拍照：無法寫入擷取影像 {image_path}，自動重試…"
+                )
             self._start_camera(index)
             return True
         self._autocapture_stills.append(image_path)
-        # Reference for "scene cleared" detection is the triggering PREVIEW frame's gray
-        # (same resolution as later preview frames), not the full-res capture_still frame.
-        self._autocapture_ref_gray = self._autocapture_prev_gray
+        # Baseline stays the empty desk; reset only the motion reference after the reopen.
         self._autocapture_prev_gray = None
         self._autocapture_detector.mark_captured()
         self._play_shutter()

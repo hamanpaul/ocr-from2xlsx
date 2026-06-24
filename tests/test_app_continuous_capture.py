@@ -52,6 +52,7 @@ def test_start_continuous_capture_opens_session(monkeypatch, tmp_path):
     app = _bare_app()
     monkeypatch.setattr("ocr_from2xlsx.app.filedialog.askdirectory", lambda **k: str(tmp_path))
     monkeypatch.setattr("ocr_from2xlsx.capture.require_camera_support", lambda: None)
+    monkeypatch.setattr("ocr_from2xlsx.app.messagebox.askokcancel", lambda *a, **k: True)
     monkeypatch.setattr(app, "_has_live_camera_preview", lambda: True)  # don't start a real camera
     ReviewApp._start_continuous_capture(app)
     assert app._autocapture_active is True
@@ -172,7 +173,10 @@ def test_perform_autocapture_saves_still_and_marks_captured(monkeypatch, tmp_pat
         capture_module, "capture_still",
         lambda *a, **k: CaptureResult(frame="frame", resolution=(1920, 1080), sharpness=180.0, brightness=128.0, passed=True),
     )
-    monkeypatch.setitem(sys.modules, "cv2", SimpleNamespace(imwrite=lambda p, f: Path(p).write_bytes(b"\x89PNG") or True))
+    import numpy as np
+    monkeypatch.setitem(sys.modules, "cv2", SimpleNamespace(
+        imencode=lambda ext, f: (True, np.frombuffer(b"\x89PNG\r\n", dtype="uint8")),
+    ))
     monkeypatch.setattr(app, "_stop_camera", lambda: None)
     monkeypatch.setattr(app, "_start_camera", lambda i: None)
     monkeypatch.setattr(app, "_play_shutter", lambda: shutters.append(True))
@@ -317,6 +321,8 @@ def test_perform_autocapture_stalled_after_retry_limit(monkeypatch, tmp_path):
     assert app._autocapture_stills == []
     # The last status message must contain the STALLED text
     assert any("連續多張太模糊" in msg for msg in app._status_log)
+    from ocr_from2xlsx.autocapture import PAUSED
+    assert app._autocapture_detector.state == PAUSED
 
 
 def test_perform_autocapture_imwrite_failure_restarts_camera(monkeypatch, tmp_path):
@@ -343,11 +349,11 @@ def test_perform_autocapture_imwrite_failure_restarts_camera(monkeypatch, tmp_pa
             passed=True,
         ),
     )
-    # cv2.imwrite returns False to simulate a write failure
+    # cv2.imencode returns (False, None) to simulate a write failure
     monkeypatch.setitem(
         sys.modules,
         "cv2",
-        SimpleNamespace(imwrite=lambda p, f: False),
+        SimpleNamespace(imencode=lambda ext, f: (False, None)),
     )
     monkeypatch.setattr(app, "_stop_camera", lambda: None)
     camera_starts = []
@@ -358,3 +364,35 @@ def test_perform_autocapture_imwrite_failure_restarts_camera(monkeypatch, tmp_pa
     assert app._autocapture_stills == []
     assert camera_starts, "_start_camera must be called to restart the preview"
     assert any("無法寫入擷取影像" in msg for msg in app._status_log)
+
+
+def test_perform_autocapture_writes_to_cjk_output_dir(monkeypatch, tmp_path):
+    import numpy as np
+    import ocr_from2xlsx.capture as capture_module
+    from ocr_from2xlsx.autocapture import AutoCaptureDetector
+    from ocr_from2xlsx.capture import CaptureResult
+
+    cjk_dir = tmp_path / "表單辨識"
+    cjk_dir.mkdir()
+    app = _bare_app()
+    app._autocapture_active = True
+    app._autocapture_output_dir = cjk_dir
+    app._autocapture_detector = AutoCaptureDetector()
+    app._autocapture_prev_gray = None
+    monkeypatch.setattr(
+        capture_module, "capture_still",
+        lambda *a, **k: CaptureResult(frame="frame", resolution=(1920, 1080), sharpness=180.0, brightness=128.0, passed=True),
+    )
+    monkeypatch.setitem(sys.modules, "cv2", SimpleNamespace(
+        imencode=lambda ext, f: (True, np.frombuffer(b"\x89PNG\r\n", dtype="uint8")),
+    ))
+    monkeypatch.setattr(app, "_stop_camera", lambda: None)
+    monkeypatch.setattr(app, "_start_camera", lambda i: None)
+    monkeypatch.setattr(app, "_play_shutter", lambda: None)
+    monkeypatch.setattr(app, "_flash_preview", lambda: None)
+
+    ReviewApp._perform_autocapture(app)
+
+    assert len(app._autocapture_stills) == 1
+    assert app._autocapture_stills[0].is_file()
+    assert "表單辨識" in str(app._autocapture_stills[0])

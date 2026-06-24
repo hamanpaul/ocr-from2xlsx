@@ -291,6 +291,140 @@ class ConfirmForm:
         return state
 
 
+class ImageViewer:
+    """A Canvas-based image viewer for the review pane (#47): drag-pan + integer-step
+    wheel-zoom on a static source image (zoom remembered per session), fit-to-pane for
+    live camera frames, and a text placeholder. The transform math is pure
+    (image_viewer.py); this widget holds Tk state and renders. Zoom magnifies via
+    ``PhotoImage.zoom`` (integer factors; no PIL dependency, matching the repo)."""
+
+    def __init__(self, parent: tk.Misc) -> None:
+        from ocr_from2xlsx.image_viewer import MIN_ZOOM
+
+        self.canvas = tk.Canvas(parent, highlightthickness=0, background="#202020")
+        self.mode = "placeholder"
+        self.zoom = MIN_ZOOM
+        self.origin = [0.0, 0.0]
+        self._image: tk.PhotoImage | None = None
+        self._display_image: tk.PhotoImage | None = None
+        self._image_size = (0, 0)
+        self._view_size = (1, 1)
+        self._drag_anchor: tuple[int, int] | None = None
+        self.canvas.bind("<MouseWheel>", self._on_wheel)
+        self.canvas.bind("<ButtonPress-1>", self._on_drag_start)
+        self.canvas.bind("<B1-Motion>", self._on_drag_move)
+
+    def set_zoom(self, zoom: float) -> None:
+        from ocr_from2xlsx.image_viewer import clamp_zoom
+
+        self.zoom = clamp_zoom(zoom)
+        self._redraw()
+
+    def pan_to(self, origin_x: float, origin_y: float) -> None:
+        from ocr_from2xlsx.image_viewer import clamp_origin
+
+        image_w, image_h = self._image_size
+        view_w, view_h = self._view_size
+        self.origin = [
+            clamp_origin(origin_x, image_w, view_w, self.zoom),
+            clamp_origin(origin_y, image_h, view_h, self.zoom),
+        ]
+        self._redraw()
+
+    def show_image(self, image: "tk.PhotoImage") -> None:
+        self.mode = "static"
+        self._image = image
+        self._image_size = (image.width(), image.height())
+        self._refresh_view_size()
+        self.pan_to(self.origin[0], self.origin[1])  # re-clamp + redraw at session zoom
+
+    def show_frame(self, image: "tk.PhotoImage") -> None:
+        self.mode = "live"
+        self._image = image
+        self._image_size = (image.width(), image.height())
+        self._redraw()
+
+    def show_placeholder(self, text: str) -> None:
+        self.mode = "placeholder"
+        self._image = None
+        self._display_image = None
+        try:
+            self.canvas.delete("all")
+            self.canvas.create_text(8, 8, anchor="nw", fill="#dddddd", text=text)
+        except tk.TclError:
+            pass
+
+    def frame_region(self, band: tuple[float, float, float, float]) -> None:
+        from ocr_from2xlsx.image_viewer import clamp_zoom
+
+        if self.mode != "static" or self._image is None:
+            return
+        image_w, image_h = self._image_size
+        self._refresh_view_size()
+        view_w, view_h = self._view_size
+        x0, y0, x1, y1 = band
+        band_w = max(1.0, (x1 - x0) * image_w)
+        band_h = max(1.0, (y1 - y0) * image_h)
+        self.zoom = clamp_zoom(min(view_w / band_w, view_h / band_h))
+        cx = (x0 + x1) / 2 * image_w
+        cy = (y0 + y1) / 2 * image_h
+        self.pan_to(cx - view_w / self.zoom / 2, cy - view_h / self.zoom / 2)
+
+    def _refresh_view_size(self) -> None:
+        try:
+            self.canvas.update_idletasks()
+            self._view_size = (max(1, self.canvas.winfo_width()), max(1, self.canvas.winfo_height()))
+        except tk.TclError:
+            pass
+
+    def _on_wheel(self, event: "tk.Event") -> str:
+        from ocr_from2xlsx.image_viewer import anchored_origin, clamp_zoom
+
+        if self.mode != "static" or self._image is None:
+            return "break"
+        old = self.zoom
+        new = clamp_zoom(old + (1.0 if event.delta > 0 else -1.0))
+        if new != old:
+            ox = anchored_origin(self.origin[0], event.x, old, new)
+            oy = anchored_origin(self.origin[1], event.y, old, new)
+            self.zoom = new
+            self.pan_to(ox, oy)
+        return "break"
+
+    def _on_drag_start(self, event: "tk.Event") -> None:
+        self._drag_anchor = (event.x, event.y)
+
+    def _on_drag_move(self, event: "tk.Event") -> str:
+        if self.mode != "static" or self._drag_anchor is None:
+            return "break"
+        dx = (event.x - self._drag_anchor[0]) / self.zoom
+        dy = (event.y - self._drag_anchor[1]) / self.zoom
+        self._drag_anchor = (event.x, event.y)
+        self.pan_to(self.origin[0] - dx, self.origin[1] - dy)
+        return "break"
+
+    def _redraw(self) -> None:
+        if self._image is None:
+            return
+        try:
+            self.canvas.delete("all")
+            if self.mode == "live":
+                self._display_image = self._image
+                self.canvas.create_image(0, 0, anchor="nw", image=self._image)
+                return
+            factor = max(1, int(round(self.zoom)))
+            display = self._image if factor == 1 else self._image.zoom(factor, factor)
+            self._display_image = display  # hold a reference so Tk does not GC it
+            self.canvas.create_image(
+                int(-self.origin[0] * factor),
+                int(-self.origin[1] * factor),
+                anchor="nw",
+                image=display,
+            )
+        except tk.TclError:
+            pass
+
+
 class ReviewApp(tk.Tk):
     _PREVIEW_PLACEHOLDER = "攝影機或圖片預覽區\n第一版可用 JSON 模擬連續掃描。"
     _CAMERA_POLL_INTERVAL_MS = 33

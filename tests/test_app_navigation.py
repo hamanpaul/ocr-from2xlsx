@@ -75,6 +75,10 @@ class FakePreview:
         self.text = ""
         self.image = None
         self.mode = "placeholder"
+        self.reset_called = False
+
+    def reset_view(self) -> None:
+        self.reset_called = True
 
     def show_image(self, image) -> None:
         self.mode = "static"

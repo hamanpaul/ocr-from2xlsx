@@ -335,6 +335,11 @@ class ConfirmForm:
                 pass
         self._active_label_path = record_path
 
+    def clear_active_label(self) -> None:
+        """Revert any active-field bold (used when a record shows nothing focused, e.g. a
+        clean 0-flagged record) so a stale bold title never lingers across records."""
+        self._set_active_label(None)
+
     def focus_first_flagged(self) -> str | None:
         """Focus the first flagged field, or the first editable field if none are
         flagged. Returns the focused field's record_path (or ``None``)."""
@@ -451,6 +456,17 @@ class ImageViewer:
     def get(self, _start: str = "1.0", _end: str = "end") -> str:
         # Mirrors the old tk.Text preview's text accessor for tests / placeholder checks.
         return self._placeholder if self.mode == "placeholder" else ""
+
+    def reset_view(self) -> None:
+        """Fit the whole source image (zoom 1, origin top-left) — the neutral overview a
+        clean record returns to so the operator isn't left zoomed into a prior field."""
+        from ocr_from2xlsx.image_viewer import MIN_ZOOM
+
+        if self.mode != "static" or self._image is None:
+            return
+        self.zoom = MIN_ZOOM
+        self._refresh_view_size()
+        self.pan_to(0.0, 0.0)
 
     def frame_region(self, band: tuple[float, float, float, float]) -> None:
         from ocr_from2xlsx.image_viewer import clamp_zoom
@@ -726,6 +742,9 @@ class ReviewApp(tk.Tk):
         # the instant focus lands on the list or an arrow is pressed.
         self._roster_listbox.bind("<Return>", self._on_roster_commit)
         self._roster_listbox.bind("<Double-Button-1>", self._on_roster_commit)
+        # Esc bails out of the list back to the name field (without committing), so focus is
+        # never trapped on the listbox where the next Enter would re-apply a candidate.
+        self._roster_listbox.bind("<Escape>", self._on_roster_escape)
 
         canvas = tk.Canvas(form, highlightthickness=0)
         canvas.grid(row=1, column=0, sticky="nsew")
@@ -806,7 +825,16 @@ class ReviewApp(tk.Tk):
                 pass
 
     def _toggle_review_mode(self) -> None:
-        self._set_review_mode("scan" if self._review_mode == "correction" else "correction")
+        target = "scan" if self._review_mode == "correction" else "correction"
+        # Don't strand an in-progress correction: switching to scan would make Enter/F2/PgDn
+        # inert, so block the switch until the edit is written or cancelled (#44).
+        if target == "scan" and self.editing:
+            messagebox.showwarning(
+                "尚未保存",
+                "目前資料已修改，請先「確認並寫入」/「強制寫入」或按 Esc 取消，再切換到掃描。",
+            )
+            return
+        self._set_review_mode(target)
 
     def _show_shortcut_help(self) -> None:
         messagebox.showinfo(
@@ -850,24 +878,37 @@ class ReviewApp(tk.Tk):
         # them so a stray Enter/F2/PgDn during capture can't write or navigate records.
         return getattr(self, "_review_mode", "correction") == "correction"
 
+    def _scan_mode_hint(self) -> None:
+        # Explain why a correction key did nothing in scan mode, instead of dropping it
+        # silently (a dead-key discoverability cliff).
+        self._push_status("掃描模式：按 F4 切回校正")
+
     def _on_confirm_key(self, _event: "tk.Event | None" = None) -> str:
         if self._correction_active():
             self._confirm_current()
+        else:
+            self._scan_mode_hint()
         return "break"
 
     def _on_force_key(self, _event: "tk.Event | None" = None) -> str:
         if self._correction_active():
             self._force_write()
+        else:
+            self._scan_mode_hint()
         return "break"
 
     def _on_next_record_key(self, _event: "tk.Event | None" = None) -> str:
         if self._correction_active():
             self._next_record()
+        else:
+            self._scan_mode_hint()
         return "break"
 
     def _on_prev_record_key(self, _event: "tk.Event | None" = None) -> str:
         if self._correction_active():
             self._previous_record()
+        else:
+            self._scan_mode_hint()
         return "break"
 
     def _on_toggle_mode_key(self, _event: "tk.Event | None" = None) -> str:
@@ -894,7 +935,10 @@ class ReviewApp(tk.Tk):
             self.editing = False
             return
         if not self.editing:
-            self._push_status("無可取消的編輯")
+            # Nothing to undo; use Esc as a safe "recenter" to the first field needing
+            # attention (no-op on a clean record) rather than a dead key (#43).
+            if self.confirm_form.flagged_count() > 0:
+                self.confirm_form.focus_first_flagged()
             return
         record = self.records[self.current_index]
         self.confirm_form.prefill(record_to_form_state(self.layout, record))
@@ -963,6 +1007,24 @@ class ReviewApp(tk.Tk):
     def _update_badge(self) -> None:
         from ocr_from2xlsx.review_workflow import record_badge_state
 
+        # No current record (cold start / just-picked template / empty load): blank the badge
+        # rather than show a misleading 待處理 chip or a stale colored one from a prior batch.
+        if not self.records or not (0 <= self.current_index < len(self.records)):
+            self._badge_state = "pending"
+            badge_var = getattr(self, "_badge_var", None)
+            if badge_var is not None:
+                try:
+                    badge_var.set("")
+                except Exception:
+                    pass
+            badge_label = getattr(self, "_badge_label", None)
+            if badge_label is not None:
+                try:
+                    badge_label.configure(background="#e8eaed", foreground="#202124")
+                except Exception:
+                    pass
+            return
+
         state = record_badge_state(
             self.current_index, self.written_indices, getattr(self, "_blocked_indices", set())
         )
@@ -1023,33 +1085,52 @@ class ReviewApp(tk.Tk):
         self._focus_name_field()
 
     def _focus_name_field(self) -> None:
-        focus_widgets = getattr(self.confirm_form, "_focus_widgets", None)
-        if not isinstance(focus_widgets, dict):
-            return
-        widget = focus_widgets.get("name")
-        if widget is None:
+        # Route through ConfirmForm._focus so the active-label bold, _current_focus and the
+        # source-image re-frame all track the name field, then place the caret at the end.
+        focus = getattr(self.confirm_form, "_focus", None)
+        if not callable(focus):
             return
         try:
-            widget.focus_set()
-            widget.icursor("end")
+            focus("name")
         except Exception:
-            pass
+            return
+        widget = getattr(self.confirm_form, "_focus_widgets", {}).get("name")
+        if widget is not None:
+            try:
+                widget.icursor("end")
+            except Exception:
+                pass
 
     def _on_roster_commit(self, _event: "tk.Event | None" = None) -> str:
+        # Mutating a record from the roster is a correction action — inert in scan mode (#44).
+        if not self._correction_active():
+            return "break"
         listbox = self._roster_listbox
         if listbox is None:
             return "break"
         try:
             selection = listbox.curselection()
-            index = selection[0] if selection else listbox.index(tk.ACTIVE)
-            self._apply_roster_choice(listbox.get(index))
+            if not selection:
+                # No real selection (e.g. Tab-focused but never browsed): do NOT commit the
+                # default-ACTIVE top candidate the operator never chose (#46 browse-vs-commit).
+                return "break"
+            self._apply_roster_choice(listbox.get(selection[0]))
         except tk.TclError:
             pass
         return "break"  # stop Return from also firing the window-level 確認並寫入
 
+    def _on_roster_escape(self, _event: "tk.Event | None" = None) -> str:
+        # Bail out of the roster back to the name field WITHOUT committing a candidate, so the
+        # operator's next Enter confirms the record rather than re-applying a name (R1 trap).
+        self._focus_name_field()
+        return "break"
+
     def _on_focus_roster_key(self, _event: "tk.Event | None" = None) -> str:
         # F8 moves the keyboard into the roster so pure-keyboard operators can reach the
-        # candidates; arrows browse, Enter commits, then focus returns to the name field (#46).
+        # candidates; arrows browse, Enter commits, Esc bails back to the name field (#46).
+        # Inert in scan mode so it can't grab/commit a name during capture (#44).
+        if not self._correction_active():
+            return "break"
         listbox = self._roster_listbox
         if listbox is None:
             return "break"
@@ -1156,6 +1237,7 @@ class ReviewApp(tk.Tk):
         else:
             self._show_placeholder_preview()
             self._update_progress()  # show the 尚未載入資料 baseline, not a blank corner (#45)
+            self._update_badge()     # and blank the badge (no stale chip from a prior batch)
 
     def _has_live_camera_preview(self) -> bool:
         return self._camera_capture is not None or self._camera_after_id is not None
@@ -1492,6 +1574,12 @@ class ReviewApp(tk.Tk):
         if result.status == "blocked":
             self._blocked_indices.add(self.current_index)
             self._update_badge()
+            messagebox.showwarning(
+                "強制寫入仍被擋下",
+                "此筆即使強制寫入仍無法寫入（有不可寫入的問題）：\n\n"
+                + "\n".join(result.blockers)
+                + "\n\n請更正後再寫入。",
+            )
             return
         if result.status in {"forced", "written"}:
             if human_confirmed:
@@ -1527,10 +1615,21 @@ class ReviewApp(tk.Tk):
         self._update_badge()
         self._update_name_aids(record)
         # Only grab focus + re-frame the scan when there is something to confirm. A clean
-        # (0-flagged) record stays at a neutral overview so the operator can glance and hit
-        # Enter, instead of the caret being yanked into the first field (#43).
+        # (0-flagged) record clears any stale active-field bold and resets the scan to a full
+        # overview, so the operator can glance and hit Enter — instead of the caret being
+        # yanked into the first field or the image staying zoomed into a prior field (#43).
         if self.confirm_form.flagged_count() > 0:
             self.confirm_form.focus_first_flagged()
+        else:
+            clear_active = getattr(self.confirm_form, "clear_active_label", None)
+            if callable(clear_active):
+                clear_active()
+            reset_view = getattr(self.preview, "reset_view", None)
+            if callable(reset_view):
+                try:
+                    reset_view()
+                except Exception:
+                    pass
 
     def _apply_form_to_record(self, record: Record) -> None:
         record.record_id = self.fields["record_id"].get()

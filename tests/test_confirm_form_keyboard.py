@@ -86,6 +86,24 @@ def test_focus_bolds_active_field_label_and_reverts_previous():
         root.destroy()
 
 
+def test_clean_record_clears_active_field_bold():
+    import tkinter.font as tkfont
+
+    root, form = _form()
+    try:
+        form.set_flagged_fields({"name": "unconfirmed"})
+        form.focus_first_flagged()  # name -> bold
+        assert tkfont.Font(font=form._field_labels["name"].cget("font")).cget("weight") == "bold"
+        # Navigating to a clean (0-flagged) record clears flags and the active-field bold,
+        # so no stale bold title lingers with nothing focused.
+        form.set_flagged_fields({})
+        form.clear_active_label()
+        assert tkfont.Font(font=form._field_labels["name"].cget("font")).cget("weight") == "normal"
+        assert form._active_label_path is None
+    finally:
+        root.destroy()
+
+
 def test_unflagged_labels_are_deemphasized_when_some_field_flagged():
     root, form = _form()
     try:

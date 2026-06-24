@@ -82,6 +82,12 @@ def prepare_records_from_images(
     created_at: str | None = None,
     on_progress: "Callable[[int, int, str], None] | None" = None,
 ) -> Batch:
+    """Prepare normalized records from still images (one Record per image).
+
+    ``on_progress(current, total, name)`` is called as each image begins
+    (``current`` is the 1-based index of the image being processed, not a
+    completed count), matching ``prepare_records_from_folder``.
+    """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     created_at = created_at or datetime.now().astimezone().isoformat(timespec="seconds")

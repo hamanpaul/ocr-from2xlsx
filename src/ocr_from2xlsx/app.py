@@ -355,7 +355,11 @@ class ReviewApp(tk.Tk):
         self.correction_store_path: Path | None = None
         self.editing = False
         self.written_indices: set[int] = set()
+        self._written_rows: dict[int, int] = {}
+        self._blocked_indices: set[int] = set()
         self._pending_count: int = 0
+        self._progress_text: str = ""
+        self._badge_state: str = "pending"
         self._preview_image: tk.PhotoImage | None = None
         self._camera_capture = None
         self._camera_after_id: str | None = None
@@ -412,6 +416,15 @@ class ReviewApp(tk.Tk):
         # Exception-first review (#43): how many fields on this record still need a human.
         self._pending_var = tk.StringVar(value="")
         ttk.Label(footer, textvariable=self._pending_var, anchor="e", relief="sunken").pack(
+            side=tk.RIGHT, padx=(8, 0)
+        )
+        # Persistent batch progress + per-record status badge (#45).
+        self._progress_var = tk.StringVar(value="")
+        ttk.Label(footer, textvariable=self._progress_var, anchor="e", relief="sunken").pack(
+            side=tk.RIGHT, padx=(8, 0)
+        )
+        self._badge_var = tk.StringVar(value="")
+        ttk.Label(footer, textvariable=self._badge_var, anchor="e", relief="sunken").pack(
             side=tk.RIGHT, padx=(8, 0)
         )
 
@@ -566,6 +579,36 @@ class ReviewApp(tk.Tk):
         if pending_var is not None:
             try:
                 pending_var.set(f"待確認 {count}" if count else "")
+            except Exception:
+                pass
+
+    def _update_progress(self) -> None:
+        total = len(self.records)
+        written = len(self.written_indices)
+        text = f"已寫入 {written} / 共 {total}"
+        row = getattr(self, "_written_rows", {}).get(self.current_index)
+        if row:
+            text += f"　第 {row} 列"
+        self._progress_text = text
+        progress_var = getattr(self, "_progress_var", None)
+        if progress_var is not None:
+            try:
+                progress_var.set(text)
+            except Exception:
+                pass
+
+    def _update_badge(self) -> None:
+        from ocr_from2xlsx.review_workflow import record_badge_state
+
+        state = record_badge_state(
+            self.current_index, self.written_indices, getattr(self, "_blocked_indices", set())
+        )
+        self._badge_state = state
+        label = {"written": "已寫入", "blocked": "被擋下", "pending": "待處理"}[state]
+        badge_var = getattr(self, "_badge_var", None)
+        if badge_var is not None:
+            try:
+                badge_var.set(label)
             except Exception:
                 pass
 
@@ -881,6 +924,8 @@ class ReviewApp(tk.Tk):
             return
         self._push_status(f"{result.record_id}: {result.status} row={result.row_number} blockers={result.blockers}")
         if result.status == "blocked":
+            self._blocked_indices.add(self.current_index)
+            self._update_badge()
             messagebox.showwarning(
                 "未寫入工作檔",
                 "此筆未寫入，因為有缺少或不合法的必填欄位：\n\n"
@@ -892,6 +937,8 @@ class ReviewApp(tk.Tk):
             if human_confirmed:
                 self._persist_confirmed_name_after_write(record)
             self.written_indices.add(self.current_index)
+            self._written_rows[self.current_index] = result.row_number
+            self._blocked_indices.discard(self.current_index)
             self.editing = False
             working = getattr(getattr(self.session, "writer", None), "working_path", "")
             self._push_status(f"已寫入工作檔 {working} 第 {result.row_number} 列")
@@ -916,11 +963,19 @@ class ReviewApp(tk.Tk):
             messagebox.showerror("寫入失敗", str(exc))
             return
         self._push_status(f"{result.record_id}: {result.status} row={result.row_number} blockers={result.blockers}")
+        if result.status == "blocked":
+            self._blocked_indices.add(self.current_index)
+            self._update_badge()
+            return
         if result.status in {"forced", "written"}:
             if human_confirmed:
                 self._persist_confirmed_name_after_write(record)
             self.written_indices.add(self.current_index)
+            self._written_rows[self.current_index] = result.row_number
+            self._blocked_indices.discard(self.current_index)
             self.editing = False
+            self._update_progress()
+            self._update_badge()
 
     def _show_record(self, record: Record) -> None:
         self.fields["record_id"].set(record.record_id)
@@ -931,6 +986,8 @@ class ReviewApp(tk.Tk):
         self._show_source_image(record)
         self.editing = False
         self._update_pending_count()
+        self._update_progress()
+        self._update_badge()
         self.confirm_form.focus_first_flagged()
 
     def _apply_form_to_record(self, record: Record) -> None:

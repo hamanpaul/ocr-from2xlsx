@@ -17,6 +17,8 @@ def _headless_app() -> ReviewApp:
     review_app.session = None
     review_app.editing = False
     review_app.written_indices = set()
+    review_app._written_rows = {}
+    review_app._blocked_indices = set()
     review_app.loaded_json_path = None
     review_app.correction_store_path = None
     review_app.layout = service_record_layout()
@@ -36,6 +38,8 @@ def _headless_app() -> ReviewApp:
     review_app._status_var = None
     review_app._status_log_path = None
     review_app._pending_var = None
+    review_app._progress_var = None
+    review_app._badge_var = None
     return review_app
 
 

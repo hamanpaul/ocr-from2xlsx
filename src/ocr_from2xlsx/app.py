@@ -378,7 +378,10 @@ class ImageViewer:
         x0, y0, x1, y1 = band
         band_w = max(1.0, (x1 - x0) * image_w)
         band_h = max(1.0, (y1 - y0) * image_h)
-        self.zoom = clamp_zoom(min(view_w / band_w, view_h / band_h))
+        # Snap to an integer zoom (floor) so it equals the integer render factor in
+        # _redraw — otherwise clamp_origin's window (view/zoom) disagrees with the
+        # rendered factor and a dark gap shows past the image edge.
+        self.zoom = clamp_zoom(float(int(min(view_w / band_w, view_h / band_h))))
         cx = (x0 + x1) / 2 * image_w
         cy = (y0 + y1) / 2 * image_h
         self.pan_to(cx - view_w / self.zoom / 2, cy - view_h / self.zoom / 2)

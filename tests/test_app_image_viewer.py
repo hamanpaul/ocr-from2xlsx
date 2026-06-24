@@ -51,6 +51,24 @@ def test_pan_is_clamped_within_bounds():
         root.destroy()
 
 
+def test_frame_region_snaps_zoom_to_integer():
+    # frame_region must store an integer zoom so it equals the integer render factor
+    # (_redraw uses int(round(zoom))); a fractional zoom would mis-clamp the pan and
+    # show a dark gap past the image edge.
+    root, viewer = _viewer()
+    try:
+        viewer._refresh_view_size = lambda: None  # keep our deterministic view size
+        viewer.mode = "static"
+        viewer._image = tk.PhotoImage(width=10, height=10)
+        viewer._image_size = (10, 10)
+        viewer._view_size = (40, 40)
+        viewer.frame_region((0.0, 0.0, 0.7, 0.7))  # ratio 40/7 ≈ 5.71 -> floor 5
+        assert viewer.zoom == float(int(viewer.zoom))
+        assert viewer.zoom == 5.0
+    finally:
+        root.destroy()
+
+
 def test_frame_field_region_only_for_known_field():
     from ocr_from2xlsx.app import ReviewApp
 

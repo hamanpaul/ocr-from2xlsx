@@ -479,3 +479,68 @@ def test_writer_leaves_newly_diagnosed_blank_when_none(tmp_path: Path) -> None:
 
     assert ws.cell(row=2, column=column).value is None
     wb.close()
+
+
+def test_write_record_to_explicit_row_overwrites_without_appending(tmp_path: Path) -> None:
+    template = tmp_path / "template.xlsx"
+    working = tmp_path / "working.xlsx"
+    create_workbook_template(template)
+    writer = WorkbookWriter.create_from_template(template, working)
+    try:
+        first = make_record("r1")
+        first.name = "王小明"
+        first.medical_record_no = "A1"
+        second = make_record("r2")
+        second.name = "李大華"
+        second.medical_record_no = "B2"
+        row1 = writer.write_record(first)
+        row2 = writer.write_record(second)
+        assert row2 == row1 + 1
+        corrected = make_record("r1b")
+        corrected.name = "王小華"
+        corrected.medical_record_no = "A9"
+        out = writer.write_record(corrected, row=row1)
+        assert out == row1
+        writer.save()
+    finally:
+        writer.close()
+
+    wb = load_workbook(working)
+    try:
+        sheet = wb["個案總表"]
+        name_col = _column_for_header(sheet, BASIC_COLUMN_BY_FIELD["name"])
+        mrn_col = _column_for_header(sheet, BASIC_COLUMN_BY_FIELD["medical_record_no"])
+        assert sheet.cell(row=row1, column=name_col).value == "王小華"
+        assert sheet.cell(row=row1, column=mrn_col).value == "A9"
+        assert sheet.cell(row=row2, column=name_col).value == "李大華"
+    finally:
+        wb.close()
+
+
+def test_overwrite_clears_stale_service_cells(tmp_path: Path) -> None:
+    template = tmp_path / "template.xlsx"
+    working = tmp_path / "working.xlsx"
+    create_workbook_template(template)
+    writer = WorkbookWriter.create_from_template(template, working)
+    try:
+        full = make_record("r1")
+        full.name = "王小明"
+        full.medical_record_no = "A1"
+        full.services.consultation["health_medical"] = ["screening_prevention"]
+        row = writer.write_record(full)
+        empty = make_record("r1b")
+        empty.name = "王小明"
+        empty.medical_record_no = "A1"
+        empty.services = Services()
+        writer.write_record(empty, row=row)
+        writer.save()
+    finally:
+        writer.close()
+
+    wb = load_workbook(working)
+    try:
+        sheet = wb["個案總表"]
+        values = [cell.value for cell in sheet[row] if cell.value not in (None, "")]
+        assert "1.癌症篩檢與預防" not in values
+    finally:
+        wb.close()

@@ -404,9 +404,16 @@ class ReviewApp(tk.Tk):
         )
 
         # Footer status bar: shows only the latest status; full history goes to the log file.
+        footer = ttk.Frame(self)
+        footer.pack(side=tk.BOTTOM, fill=tk.X, padx=8, pady=(0, 8))
         self._status_var = tk.StringVar(value="就緒")
-        ttk.Label(self, textvariable=self._status_var, anchor="w", relief="sunken").pack(
-            side=tk.BOTTOM, fill=tk.X, padx=8, pady=(0, 8)
+        ttk.Label(footer, textvariable=self._status_var, anchor="w", relief="sunken").pack(
+            side=tk.LEFT, fill=tk.X, expand=True
+        )
+        # Exception-first review (#43): how many fields on this record still need a human.
+        self._pending_var = tk.StringVar(value="")
+        ttk.Label(footer, textvariable=self._pending_var, anchor="e", relief="sunken").pack(
+            side=tk.RIGHT, padx=(8, 0)
         )
 
         # Two maximized panes: webcam/source preview on the left, the review form on the right.
@@ -428,7 +435,13 @@ class ReviewApp(tk.Tk):
         scrollbar.grid(row=0, column=1, sticky="ns")
         canvas.configure(yscrollcommand=scrollbar.set)
 
-        self.confirm_form = ConfirmForm(canvas, self.layout, on_change=self._mark_editing)
+        self._form_canvas = canvas
+        self.confirm_form = ConfirmForm(
+            canvas,
+            self.layout,
+            on_change=self._mark_editing,
+            on_field_focused=self._scroll_form_widget_into_view,
+        )
         canvas_window = canvas.create_window((0, 0), window=self.confirm_form.frame, anchor="nw")
         self.confirm_form.frame.bind(
             "<Configure>",
@@ -458,6 +471,83 @@ class ReviewApp(tk.Tk):
         }
 
         self._init_camera()
+        self._bind_review_shortcuts()
+
+    def _bind_review_shortcuts(self) -> None:
+        # Keyboard-first review (#42): window-level shortcuts fire over any focused
+        # field. Single-line ttk.Entry does not consume <Return>, so confirm-on-Enter
+        # is safe; number-key option entry is bound per single-choice field, not here.
+        self.bind("<Return>", self._on_confirm_key)
+        self.bind("<KP_Enter>", self._on_confirm_key)
+        self.bind("<Control-Return>", self._on_confirm_key)
+        self.bind("<F2>", self._on_force_key)
+        self.bind("<Control-Shift-Return>", self._on_force_key)
+        self.bind("<Next>", self._on_next_record_key)        # PgDn
+        self.bind("<Prior>", self._on_prev_record_key)       # PgUp
+        self.bind("<Control-Right>", self._on_next_record_key)
+        self.bind("<Control-Left>", self._on_prev_record_key)
+        self.bind("<Escape>", self._on_cancel_key)
+        self.bind("<Control-Tab>", self._on_next_flagged_key)
+        self.bind("<Control-Shift-Tab>", self._on_prev_flagged_key)
+
+    def _on_confirm_key(self, _event: "tk.Event | None" = None) -> str:
+        self._confirm_current()
+        return "break"
+
+    def _on_force_key(self, _event: "tk.Event | None" = None) -> str:
+        self._force_write()
+        return "break"
+
+    def _on_next_record_key(self, _event: "tk.Event | None" = None) -> str:
+        self._next_record()
+        return "break"
+
+    def _on_prev_record_key(self, _event: "tk.Event | None" = None) -> str:
+        self._previous_record()
+        return "break"
+
+    def _on_cancel_key(self, _event: "tk.Event | None" = None) -> str:
+        self._cancel_edit()
+        return "break"
+
+    def _on_next_flagged_key(self, _event: "tk.Event | None" = None) -> str:
+        self.confirm_form.focus_next_flagged()
+        return "break"
+
+    def _on_prev_flagged_key(self, _event: "tk.Event | None" = None) -> str:
+        self.confirm_form.focus_prev_flagged()
+        return "break"
+
+    def _cancel_edit(self) -> None:
+        # Re-show the current record from its stored values, discarding in-form edits,
+        # and clear the unsaved-edit guard so navigation works again.
+        if self.current_index < 0 or self.current_index >= len(self.records):
+            self.editing = False
+            return
+        self._show_record(self.records[self.current_index])
+
+    def _scroll_form_widget_into_view(self, widget: "tk.Misc") -> None:
+        canvas = getattr(self, "_form_canvas", None)
+        if canvas is None:
+            return
+        try:
+            canvas.update_idletasks()
+            offset = widget.winfo_rooty() - self.confirm_form.frame.winfo_rooty()
+            total = self.confirm_form.frame.winfo_height()
+            if total > 0:
+                canvas.yview_moveto(max(0.0, min(1.0, offset / total)))
+        except tk.TclError:
+            pass
+
+    def _update_pending_count(self) -> None:
+        count = self.confirm_form.flagged_count()
+        self._pending_count = count
+        pending_var = getattr(self, "_pending_var", None)
+        if pending_var is not None:
+            try:
+                pending_var.set(f"待確認 {count}" if count else "")
+            except Exception:
+                pass
 
     @staticmethod
     def _bind_mousewheel_recursive(widget: tk.Misc, handler) -> None:
@@ -820,6 +910,8 @@ class ReviewApp(tk.Tk):
         )
         self._show_source_image(record)
         self.editing = False
+        self._update_pending_count()
+        self.confirm_form.focus_first_flagged()
 
     def _apply_form_to_record(self, record: Record) -> None:
         record.record_id = self.fields["record_id"].get()

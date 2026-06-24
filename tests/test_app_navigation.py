@@ -107,6 +107,23 @@ class FakeConfirmForm:
                 collected[key] = self._fields[key].get()
         return collected
 
+    def flagged_keys(self) -> list[str]:
+        return list(getattr(self, "flagged", {}).keys())
+
+    def flagged_count(self) -> int:
+        return len(getattr(self, "flagged", {}))
+
+    def focus_first_flagged(self) -> str | None:
+        keys = self.flagged_keys()
+        self.focused = keys[0] if keys else None
+        return self.focused
+
+    def focus_next_flagged(self) -> str | None:
+        return None
+
+    def focus_prev_flagged(self) -> str | None:
+        return None
+
 
 class _FakePreviewCapture:
     def __init__(
@@ -365,6 +382,7 @@ def app(monkeypatch: pytest.MonkeyPatch) -> ReviewApp:
     review_app._preview_rotation = 0
     review_app._status_log = []
     review_app._status_var = None
+    review_app._pending_var = None
     review_app._status_log_path = None
     return review_app
 

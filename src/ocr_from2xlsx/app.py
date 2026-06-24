@@ -1003,14 +1003,16 @@ class ReviewApp(tk.Tk):
         if self.current_index < 0 or self.current_index >= len(self.records):
             messagebox.showerror("缺少資料", "請先載入 JSON 資料。")
             return
-        if self.current_index in self.written_indices:
-            messagebox.showinfo("提示", "目前資料已寫入，請切換下一筆。")
+        overwrite_row = self._overwrite_row_for_confirm()
+        if overwrite_row is False:
             return
         record = self.records[self.current_index]
         self._apply_form_to_record(record)
         human_confirmed = self._needs_name_confirmation(record)
         try:
-            result = self.session.accept_scan(record, human_confirmed=True)
+            result = self.session.accept_scan(
+                record, human_confirmed=True, overwrite_row=overwrite_row
+            )
         except (OSError, ValueError) as exc:
             messagebox.showerror("寫入失敗", str(exc))
             return
@@ -1034,7 +1036,27 @@ class ReviewApp(tk.Tk):
             self.editing = False
             working = getattr(getattr(self.session, "writer", None), "working_path", "")
             self._push_status(f"已寫入工作檔 {working} 第 {result.row_number} 列")
-            self._next_record()
+            if overwrite_row is None:
+                self._next_record()
+            else:
+                # Overwrite stays on the corrected record (no advance) so the operator
+                # can verify the fix in place.
+                self._update_progress()
+                self._update_badge()
+
+    def _overwrite_row_for_confirm(self) -> int | None | bool:
+        """Decide the write target when (re-)confirming the current record (#48):
+        ``None`` to append normally; the row number to overwrite an already-written
+        record after a confirmation; ``False`` if the operator declined (caller returns)."""
+        if self.current_index not in self.written_indices:
+            return None
+        row = self._written_rows.get(self.current_index)
+        if row is None or not messagebox.askyesno(
+            "覆寫確認", f"此筆已寫入第 {row} 列，將覆寫該列。確定？"
+        ):
+            messagebox.showinfo("提示", "目前資料已寫入，請切換下一筆。")
+            return False
+        return row
 
     def _force_write(self) -> None:
         if not self.session:
@@ -1043,14 +1065,16 @@ class ReviewApp(tk.Tk):
         if self.current_index < 0 or self.current_index >= len(self.records):
             messagebox.showerror("缺少資料", "請先載入 JSON 資料。")
             return
-        if self.current_index in self.written_indices:
-            messagebox.showinfo("提示", "目前資料已寫入，請切換下一筆。")
+        overwrite_row = self._overwrite_row_for_confirm()
+        if overwrite_row is False:
             return
         record = self.records[self.current_index]
         self._apply_form_to_record(record)
         human_confirmed = self._needs_name_confirmation(record)
         try:
-            result = self.session.accept_scan(record, force=True, human_confirmed=True)
+            result = self.session.accept_scan(
+                record, force=True, human_confirmed=True, overwrite_row=overwrite_row
+            )
         except (OSError, ValueError) as exc:
             messagebox.showerror("寫入失敗", str(exc))
             return

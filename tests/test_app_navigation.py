@@ -26,11 +26,17 @@ class StubSession:
     def __init__(self, result: AcceptResult) -> None:
         self.result = result
         self.calls: list[tuple[str, bool, bool]] = []
+        self.overwrite_rows: list[int | None] = []
 
     def accept_scan(
-        self, record, force: bool = False, human_confirmed: bool = False
+        self,
+        record,
+        force: bool = False,
+        human_confirmed: bool = False,
+        overwrite_row: int | None = None,
     ) -> AcceptResult:
         self.calls.append((record.record_id, force, human_confirmed))
+        self.overwrite_rows.append(overwrite_row)
         if human_confirmed and self.result.status in {"forced", "written"}:
             record.ocr.warnings = [warning for warning in record.ocr.warnings if warning != "name.unconfirmed"]
         return self.result
@@ -457,7 +463,7 @@ def test_force_write_skips_when_already_written(
     )
 
     class FailingSession:
-        def accept_scan(self, record, force: bool = False) -> AcceptResult:
+        def accept_scan(self, record, force: bool = False, overwrite_row: int | None = None) -> AcceptResult:
             raise AssertionError("accept_scan should not be called")
 
         def close(self) -> None:
@@ -478,7 +484,7 @@ def test_next_record_browses_without_writing_current_record(app: ReviewApp) -> N
     app._show_record(records[0])
 
     class FailingSession:
-        def accept_scan(self, record, force: bool = False) -> AcceptResult:
+        def accept_scan(self, record, force: bool = False, overwrite_row: int | None = None) -> AcceptResult:
             raise AssertionError("accept_scan should not be called")
 
         def close(self) -> None:
@@ -500,7 +506,7 @@ def test_previous_record_browses_without_writing_current_record(app: ReviewApp) 
     app._show_record(records[1])
 
     class FailingSession:
-        def accept_scan(self, record, force: bool = False) -> AcceptResult:
+        def accept_scan(self, record, force: bool = False, overwrite_row: int | None = None) -> AcceptResult:
             raise AssertionError("accept_scan should not be called")
 
         def close(self) -> None:
@@ -519,7 +525,7 @@ def test_next_record_from_initial_index_shows_first_record(app: ReviewApp) -> No
     app.records = [record]
 
     class FailingSession:
-        def accept_scan(self, record, force: bool = False) -> AcceptResult:
+        def accept_scan(self, record, force: bool = False, overwrite_row: int | None = None) -> AcceptResult:
             raise AssertionError("accept_scan should not be called")
 
         def close(self) -> None:
@@ -1350,7 +1356,8 @@ def test_force_write_failure_does_not_persist_unconfirmed_name(app: ReviewApp, t
 
     class FailingSession:
         def accept_scan(
-            self, record, force: bool = False, human_confirmed: bool = False
+            self, record, force: bool = False, human_confirmed: bool = False,
+            overwrite_row: int | None = None,
         ) -> AcceptResult:
             raise OSError("disk full")
 

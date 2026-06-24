@@ -152,3 +152,45 @@ def test_roster_candidates_for_no_store_returns_empty():
     app = _headless_app([make_record("scan-0001")])
     app.correction_store_path = None
     assert app._roster_candidates_for(app.records[0]) == []
+
+
+def test_confirm_on_written_record_overwrites_its_row(monkeypatch):
+    from ocr_from2xlsx.session import AcceptResult
+    from tests.test_app_navigation import StubSession
+    from tests.test_json_io import make_record
+
+    session = StubSession(
+        AcceptResult(record_id="scan-0001", status="written", row_number=5, blockers=[], warnings=[])
+    )
+    app = _headless_app([make_record("scan-0001")], session)
+    app.written_indices = {0}
+    app._written_rows = {0: 5}
+    app.editing = True
+    monkeypatch.setattr("ocr_from2xlsx.app.messagebox.askyesno", lambda *a, **k: True)
+    monkeypatch.setattr("ocr_from2xlsx.app.messagebox.showinfo", lambda *a, **k: None)
+
+    app._confirm_current()
+
+    # Overwrote row 5 (not appended) and stayed on the corrected record (no advance).
+    assert session.overwrite_rows == [5]
+    assert app._written_rows[0] == 5
+    assert app.current_index == 0
+
+
+def test_confirm_on_written_record_cancel_writes_nothing(monkeypatch):
+    from ocr_from2xlsx.session import AcceptResult
+    from tests.test_app_navigation import StubSession
+    from tests.test_json_io import make_record
+
+    session = StubSession(
+        AcceptResult(record_id="scan-0001", status="written", row_number=5, blockers=[], warnings=[])
+    )
+    app = _headless_app([make_record("scan-0001")], session)
+    app.written_indices = {0}
+    app._written_rows = {0: 5}
+    monkeypatch.setattr("ocr_from2xlsx.app.messagebox.askyesno", lambda *a, **k: False)
+    monkeypatch.setattr("ocr_from2xlsx.app.messagebox.showinfo", lambda *a, **k: None)
+
+    app._confirm_current()
+
+    assert session.calls == []  # cancelling the overwrite confirmation writes nothing

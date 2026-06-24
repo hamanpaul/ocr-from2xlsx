@@ -102,6 +102,7 @@ def test_review_app_binds_documented_shortcuts():
     try:
         for sequence in (
             "<Return>",
+            "<KP_Enter>",
             "<Control-Return>",
             "<F2>",
             "<Control-Shift-Return>",
@@ -111,6 +112,7 @@ def test_review_app_binds_documented_shortcuts():
             "<Control-Left>",
             "<Escape>",
             "<Control-Tab>",
+            "<Control-Shift-Tab>",
         ):
             assert app.bind(sequence), f"missing binding for {sequence}"
     finally:

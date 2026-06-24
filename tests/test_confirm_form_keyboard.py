@@ -132,3 +132,16 @@ def test_space_toggle_multi_choice_option():
         assert form.collect()["cancer"] == set()
     finally:
         root.destroy()
+
+
+def test_flagged_count_excludes_non_navigable_keys():
+    # flagged_fields() can fall back to a raw field-id that is not a navigable field
+    # (e.g. an unmapped low-confidence id). The "待確認 N" badge must count only fields
+    # the reviewer can jump to, so flagged_count() must equal len(flagged_keys()).
+    root, form = _form()
+    try:
+        form.set_flagged_fields({"name": "unconfirmed", "ghost_field_id": "low-confidence"})
+        assert form.flagged_keys() == ["name"]
+        assert form.flagged_count() == len(form.flagged_keys()) == 1
+    finally:
+        root.destroy()

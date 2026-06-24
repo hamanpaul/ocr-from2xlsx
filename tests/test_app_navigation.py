@@ -108,6 +108,9 @@ class FakeConfirmForm:
         return collected
 
     def flagged_keys(self) -> list[str]:
+        # NOTE: returns dict insertion order, not the real ConfirmForm's layout order.
+        # Fine for the headless tests here (single flag); assert multi-flag focus order
+        # against the real ConfirmForm (tests/test_confirm_form_keyboard.py) instead.
         return list(getattr(self, "flagged", {}).keys())
 
     def flagged_count(self) -> int:

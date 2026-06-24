@@ -220,9 +220,10 @@ class ConfirmForm:
         return [key for key in self._nav_order if key in self._flagged]
 
     def flagged_count(self) -> int:
-        # _flagged is only mutated in set_flagged_fields and its keys are exactly the
-        # navigable field paths, so this matches len(flagged_keys()) without re-scanning.
-        return len(self._flagged)
+        # Count only navigable flagged fields: flagged_fields() can fall back to a raw
+        # field-id key that is not in _nav_order, and the "待確認 N" badge must match the
+        # fields the reviewer can actually jump to (flagged_keys filters by _nav_order).
+        return len(self.flagged_keys())
 
     def _focus(self, record_path: str | None) -> str | None:
         if record_path is None:
@@ -354,6 +355,7 @@ class ReviewApp(tk.Tk):
         self.correction_store_path: Path | None = None
         self.editing = False
         self.written_indices: set[int] = set()
+        self._pending_count: int = 0
         self._preview_image: tk.PhotoImage | None = None
         self._camera_capture = None
         self._camera_after_id: str | None = None
@@ -488,6 +490,8 @@ class ReviewApp(tk.Tk):
         self.bind("<Control-Left>", self._on_prev_record_key)
         self.bind("<Escape>", self._on_cancel_key)
         self.bind("<Control-Tab>", self._on_next_flagged_key)
+        # NOTE: Ctrl+Shift+Tab may be intercepted by the OS tab-switcher on macOS/GNOME;
+        # the app targets Windows, where it reaches Tk.
         self.bind("<Control-Shift-Tab>", self._on_prev_flagged_key)
 
     def _on_confirm_key(self, _event: "tk.Event | None" = None) -> str:

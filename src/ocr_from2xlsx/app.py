@@ -305,6 +305,10 @@ class ReviewApp(tk.Tk):
     _splash_closed: bool = False
     _status_var: object | None = None
     _status_log_path: object | None = None
+    # Name-correction aids (#46); class-level defaults so headless ReviewApp.__new__
+    # instances (no Tk) resolve them without tripping tk.Tk.__getattr__ recursion.
+    _name_crop_label: object | None = None
+    _roster_listbox: object | None = None
 
     @staticmethod
     def _runtime_base_dir() -> Path:
@@ -439,12 +443,23 @@ class ReviewApp(tk.Tk):
         form = ttk.Frame(body)
         body.add(form, weight=1)
         form.columnconfigure(0, weight=1)
-        form.rowconfigure(0, weight=1)
+        form.rowconfigure(1, weight=1)
+
+        # Name-correction aids (#46): a zoomed name crop + selectable roster candidates,
+        # pinned above the scrollable form (the most-corrected field gets the most help).
+        name_aids = ttk.LabelFrame(form, text="姓名校正")
+        name_aids.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 6))
+        name_aids.columnconfigure(1, weight=1)
+        self._name_crop_label = ttk.Label(name_aids, text="（無姓名裁圖）", anchor="center")
+        self._name_crop_label.grid(row=0, column=0, padx=6, pady=4, sticky="w")
+        self._roster_listbox = tk.Listbox(name_aids, height=4, exportselection=False)
+        self._roster_listbox.grid(row=0, column=1, padx=6, pady=4, sticky="ew")
+        self._roster_listbox.bind("<<ListboxSelect>>", self._on_roster_select)
 
         canvas = tk.Canvas(form, highlightthickness=0)
-        canvas.grid(row=0, column=0, sticky="nsew")
+        canvas.grid(row=1, column=0, sticky="nsew")
         scrollbar = ttk.Scrollbar(form, orient="vertical", command=canvas.yview)
-        scrollbar.grid(row=0, column=1, sticky="ns")
+        scrollbar.grid(row=1, column=1, sticky="ns")
         canvas.configure(yscrollcommand=scrollbar.set)
 
         self._form_canvas = canvas
@@ -611,6 +626,83 @@ class ReviewApp(tk.Tk):
                 badge_var.set(label)
             except Exception:
                 pass
+
+    def _roster_candidates_for(self, record: Record) -> list[str]:
+        # Confirmed-name roster (from the correction store) ranked against this record's
+        # current name, for the selectable suggestions beside the name field (#46).
+        from ocr_from2xlsx.correction_store import roster_from_store
+        from ocr_from2xlsx.review_workflow import rank_roster_candidates
+
+        store = self.correction_store_path
+        if store is None:
+            return []
+        try:
+            roster = roster_from_store(store)
+        except (OSError, ValueError):
+            return []
+        return rank_roster_candidates(record.name, roster)
+
+    def _apply_roster_choice(self, name: str) -> None:
+        # Fill the name field from a roster pick and clear the unconfirmed-name marker (#46).
+        chosen = (name or "").strip()
+        if not chosen:
+            return
+        self.fields["name"].set(chosen)
+        if 0 <= self.current_index < len(self.records):
+            record = self.records[self.current_index]
+            record.ocr.warnings = [w for w in record.ocr.warnings if w != NAME_UNCONFIRMED]
+        self.editing = True
+
+    def _on_roster_select(self, _event: "tk.Event | None" = None) -> None:
+        listbox = self._roster_listbox
+        if listbox is None:
+            return
+        try:
+            selection = listbox.curselection()
+            if not selection:
+                return
+            self._apply_roster_choice(listbox.get(selection[0]))
+        except tk.TclError:
+            pass
+
+    def _update_name_aids(self, record: Record) -> None:
+        # Populate the roster suggestions and the zoomed name-crop preview (#46).
+        listbox = self._roster_listbox
+        if listbox is not None:
+            try:
+                listbox.delete(0, tk.END)
+                for candidate in self._roster_candidates_for(record):
+                    listbox.insert(tk.END, candidate)
+            except tk.TclError:
+                pass
+        self._show_name_crop(record)
+
+    def _show_name_crop(self, record: Record) -> None:
+        label = self._name_crop_label
+        if label is None:
+            return
+        try:
+            relative = record.ocr.name_crop
+            if not relative or self.loaded_json_path is None:
+                label.configure(image="", text="（無姓名裁圖）")
+                self._name_crop_image = None
+                return
+            crop_path = self.loaded_json_path.parent / relative
+            if crop_path.suffix.lower() != ".png" or not crop_path.is_file():
+                label.configure(image="", text="（無姓名裁圖）")
+                self._name_crop_image = None
+                return
+            image = tk.PhotoImage(file=str(crop_path))
+            if image.width() < 240:
+                image = image.zoom(2, 2)  # enlarge small crops so handwriting is legible
+            self._name_crop_image = image
+            label.configure(image=image, text="")
+        except Exception:
+            try:
+                label.configure(image="", text="（無姓名裁圖）")
+            except tk.TclError:
+                pass
+            self._name_crop_image = None
 
     @staticmethod
     def _bind_mousewheel_recursive(widget: tk.Misc, handler) -> None:
@@ -988,6 +1080,7 @@ class ReviewApp(tk.Tk):
         self._update_pending_count()
         self._update_progress()
         self._update_badge()
+        self._update_name_aids(record)
         self.confirm_form.focus_first_flagged()
 
     def _apply_form_to_record(self, record: Record) -> None:

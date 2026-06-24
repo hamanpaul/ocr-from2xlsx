@@ -49,3 +49,41 @@ def test_pan_is_clamped_within_bounds():
         assert viewer.origin[1] == 600.0
     finally:
         root.destroy()
+
+
+def test_frame_field_region_only_for_known_field():
+    from ocr_from2xlsx.app import ReviewApp
+
+    calls = []
+
+    class _StubViewer:
+        mode = "static"
+
+        def frame_region(self, band):
+            calls.append(band)
+
+    app = ReviewApp.__new__(ReviewApp)
+    app.preview = _StubViewer()
+
+    app._frame_field_region("identity")
+    assert len(calls) == 1
+    app._frame_field_region("definitely_not_a_field")
+    assert len(calls) == 1  # unknown region: no framing call
+
+
+def test_confirm_form_field_focus_frames_region():
+    root, _ = _viewer()
+    try:
+        from ocr_from2xlsx.form_layout import service_record_layout
+
+        framed = []
+        form = app_module.ConfirmForm(
+            root,
+            service_record_layout(),
+            on_field_region=lambda record_path: framed.append(record_path),
+        )
+        form.set_flagged_fields({"name": "unconfirmed"})
+        form.focus_first_flagged()
+        assert framed == ["name"]
+    finally:
+        root.destroy()

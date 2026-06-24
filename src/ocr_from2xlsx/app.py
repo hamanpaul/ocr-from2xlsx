@@ -48,10 +48,12 @@ class ConfirmForm:
         layout: FormLayout,
         on_change: Callable[[], None] | None = None,
         on_field_focused: Callable[[tk.Misc], None] | None = None,
+        on_field_region: Callable[[str], None] | None = None,
     ) -> None:
         self.layout = layout
         self._on_change = on_change
         self._on_field_focused = on_field_focused
+        self._on_field_region = on_field_region
         self.frame = ttk.Frame(parent)
         self.text_fields: dict[str, tk.StringVar] = {}
         self.single_choice_fields: dict[str, tk.StringVar] = {}
@@ -239,6 +241,11 @@ class ConfirmForm:
         if self._on_field_focused is not None:
             try:
                 self._on_field_focused(widget)
+            except Exception:
+                pass
+        if self._on_field_region is not None:
+            try:
+                self._on_field_region(record_path)
             except Exception:
                 pass
         return record_path
@@ -608,6 +615,7 @@ class ReviewApp(tk.Tk):
             self.layout,
             on_change=self._mark_editing,
             on_field_focused=self._scroll_form_widget_into_view,
+            on_field_region=self._frame_field_region,
         )
         canvas_window = canvas.create_window((0, 0), window=self.confirm_form.frame, anchor="nw")
         self.confirm_form.frame.bind(
@@ -713,6 +721,20 @@ class ReviewApp(tk.Tk):
             self.editing = False
             return
         self._show_record(self.records[self.current_index])
+
+    def _frame_field_region(self, record_path: str) -> None:
+        # On field focus, frame the source-image viewer to that field's section band (#47).
+        from ocr_from2xlsx.image_viewer import field_region
+
+        viewer = getattr(self, "preview", None)
+        if viewer is None or getattr(viewer, "mode", None) != "static":
+            return
+        band = field_region(record_path)
+        if band is not None:
+            try:
+                viewer.frame_region(band)
+            except Exception:
+                pass
 
     def _scroll_form_widget_into_view(self, widget: "tk.Misc") -> None:
         canvas = getattr(self, "_form_canvas", None)

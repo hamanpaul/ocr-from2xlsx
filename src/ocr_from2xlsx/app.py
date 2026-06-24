@@ -378,32 +378,29 @@ class ReviewApp(tk.Tk):
             side=tk.LEFT, padx=4
         )
         ttk.Button(toolbar, text="匯入 JSON", command=self._load_json).pack(side=tk.LEFT, padx=4)
-        ttk.Button(toolbar, text="上一筆", command=self._previous_record).pack(side=tk.LEFT, padx=4)
-        ttk.Button(toolbar, text="下一筆", command=self._next_record).pack(
+        # Mode-specific toolbar buttons (#44): scan-station vs. correction controls are
+        # shown/hidden by review mode so correction is uncluttered and mis-clicks (e.g.
+        # 擷取並辨識 mid-review) are impossible. Setup buttons + the toggle stay visible.
+        self._mode_buttons: dict[str, ttk.Button] = {}
+        button_specs: dict[str, tuple[str, object]] = {
+            "prev_record": ("上一筆", self._previous_record),
+            "next_record": ("下一筆", self._next_record),
+            "confirm": ("確認並寫入", self._confirm_current),
+            "force_write": ("強制寫入", self._force_write),
+            "choose_camera": ("選擇攝影機", self._choose_camera),
+            "capture_recognize": ("擷取並辨識", self._capture_and_recognize),
+            "import_folder_batch": ("匯入資料夾批次", self._import_folder_batch),
+            "rotate": ("旋轉", self._rotate_preview),
+            "zoom_in": ("放大", lambda: self._zoom_preview(1.25)),
+            "zoom_out": ("縮小", lambda: self._zoom_preview(1 / 1.25)),
+        }
+        for key, (label, command) in button_specs.items():
+            self._mode_buttons[key] = ttk.Button(toolbar, text=label, command=command)
+        ttk.Button(toolbar, text="掃描/校正", command=self._toggle_review_mode).pack(
             side=tk.LEFT, padx=4
         )
-        ttk.Button(toolbar, text="確認並寫入", command=self._confirm_current).pack(
-            side=tk.LEFT, padx=4
-        )
-        ttk.Button(toolbar, text="強制寫入", command=self._force_write).pack(side=tk.LEFT, padx=4)
-        ttk.Button(toolbar, text="選擇攝影機", command=self._choose_camera).pack(
-            side=tk.LEFT, padx=4
-        )
-        ttk.Button(toolbar, text="擷取並辨識", command=self._capture_and_recognize).pack(
-            side=tk.LEFT, padx=4
-        )
-        ttk.Button(toolbar, text="匯入資料夾批次", command=self._import_folder_batch).pack(
-            side=tk.LEFT, padx=4
-        )
-        ttk.Button(toolbar, text="旋轉", command=self._rotate_preview).pack(
-            side=tk.LEFT, padx=4
-        )
-        ttk.Button(toolbar, text="放大", command=lambda: self._zoom_preview(1.25)).pack(
-            side=tk.LEFT, padx=4
-        )
-        ttk.Button(toolbar, text="縮小", command=lambda: self._zoom_preview(1 / 1.25)).pack(
-            side=tk.LEFT, padx=4
-        )
+        self._review_mode = "correction"
+        self._set_review_mode("correction")
 
         # Footer status bar: shows only the latest status; full history goes to the log file.
         footer = ttk.Frame(self)
@@ -474,6 +471,25 @@ class ReviewApp(tk.Tk):
 
         self._init_camera()
         self._bind_review_shortcuts()
+
+    def _set_review_mode(self, mode: str) -> None:
+        from ocr_from2xlsx.review_workflow import (
+            correction_mode_controls,
+            scan_mode_controls,
+        )
+
+        self._review_mode = mode
+        visible = set(
+            correction_mode_controls() if mode == "correction" else scan_mode_controls()
+        )
+        for key, button in self._mode_buttons.items():
+            if key in visible:
+                button.pack(side=tk.LEFT, padx=4)
+            else:
+                button.pack_forget()
+
+    def _toggle_review_mode(self) -> None:
+        self._set_review_mode("scan" if self._review_mode == "correction" else "correction")
 
     def _bind_review_shortcuts(self) -> None:
         # Keyboard-first review (#42): window-level shortcuts fire over any focused

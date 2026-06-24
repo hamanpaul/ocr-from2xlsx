@@ -11,6 +11,11 @@
 - (#R6) 連續拍照基準強化：基準改為收集 N 張（預設 3）連續靜止影格取平均，避免單幀雜訊；動作偵測改用
   `mean_normalized_diff`（去 DC 後差異），對均勻亮度/曝光偏移免疫；辨識結果零筆時同步清除已拍清單，
   避免空結果循環重試。
+- 修正 PR #40 程式碼審查指出的 4 處：`recognition/backend.py` `VisionOcrBackend` 預設 `model_name` 對齊
+  `qwen3-vl:2b`（與 `factory.DEFAULT_MODEL` 一致，避免漏進 `ocr.model`）；`training/eval_scan._norm` 改為明確
+  `None`/`""` 判斷（不再把 `0`/`False` 誤當缺值）；`plugins/paddleocr/name_crop._trim_top_right_bleed` 改為只裁頂端
+  **連續**暗列（遇第一個乾淨列即停，不再過度裁切到姓名）；`scan.prepare_records_from_folder` docstring 修正
+  `on_progress` 語意（傳入的是處理中檔案的 1-based index，非已完成數）。
 
 ### Changed
 - 連續拍照偵測改用**空桌基準差異法（中央 ROI）**：原本以「與上一張已拍表單的差異」判定新張，對同版型一疊會漏拍第二張；改為與本 session「空桌基準」比對、淨空循環去重，並修正中文路徑寫檔（imencode+write_bytes）、連續模糊改**暫停**、合焦收斂改雙向 abs、相機中斷/辨識失敗保留已擷取影像可續辨識，辨識完成後跳通知再進逐張校正。校正進度 resume 另立 issue #37。

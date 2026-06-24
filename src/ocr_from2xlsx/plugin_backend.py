@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 
 from ocr_from2xlsx.ocr_plugin import (
@@ -21,19 +23,34 @@ class PluginExecutionError(RuntimeError):
     """Raised when the plugin subprocess fails or returns invalid output."""
 
 
+def scan_doc_preprocess_env_overrides() -> dict[str, str] | None:
+    value = os.environ.get("SCAN_DOC_PREPROCESS")
+    if value is None or value.strip().lower() not in {"1", "true"}:
+        return None
+    return {"SCAN_DOC_PREPROCESS": value}
+
+
 class PluginOcrBackend:
-    def __init__(self, plugin_dir: Path | str) -> None:
+    def __init__(
+        self,
+        plugin_dir: Path | str,
+        *,
+        env_overrides: Mapping[str, str] | None = None,
+    ) -> None:
         self.plugin_dir = Path(plugin_dir)
         self.manifest: PluginManifest = load_manifest(self.plugin_dir)
+        self.env_overrides = dict(env_overrides or {})
 
     @classmethod
     def resolve(
         cls,
         explicit_dir: Path | str | None = None,
         default_dir: Path | str | None = None,
+        *,
+        env_overrides: Mapping[str, str] | None = None,
     ) -> "PluginOcrBackend":
         plugin_dir = resolve_plugin_dir(explicit_dir=explicit_dir, default_dir=default_dir)
-        return cls(plugin_dir)
+        return cls(plugin_dir, env_overrides=env_overrides)
 
     def _command(self) -> list[str]:
         parts = [
@@ -62,6 +79,10 @@ class PluginOcrBackend:
             document_name=Path(page.source.document_path or "").name,
             page_number=page.source.page_number or 0,
         )
+        env = os.environ.copy()
+        env.pop("SCAN_DOC_PREPROCESS", None)
+        if self.env_overrides:
+            env.update(self.env_overrides)
         try:
             completed = subprocess.run(
                 self._command(),
@@ -71,6 +92,7 @@ class PluginOcrBackend:
                 text=True,
                 encoding="utf-8",
                 errors="replace",
+                env=env,
             )
         except OSError as exc:
             raise PluginExecutionError(f"Failed to launch OCR plugin: {exc}") from exc

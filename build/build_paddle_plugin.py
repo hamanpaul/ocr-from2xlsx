@@ -10,6 +10,7 @@ Run with any python: `python build/build_paddle_plugin.py`
 """
 from __future__ import annotations
 
+import json
 import shutil
 from pathlib import Path
 
@@ -19,6 +20,8 @@ SRC_PLUGIN = REPO / "plugins" / "paddleocr"
 MODELS_SRC = Path.home() / ".paddlex" / "official_models"
 NEEDED_MODELS = ["PP-OCRv5_mobile_det", "PP-OCRv5_mobile_rec", "PP-LCNet_x1_0_textline_ori"]
 OUT = REPO / "dist" / "plugins" / "paddleocr"
+SOURCE_PYTHON_PLACEHOLDER = "__PYTHON__"
+BUNDLED_PYTHON = "python\\Scripts\\python.exe"
 
 
 def _copy_models(dest_models: Path) -> None:
@@ -27,6 +30,18 @@ def _copy_models(dest_models: Path) -> None:
         if not src.is_dir():
             raise SystemExit(f"Missing model dir (run the plugin once to download it): {src}")
         shutil.copytree(src, dest_models / name, dirs_exist_ok=True)
+
+
+def _copy_manifest() -> None:
+    manifest_path = SRC_PLUGIN / "plugin.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    command = manifest.get("command")
+    if isinstance(command, list) and command and command[0] == SOURCE_PYTHON_PLACEHOLDER:
+        manifest["command"] = [BUNDLED_PYTHON, *command[1:]]
+    (OUT / "plugin.json").write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
 
 
 def main() -> int:
@@ -46,9 +61,9 @@ def main() -> int:
         "mark_features.py",
         "mark_model.py",
         "crop_provider.py",
-        "plugin.json",
     ]:
         shutil.copy2(SRC_PLUGIN / name, OUT / name)
+    _copy_manifest()
     for name in ["template_boxes.json", "mark_model.json"]:
         src = SRC_PLUGIN / name
         if src.exists():

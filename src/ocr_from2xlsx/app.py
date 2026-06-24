@@ -1255,16 +1255,15 @@ class ReviewApp(tk.Tk):
         from ocr_from2xlsx.plugin_backend import scan_doc_preprocess_env_overrides
         from ocr_from2xlsx.scan import next_output_artifact_path, prepare_records_from_images
 
-        if not self._autocapture_active:
+        stills = list(self._autocapture_stills)
+        if not self._autocapture_active and not stills:
             return
         self._stop_camera()
         self._autocapture_active = False
-        stills = list(self._autocapture_stills)
-        output_dir = self._autocapture_output_dir
         if not stills:
             messagebox.showwarning("連續拍照", "尚未擷取任何影像，沒有可辨識的內容。")
             return
-        json_path = next_output_artifact_path(output_dir, "scan-prepared.json")
+        json_path = next_output_artifact_path(self._autocapture_output_dir, "scan-prepared.json")
         modal = self._open_processing_modal("批次辨識中…")
         try:
             backend = self._resolve_recognition_backend(
@@ -1276,12 +1275,14 @@ class ReviewApp(tk.Tk):
                 self._set_modal_message(modal, f"批次辨識中… {done}/{total}\n{name}")
 
             batch = prepare_records_from_images(
-                stills, output_dir, template, backend, on_progress=_progress
+                stills, self._autocapture_output_dir, template, backend, on_progress=_progress
             )
             dump_batch(batch, json_path)
-        except Exception as exc:  # noqa: BLE001 - surface any failure to the user
+        except Exception as exc:  # noqa: BLE001 - keep the stills for a retry
             self._close_processing_modal(modal)
-            messagebox.showerror("批次辨識失敗", str(exc))
+            messagebox.showerror(
+                "批次辨識失敗", f"{exc}\n（已擷取的影像保留，可再次按『完成辨識』重試。）"
+            )
             return
         else:
             self._close_processing_modal(modal)
@@ -1289,6 +1290,8 @@ class ReviewApp(tk.Tk):
         if not records:
             messagebox.showwarning("沒有可辨識的影像", "辨識結果沒有任何紀錄。")
             return
+        self._autocapture_stills = []  # consumed
+        messagebox.showinfo("辨識完成", f"已辨識 {len(records)} 筆，進入逐張人工校正。")
         self._set_loaded_records(records, json_path)
         self._push_status(f"連續拍照完成：{len(records)} 筆，請逐筆確認後寫入。")
 

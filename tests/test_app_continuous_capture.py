@@ -258,12 +258,16 @@ def test_finish_routes_stills_to_batch_and_loads_review(monkeypatch, tmp_path):
     loaded = {}
     monkeypatch.setattr(app, "_set_loaded_records", lambda records, path: loaded.update(path=path))
     monkeypatch.setattr("ocr_from2xlsx.app.JsonRecordSource", lambda path: SimpleNamespace(records=lambda: iter([SimpleNamespace(record_id="batch-0001")])))
+    infos = []
+    monkeypatch.setattr("ocr_from2xlsx.app.messagebox.showinfo", lambda t, m: infos.append((t, m)))
 
     ReviewApp._finish_continuous_capture(app)
 
     assert seen["stills"] == [s1, s2]
     assert app._autocapture_active is False
     assert loaded.get("path") == tmp_path / "scan-prepared.json"
+    assert any(t == "辨識完成" for t, _ in infos)
+    assert app._autocapture_stills == []  # consumed on success
 
 
 def test_finish_with_no_captures_warns_and_skips(monkeypatch, tmp_path):
@@ -396,3 +400,55 @@ def test_perform_autocapture_writes_to_cjk_output_dir(monkeypatch, tmp_path):
     assert len(app._autocapture_stills) == 1
     assert app._autocapture_stills[0].is_file()
     assert "表單辨識" in str(app._autocapture_stills[0])
+
+
+# ---------------------------------------------------------------------------
+# Task 4: Finish data recovery + "辨識完成" dialog
+# ---------------------------------------------------------------------------
+def test_finish_works_after_camera_loss_when_stills_exist(monkeypatch, tmp_path):
+    import ocr_from2xlsx.scan as scan
+    from ocr_from2xlsx.domain import Batch, SourceBatch
+
+    app = _bare_app()
+    app._autocapture_active = False  # camera-loss set this False, but stills remain
+    app._autocapture_output_dir = tmp_path
+    s1 = tmp_path / "scan-capture.png"; s1.write_bytes(b"x")
+    app._autocapture_stills = [s1]
+    monkeypatch.setattr(scan, "prepare_records_from_images",
+                        lambda *a, **k: Batch(source_batch=SourceBatch(created_at="t", source_type="scan_records", template_name="service_record.v1"), records=[]))
+    monkeypatch.setattr("ocr_from2xlsx.cli._resolve_template", lambda name: SimpleNamespace(template_id=name))
+    monkeypatch.setattr(app, "_resolve_recognition_backend", lambda *a, **k: object())
+    monkeypatch.setattr(app, "_open_processing_modal", lambda msg: None)
+    monkeypatch.setattr(app, "_set_modal_message", lambda m, msg: None)
+    monkeypatch.setattr(app, "_close_processing_modal", lambda m: None)
+    monkeypatch.setattr(app, "_stop_camera", lambda: None)
+    monkeypatch.setattr("ocr_from2xlsx.json_io.dump_batch", lambda batch, path: Path(path).write_text("{}"))
+    monkeypatch.setattr("ocr_from2xlsx.app.messagebox.showinfo", lambda *a, **k: None)
+    loaded = {}
+    monkeypatch.setattr(app, "_set_loaded_records", lambda records, path: loaded.update(path=path))
+    monkeypatch.setattr("ocr_from2xlsx.app.JsonRecordSource",
+                        lambda path: SimpleNamespace(records=lambda: iter([SimpleNamespace(record_id="batch-0001")])))
+
+    ReviewApp._finish_continuous_capture(app)
+    assert loaded.get("path") == tmp_path / "scan-prepared.json"
+
+
+def test_finish_recognition_error_preserves_stills_for_retry(monkeypatch, tmp_path):
+    import ocr_from2xlsx.scan as scan
+    app = _bare_app()
+    app._autocapture_active = True
+    app._autocapture_output_dir = tmp_path
+    s1 = tmp_path / "scan-capture.png"; s1.write_bytes(b"x")
+    app._autocapture_stills = [s1]
+    monkeypatch.setattr(app, "_stop_camera", lambda: None)
+    monkeypatch.setattr(app, "_resolve_recognition_backend", lambda *a, **k: object())
+    monkeypatch.setattr("ocr_from2xlsx.cli._resolve_template", lambda name: SimpleNamespace(template_id=name))
+    monkeypatch.setattr(app, "_open_processing_modal", lambda msg: None)
+    monkeypatch.setattr(app, "_close_processing_modal", lambda m: None)
+    errors = []
+    monkeypatch.setattr("ocr_from2xlsx.app.messagebox.showerror", lambda t, m: errors.append((t, m)))
+    monkeypatch.setattr(scan, "prepare_records_from_images",
+                        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("backend down")))
+    ReviewApp._finish_continuous_capture(app)
+    assert app._autocapture_stills == [s1]  # preserved → retryable
+    assert errors and errors[0][0] == "批次辨識失敗"

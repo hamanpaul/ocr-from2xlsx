@@ -69,6 +69,23 @@ def test_focus_next_flagged_noop_when_none_flagged():
         root.destroy()
 
 
+def test_focus_bolds_active_field_label_and_reverts_previous():
+    import tkinter.font as tkfont
+
+    root, form = _form()
+    try:
+        form.set_flagged_fields({"name": "unconfirmed", "gender": "low-confidence"})
+        form.focus_first_flagged()  # name
+        assert tkfont.Font(font=form._field_labels["name"].cget("font")).cget("weight") == "bold"
+        form.focus_next_flagged()  # gender — name reverts, gender bolds
+        assert tkfont.Font(font=form._field_labels["name"].cget("font")).cget("weight") == "normal"
+        assert tkfont.Font(font=form._field_labels["gender"].cget("font")).cget("weight") == "bold"
+        # Foreground (flagged red) is untouched by the bold emphasis.
+        assert str(form._field_labels["gender"].cget("foreground")) == "#b00020"
+    finally:
+        root.destroy()
+
+
 def test_unflagged_labels_are_deemphasized_when_some_field_flagged():
     root, form = _form()
     try:

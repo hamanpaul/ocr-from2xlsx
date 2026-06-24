@@ -86,6 +86,36 @@ def test_key_handlers_invoke_existing_actions(monkeypatch):
     assert calls == ["confirm", "force", "next", "prev"]
 
 
+def test_correction_keys_are_inert_in_scan_mode(monkeypatch):
+    app = _headless_app()
+    app._review_mode = "scan"
+    calls = []
+    monkeypatch.setattr(app, "_confirm_current", lambda: calls.append("confirm"))
+    monkeypatch.setattr(app, "_force_write", lambda: calls.append("force"))
+    monkeypatch.setattr(app, "_next_record", lambda: calls.append("next"))
+    monkeypatch.setattr(app, "_previous_record", lambda: calls.append("prev"))
+
+    # In scan mode the correction shortcuts swallow the key but do nothing (#44).
+    assert app._on_confirm_key() == "break"
+    assert app._on_force_key() == "break"
+    assert app._on_next_record_key() == "break"
+    assert app._on_prev_record_key() == "break"
+    assert calls == []
+
+
+def test_clean_record_does_not_steal_focus():
+    app = _headless_app()
+    record = make_record("scan-0001")  # no warnings -> 0 flagged fields
+    app.records = [record]
+    app.current_index = 0
+
+    app._show_record(record)
+
+    assert app._pending_count == 0
+    # A 0-flagged record must not yank the caret into the first field (#43).
+    assert getattr(app.confirm_form, "focused", None) is None
+
+
 def test_next_prev_flagged_handlers_delegate_to_form():
     app = _headless_app()
     seen = []
@@ -117,6 +147,8 @@ def test_review_app_binds_documented_shortcuts():
             "<Escape>",
             "<Control-Tab>",
             "<Control-Shift-Tab>",
+            "<F4>",
+            "<F8>",
         ):
             assert app.bind(sequence), f"missing binding for {sequence}"
     finally:

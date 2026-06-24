@@ -39,3 +39,13 @@ def test_field_region_returns_section_band_or_none():
     assert len(band) == 4
     assert all(0.0 <= v <= 1.0 for v in band)
     assert field_region("definitely_not_a_field") is None
+
+
+def test_field_region_unions_multi_section_field():
+    # patient_fields.cancers is split across the 5 column crops cancers_c1..c5; the framed
+    # band must cover all of them (x ~0.13..0.85), not just the first ~0.14-wide column.
+    cancers = field_region("patient_fields.cancers")
+    assert cancers is not None
+    x0, _y0, x1, _y1 = cancers
+    assert x0 <= 0.14 and x1 >= 0.84
+    assert x1 - x0 > 0.4

@@ -121,11 +121,16 @@ def test_apply_roster_choice_fills_name_and_clears_unconfirmed():
     rec.ocr.warnings = ["name.unconfirmed"]
     app = _headless_app([rec])
 
+    app.confirm_form.set_flagged_fields({"name": "unconfirmed"})
+    assert app.confirm_form.flagged_count() == 1
+
     app._apply_roster_choice("王小明")
 
     assert app.fields["name"].get() == "王小明"
     assert "name.unconfirmed" not in app.records[0].ocr.warnings
     assert app.editing is True
+    # Picking a name clears its ⚠ flag + the "待確認 N" count immediately (#46).
+    assert app.confirm_form.flagged_count() == 0
 
 
 def test_roster_candidates_for_ranks_store_names(tmp_path):

@@ -44,21 +44,23 @@ On startup the app auto-detects webcams: if exactly one camera is found it auto-
 
 ### Correction keyboard shortcuts
 
-Review/correction is keyboard-first: when a record opens, focus lands on the first field that needs a human (the first `⚠` flagged field, otherwise the first editable field) and scrolls it into view, high-confidence fields are dimmed, and the footer shows `待確認 N` (how many fields still need confirmation). Shortcuts (fire from anywhere in the window):
+Review/correction is keyboard-first: when a record opens, focus lands on the first field that needs a human (the first `⚠` flagged field) and scrolls it into view, the active field's title is **bold**, high-confidence fields are dimmed, and the footer shows `待確認 N` (how many fields still need confirmation). A clean (0-flagged) record does *not* grab focus, so you can glance and confirm. The correction-action shortcuts below only fire in **correction mode** (scan mode swallows them so a stray key can't write/navigate); a `快捷鍵` toolbar button shows this list, and buttons have hover hints.
 
 - `Enter` / `Ctrl+Enter` — 確認並寫入 (confirm and write, then advance)
-- `F2` / `Ctrl+Shift+Enter` — 強制寫入 (force write)
+- `F2` / `Ctrl+Shift+Enter` — 強制寫入 (force write; if fields still fail validation, a notice follows the write)
 - `PgDn` / `PgUp` (or `Ctrl+→` / `Ctrl+←`) — 下一筆 / 上一筆 (next / previous record)
-- `Esc` — cancel the current record's edits (re-show stored values)
+- `Esc` — cancel the current record's edits, restoring stored values **in place** (keeps your image zoom/pan and focus)
 - `Ctrl+Tab` / `Ctrl+Shift+Tab` — jump to the next / previous field needing confirmation (cycles only `⚠` fields)
+- `F4` — 切換 掃描 / 校正 模式 (toggle scan / correction mode)
+- `F8` — jump into the 姓名 roster list (arrow to browse, `Enter` to apply, focus returns to the name field)
 - On a focused single-choice field, number keys `1`–`N` pick that option; on a focused multi-choice option, the spacebar toggles it. Digits typed into a text field stay text.
 
 ### Correction workflow aids
 
-- **Scan vs. correction modes** — the `掃描/校正` button toggles the toolbar between a correction mode (上一筆 / 下一筆 / 確認並寫入 / 強制寫入 only) and a scan mode (擷取並辨識 / 匯入資料夾批次 / 選擇攝影機 / 旋轉 / 放大 / 縮小), so correction is uncluttered and you can't mis-click a scan-station action mid-review.
-- **Progress + per-record status** — the footer shows `已寫入 X / 共 N` and the current row, plus a per-record badge (`已寫入` / `待處理` / `被擋下`); navigating back to a written record shows its badge and row.
-- **Handwritten-name aids** — a `姓名校正` panel shows a zoomed name crop (`record.ocr.name_crop`, falling back to a placeholder when absent) and a list of roster suggestions from the confirmed-name store; clicking a suggestion fills the name and clears its `⚠`.
-- **Write recovery (re-open & overwrite)** — confirming/force-writing a record that was already written prompts `將覆寫第 N 列`; confirming overwrites that exact row (no duplicate), cancelling writes nothing.
+- **Scan vs. correction modes** — the toggle button (which names the *other* mode, e.g. `切換到掃描站 (F4)`) and a footer `模式：校正/掃描` indicator make the current mode obvious; correction mode shows only 上一筆 / 下一筆 / 確認並寫入 / 強制寫入, scan mode shows 擷取並辨識 / 匯入資料夾批次 / 選擇攝影機 / 旋轉 / 放大 / 縮小, so correction is uncluttered and you can't mis-click (or mis-key) a scan-station action mid-review.
+- **Progress + per-record status** — the footer shows `已寫入 X / 共 N` and the current row (or `尚未載入資料` before a batch is loaded), plus a **color-coded** per-record badge (green `已寫入` / red `被擋下` / grey `待處理`); navigating back to a written record shows its badge and row.
+- **Handwritten-name aids** — a `姓名校正` panel shows a zoomed name crop (`record.ocr.name_crop`, falling back to a placeholder when absent) and a list of roster suggestions from the confirmed-name store. Browsing the list (arrows / single click) only highlights; `Enter` or double-click applies a suggestion, which fills the name, clears its `⚠` and the `待確認` count, and returns focus to the name field.
+- **Write recovery (re-open & overwrite)** — confirming/force-writing a record that was already written prompts to overwrite its row (the dialog defaults to *No*, so a reflexive `Enter` cancels); the prompt wording differs for 確認並寫入 (validated overwrite) vs 強制寫入 (skips required-field checks). Confirming overwrites that exact row (no duplicate), cancelling writes nothing.
 - **Image verification (pan / zoom / field framing)** — the source-image preview is a Canvas viewer: drag to pan, scroll the mouse wheel to zoom (integer-step magnification, zoom remembered for the session), and focusing a field frames the image to that field's area (recognition-layout section band). The live camera preview stays fit-to-pane.
 
 ```powershell

@@ -41,6 +41,45 @@ def _wheel_scroll_units(delta: int) -> int:
     return units
 
 
+class _Tooltip:
+    """A minimal hover tooltip: a borderless Toplevel shown under ``widget`` on <Enter>
+    and destroyed on <Leave>. Used to surface keyboard accelerators / button guidance in
+    the GUI without baking them into button labels (which tests assert on)."""
+
+    def __init__(self, widget: tk.Misc, text: str) -> None:
+        self.widget = widget
+        self.text = text
+        self._tip: tk.Toplevel | None = None
+        widget.bind("<Enter>", self._show, add="+")
+        widget.bind("<Leave>", self._hide, add="+")
+
+    def _show(self, _event: "tk.Event | None" = None) -> None:
+        if self._tip is not None or not self.text:
+            return
+        try:
+            x = self.widget.winfo_rootx() + 12
+            y = self.widget.winfo_rooty() + self.widget.winfo_height() + 4
+            tip = tk.Toplevel(self.widget)
+            tip.wm_overrideredirect(True)
+            tip.wm_geometry(f"+{x}+{y}")
+            tk.Label(
+                tip, text=self.text, background="#ffffe0", relief="solid", borderwidth=1,
+                justify="left", padx=6, pady=3,
+            ).pack()
+            self._tip = tip
+        except Exception:
+            self._tip = None
+
+    def _hide(self, _event: "tk.Event | None" = None) -> None:
+        tip = self._tip
+        self._tip = None
+        if tip is not None:
+            try:
+                tip.destroy()
+            except Exception:
+                pass
+
+
 class ConfirmForm:
     def __init__(
         self,
@@ -71,6 +110,12 @@ class ConfirmForm:
         self._flagged: dict[str, str] = {}
         self._current_focus: str | None = None
         self._single_choice_select_by_digit: dict[str, Callable[[str], bool]] = {}
+        # Active-field emphasis: the focused field's title goes bold so the operator can
+        # see which field is active while Ctrl+Tab-cycling, a separate channel from the
+        # flagged/de-emphasis foreground colors so the two never fight.
+        self._active_label_path: str | None = None
+        self._label_base_font = None
+        self._label_bold_font = None
         self.frame.columnconfigure(0, weight=1)
 
         for section_row, section in enumerate(layout.sections):
@@ -234,6 +279,7 @@ class ConfirmForm:
         if widget is None:
             return None
         self._current_focus = record_path
+        self._set_active_label(record_path)
         try:
             widget.focus_set()
         except Exception:
@@ -249,6 +295,45 @@ class ConfirmForm:
             except Exception:
                 pass
         return record_path
+
+    def _ensure_label_fonts(self, label: "ttk.Label | None") -> None:
+        if self._label_bold_font is not None or label is None:
+            return
+        import tkinter.font as tkfont
+
+        try:
+            base = tkfont.Font(font=label.cget("font"))
+            bold = base.copy()
+            bold.configure(weight="bold")
+            self._label_base_font = base
+            self._label_bold_font = bold
+        except Exception:
+            self._label_base_font = None
+            self._label_bold_font = None
+
+    def _set_active_label(self, record_path: str | None) -> None:
+        prev = self._active_label_path
+        if prev == record_path:
+            return
+        self._ensure_label_fonts(
+            self._field_labels.get(record_path) or self._field_labels.get(prev or "")
+        )
+        if self._label_bold_font is None:
+            self._active_label_path = record_path
+            return
+        prev_label = self._field_labels.get(prev or "")
+        if prev_label is not None:
+            try:
+                prev_label.configure(font=self._label_base_font)
+            except Exception:
+                pass
+        new_label = self._field_labels.get(record_path or "")
+        if new_label is not None:
+            try:
+                new_label.configure(font=self._label_bold_font)
+            except Exception:
+                pass
+        self._active_label_path = record_path
 
     def focus_first_flagged(self) -> str | None:
         """Focus the first flagged field, or the first editable field if none are
@@ -459,6 +544,14 @@ class ReviewApp(tk.Tk):
     # instances (no Tk) resolve them without tripping tk.Tk.__getattr__ recursion.
     _name_crop_label: object | None = None
     _roster_listbox: object | None = None
+    # Same guard for the colored badge label + mode indicator widgets (UX pass): code
+    # reads these via getattr on headless instances, so they need class-level defaults.
+    _badge_label: object | None = None
+    _mode_toggle: object | None = None
+    _mode_var: object | None = None
+    # Mode-gated shortcuts read this on headless instances, so it needs a class default
+    # to avoid the tk.Tk.__getattr__ recursion; __init__/_set_review_mode set the instance.
+    _review_mode: str = "correction"
 
     @staticmethod
     def _runtime_base_dir() -> Path:
@@ -554,15 +647,36 @@ class ReviewApp(tk.Tk):
         }
         for key, (label, command) in button_specs.items():
             self._mode_buttons[key] = ttk.Button(toolbar, text=label, command=command)
-        ttk.Button(toolbar, text="掃描/校正", command=self._toggle_review_mode).pack(
-            side=tk.LEFT, padx=4
-        )
+        # Toggle names the action it performs (next mode), so the operator can tell the
+        # current mode from the button alone (#44); _set_review_mode keeps its text in sync.
+        self._mode_toggle = ttk.Button(toolbar, command=self._toggle_review_mode)
+        self._mode_toggle.pack(side=tk.LEFT, padx=4)
         self._review_mode = "correction"
         self._set_review_mode("correction")
+
+        # Discoverability (#42): a persistent 快捷鍵 cheat-sheet button (right edge, out of
+        # the way of the #44 decluttering) + hover tooltips that also clarify 確認 vs 強制
+        # 寫入 (#48), without changing the button labels existing tests assert on.
+        ttk.Button(toolbar, text="快捷鍵", command=self._show_shortcut_help).pack(
+            side=tk.RIGHT, padx=4
+        )
+        button_tooltips = {
+            "confirm": "Enter / Ctrl+Enter：驗證必填欄位後寫入；缺漏會被擋下",
+            "force_write": "F2 / Ctrl+Shift+Enter：跳過必填檢查強制寫入，可能寫入不完整資料",
+            "prev_record": "PgUp / Ctrl+←：上一筆",
+            "next_record": "PgDn / Ctrl+→：下一筆",
+        }
+        for key, hint in button_tooltips.items():
+            _Tooltip(self._mode_buttons[key], hint)
 
         # Footer status bar: shows only the latest status; full history goes to the log file.
         footer = ttk.Frame(self)
         footer.pack(side=tk.BOTTOM, fill=tk.X, padx=8, pady=(0, 8))
+        # Persistent mode indicator (#44): which mode the operator is in, at a glance.
+        self._mode_var = tk.StringVar(value="模式：校正")
+        ttk.Label(footer, textvariable=self._mode_var, anchor="w", relief="sunken").pack(
+            side=tk.LEFT, padx=(0, 8)
+        )
         self._status_var = tk.StringVar(value="就緒")
         ttk.Label(footer, textvariable=self._status_var, anchor="w", relief="sunken").pack(
             side=tk.LEFT, fill=tk.X, expand=True
@@ -572,15 +686,18 @@ class ReviewApp(tk.Tk):
         ttk.Label(footer, textvariable=self._pending_var, anchor="e", relief="sunken").pack(
             side=tk.RIGHT, padx=(8, 0)
         )
-        # Persistent batch progress + per-record status badge (#45).
-        self._progress_var = tk.StringVar(value="")
+        # Persistent batch progress baseline (#45): always show a count, even before load.
+        self._progress_var = tk.StringVar(value="尚未載入資料")
         ttk.Label(footer, textvariable=self._progress_var, anchor="e", relief="sunken").pack(
             side=tk.RIGHT, padx=(8, 0)
         )
+        # Colored per-record status badge (#45): 已寫入/被擋下/待處理 read at a glance via
+        # background color, not identical grey text. tk.Label honors bg across themes.
         self._badge_var = tk.StringVar(value="")
-        ttk.Label(footer, textvariable=self._badge_var, anchor="e", relief="sunken").pack(
-            side=tk.RIGHT, padx=(8, 0)
+        self._badge_label = tk.Label(
+            footer, textvariable=self._badge_var, anchor="e", relief="sunken", padx=6
         )
+        self._badge_label.pack(side=tk.RIGHT, padx=(8, 0))
 
         # Two maximized panes: webcam/source preview on the left, the review form on the right.
         body = ttk.PanedWindow(self, orient=tk.HORIZONTAL)
@@ -604,7 +721,11 @@ class ReviewApp(tk.Tk):
         self._name_crop_label.grid(row=0, column=0, padx=6, pady=4, sticky="w")
         self._roster_listbox = tk.Listbox(name_aids, height=4, exportselection=False)
         self._roster_listbox.grid(row=0, column=1, padx=6, pady=4, sticky="ew")
-        self._roster_listbox.bind("<<ListboxSelect>>", self._on_roster_select)
+        # Browse vs. commit (#46): arrow keys / single clicks only move the highlight;
+        # Enter or double-click commits the candidate. Avoids overwriting the name field
+        # the instant focus lands on the list or an arrow is pressed.
+        self._roster_listbox.bind("<Return>", self._on_roster_commit)
+        self._roster_listbox.bind("<Double-Button-1>", self._on_roster_commit)
 
         canvas = tk.Canvas(form, highlightthickness=0)
         canvas.grid(row=1, column=0, sticky="nsew")
@@ -666,9 +787,39 @@ class ReviewApp(tk.Tk):
                 button.pack(side=tk.LEFT, padx=4)
             else:
                 button.pack_forget()
+        # Reflect the current mode on the toggle button + footer (#44). getattr-guarded
+        # because _set_review_mode runs once during _build_ui before the footer exists.
+        label = "校正" if mode == "correction" else "掃描"
+        toggle = getattr(self, "_mode_toggle", None)
+        if toggle is not None:
+            try:
+                toggle.configure(
+                    text="切換到掃描站 (F4)" if mode == "correction" else "切換到校正 (F4)"
+                )
+            except Exception:
+                pass
+        mode_var = getattr(self, "_mode_var", None)
+        if mode_var is not None:
+            try:
+                mode_var.set(f"模式：{label}")
+            except Exception:
+                pass
 
     def _toggle_review_mode(self) -> None:
         self._set_review_mode("scan" if self._review_mode == "correction" else "correction")
+
+    def _show_shortcut_help(self) -> None:
+        messagebox.showinfo(
+            "鍵盤快捷鍵",
+            "Enter / Ctrl+Enter　確認並寫入\n"
+            "F2 / Ctrl+Shift+Enter　強制寫入\n"
+            "PgDn / PgUp（或 Ctrl+→ / Ctrl+←）　下一筆 / 上一筆\n"
+            "Esc　取消本筆編輯\n"
+            "Ctrl+Tab / Ctrl+Shift+Tab　跳下一個 / 上一個待確認欄位\n"
+            "數字鍵 1–N　選擇單選欄選項；空白鍵　切換多選欄\n"
+            "F4　切換 掃描 / 校正 模式\n"
+            "F8　跳到姓名候選清單（方向鍵選、Enter 套用）",
+        )
 
     def _bind_review_shortcuts(self) -> None:
         # Keyboard-first review (#42): window-level shortcuts fire over any focused
@@ -688,21 +839,39 @@ class ReviewApp(tk.Tk):
         # NOTE: Ctrl+Shift+Tab may be intercepted by the OS tab-switcher on macOS/GNOME;
         # the app targets Windows, where it reaches Tk.
         self.bind("<Control-Shift-Tab>", self._on_prev_flagged_key)
+        # Mode switching from the keyboard (#44): a keyboard-first station should not need
+        # the mouse to flip 掃描<->校正. F4 chosen to avoid colliding with Return (Ctrl+M).
+        self.bind("<F4>", self._on_toggle_mode_key)
+        # Jump into the name roster (#46) so candidates are reachable without the mouse.
+        self.bind("<F8>", self._on_focus_roster_key)
+
+    def _correction_active(self) -> bool:
+        # Correction-action shortcuts only fire in correction mode (#44); scan mode swallows
+        # them so a stray Enter/F2/PgDn during capture can't write or navigate records.
+        return getattr(self, "_review_mode", "correction") == "correction"
 
     def _on_confirm_key(self, _event: "tk.Event | None" = None) -> str:
-        self._confirm_current()
+        if self._correction_active():
+            self._confirm_current()
         return "break"
 
     def _on_force_key(self, _event: "tk.Event | None" = None) -> str:
-        self._force_write()
+        if self._correction_active():
+            self._force_write()
         return "break"
 
     def _on_next_record_key(self, _event: "tk.Event | None" = None) -> str:
-        self._next_record()
+        if self._correction_active():
+            self._next_record()
         return "break"
 
     def _on_prev_record_key(self, _event: "tk.Event | None" = None) -> str:
-        self._previous_record()
+        if self._correction_active():
+            self._previous_record()
+        return "break"
+
+    def _on_toggle_mode_key(self, _event: "tk.Event | None" = None) -> str:
+        self._toggle_review_mode()
         return "break"
 
     def _on_cancel_key(self, _event: "tk.Event | None" = None) -> str:
@@ -718,12 +887,23 @@ class ReviewApp(tk.Tk):
         return "break"
 
     def _cancel_edit(self) -> None:
-        # Re-show the current record from its stored values, discarding in-form edits,
-        # and clear the unsaved-edit guard so navigation works again.
+        # Esc discards in-form edits. Restore values in place rather than repainting the
+        # whole record (image re-frame, roster rebuild, focus jump): a one-field undo
+        # should not yank the operator out of their current context.
         if self.current_index < 0 or self.current_index >= len(self.records):
             self.editing = False
             return
-        self._show_record(self.records[self.current_index])
+        if not self.editing:
+            self._push_status("無可取消的編輯")
+            return
+        record = self.records[self.current_index]
+        self.confirm_form.prefill(record_to_form_state(self.layout, record))
+        self.confirm_form.set_flagged_fields(
+            flagged_fields(list(record.ocr.warnings), SERVICE_RECORD_V1_LAYOUT)
+        )
+        self._update_pending_count()
+        self.editing = False
+        self._push_status("已還原本筆")
 
     def _frame_field_region(self, record_path: str) -> None:
         # On field focus, frame the source-image viewer to that field's section band (#47).
@@ -764,11 +944,14 @@ class ReviewApp(tk.Tk):
 
     def _update_progress(self) -> None:
         total = len(self.records)
-        written = len(self.written_indices)
-        text = f"已寫入 {written} / 共 {total}"
-        row = getattr(self, "_written_rows", {}).get(self.current_index)
-        if row is not None:
-            text += f"　第 {row} 列"
+        if total == 0:
+            text = "尚未載入資料"
+        else:
+            written = len(self.written_indices)
+            text = f"已寫入 {written} / 共 {total}"
+            row = getattr(self, "_written_rows", {}).get(self.current_index)
+            if row is not None:
+                text += f"　第 {row} 列"
         self._progress_text = text
         progress_var = getattr(self, "_progress_var", None)
         if progress_var is not None:
@@ -784,11 +967,23 @@ class ReviewApp(tk.Tk):
             self.current_index, self.written_indices, getattr(self, "_blocked_indices", set())
         )
         self._badge_state = state
-        label = {"written": "已寫入", "blocked": "被擋下", "pending": "待處理"}[state]
+        # (text, background, foreground) per state so 成功/被擋下/待處理 differ at a glance.
+        styles = {
+            "written": ("✓ 已寫入", "#1e7d34", "#ffffff"),
+            "blocked": ("⛔ 被擋下", "#b00020", "#ffffff"),
+            "pending": ("• 待處理", "#e8eaed", "#202124"),
+        }
+        text, bg, fg = styles[state]
         badge_var = getattr(self, "_badge_var", None)
         if badge_var is not None:
             try:
-                badge_var.set(label)
+                badge_var.set(text)
+            except Exception:
+                pass
+        badge_label = getattr(self, "_badge_label", None)
+        if badge_label is not None:
+            try:
+                badge_label.configure(background=bg, foreground=fg)
             except Exception:
                 pass
 
@@ -816,19 +1011,57 @@ class ReviewApp(tk.Tk):
         if 0 <= self.current_index < len(self.records):
             record = self.records[self.current_index]
             record.ocr.warnings = [w for w in record.ocr.warnings if w != NAME_UNCONFIRMED]
+            # Name no longer unconfirmed: refresh the ⚠/grey marks and the "待確認 N" count
+            # so they reflect the pick immediately (#46), mirroring _show_record.
+            self.confirm_form.set_flagged_fields(
+                flagged_fields(list(record.ocr.warnings), SERVICE_RECORD_V1_LAYOUT)
+            )
+            self._update_pending_count()
         self.editing = True
+        # Return focus to the name field so the operator can keep typing / advance, instead
+        # of leaving focus trapped on the listbox where arrows would re-browse candidates.
+        self._focus_name_field()
 
-    def _on_roster_select(self, _event: "tk.Event | None" = None) -> None:
-        listbox = self._roster_listbox
-        if listbox is None:
+    def _focus_name_field(self) -> None:
+        focus_widgets = getattr(self.confirm_form, "_focus_widgets", None)
+        if not isinstance(focus_widgets, dict):
+            return
+        widget = focus_widgets.get("name")
+        if widget is None:
             return
         try:
+            widget.focus_set()
+            widget.icursor("end")
+        except Exception:
+            pass
+
+    def _on_roster_commit(self, _event: "tk.Event | None" = None) -> str:
+        listbox = self._roster_listbox
+        if listbox is None:
+            return "break"
+        try:
             selection = listbox.curselection()
-            if not selection:
-                return
-            self._apply_roster_choice(listbox.get(selection[0]))
+            index = selection[0] if selection else listbox.index(tk.ACTIVE)
+            self._apply_roster_choice(listbox.get(index))
         except tk.TclError:
             pass
+        return "break"  # stop Return from also firing the window-level 確認並寫入
+
+    def _on_focus_roster_key(self, _event: "tk.Event | None" = None) -> str:
+        # F8 moves the keyboard into the roster so pure-keyboard operators can reach the
+        # candidates; arrows browse, Enter commits, then focus returns to the name field (#46).
+        listbox = self._roster_listbox
+        if listbox is None:
+            return "break"
+        try:
+            if listbox.size() > 0:
+                listbox.focus_set()
+                listbox.activate(0)
+                listbox.selection_clear(0, tk.END)
+                listbox.selection_set(0)
+        except Exception:
+            pass
+        return "break"
 
     def _update_name_aids(self, record: Record) -> None:
         # Populate the roster suggestions and the zoomed name-crop preview (#46).
@@ -891,7 +1124,13 @@ class ReviewApp(tk.Tk):
             messagebox.showerror("無法建立工作檔", str(exc))
             return
         self.written_indices = set()
+        self._written_rows = {}
+        self._blocked_indices = set()
         self._push_status(f"工作檔: {working}")
+        # New working file → reset the persistent corner so it does not show the old
+        # batch's "已寫入 X / 列號" or a stale badge (#45).
+        self._update_progress()
+        self._update_badge()
 
     def _load_json(self) -> None:
         path = filedialog.askopenfilename(filetypes=[("JSON files", "*.json")])
@@ -916,6 +1155,7 @@ class ReviewApp(tk.Tk):
             self._next_record()
         else:
             self._show_placeholder_preview()
+            self._update_progress()  # show the 尚未載入資料 baseline, not a blank corner (#45)
 
     def _has_live_camera_preview(self) -> bool:
         return self._camera_capture is not None or self._camera_after_id is not None
@@ -1209,16 +1449,21 @@ class ReviewApp(tk.Tk):
                 self._update_progress()
                 self._update_badge()
 
-    def _overwrite_row_for_confirm(self) -> int | None | bool:
+    def _overwrite_row_for_confirm(self, forced: bool = False) -> int | None | bool:
         """Decide the write target when (re-)confirming the current record (#48):
         ``None`` to append normally; the row number to overwrite an already-written
-        record after a confirmation; ``False`` if the operator declined (caller returns)."""
+        record after a confirmation; ``False`` if the operator declined (caller returns).
+        ``forced`` tailors the prompt so the operator knows whether validation will run
+        (確認並寫入) or be skipped (強制寫入). Defaults the dialog to *No* so a reflexive
+        Enter cancels rather than silently overwriting a written row."""
         if self.current_index not in self.written_indices:
             return None
         row = self._written_rows.get(self.current_index)
-        if row is None or not messagebox.askyesno(
-            "覆寫確認", f"此筆已寫入第 {row} 列，將覆寫該列。確定？"
-        ):
+        if forced:
+            prompt = f"強制覆寫第 {row} 列：將跳過必填檢查，可能寫入不完整資料。確定？"
+        else:
+            prompt = f"將以驗證後的內容覆寫第 {row} 列。確定？"
+        if row is None or not messagebox.askyesno("覆寫確認", prompt, default=messagebox.NO):
             messagebox.showinfo("提示", "目前資料已寫入，請切換下一筆。")
             return False
         return row
@@ -1230,7 +1475,7 @@ class ReviewApp(tk.Tk):
         if self.current_index < 0 or self.current_index >= len(self.records):
             messagebox.showerror("缺少資料", "請先載入 JSON 資料。")
             return
-        overwrite_row = self._overwrite_row_for_confirm()
+        overwrite_row = self._overwrite_row_for_confirm(forced=True)
         if overwrite_row is False:
             return
         record = self.records[self.current_index]
@@ -1259,6 +1504,15 @@ class ReviewApp(tk.Tk):
             self._push_status(f"已寫入工作檔 {working} 第 {result.row_number} 列")
             self._update_progress()
             self._update_badge()
+            # 強制寫入 can write a row that still fails validation; make that visible after
+            # the fact (no extra gate, so the F2 / no-advance flow is unchanged) (#48).
+            if result.blockers:
+                messagebox.showwarning(
+                    "已強制寫入（含缺漏）",
+                    f"此筆已強制寫入第 {result.row_number} 列，但仍有未通過的欄位：\n\n"
+                    + "\n".join(result.blockers)
+                    + "\n\n如為誤覆寫，請更正後重新寫入。",
+                )
 
     def _show_record(self, record: Record) -> None:
         self.fields["record_id"].set(record.record_id)
@@ -1272,7 +1526,11 @@ class ReviewApp(tk.Tk):
         self._update_progress()
         self._update_badge()
         self._update_name_aids(record)
-        self.confirm_form.focus_first_flagged()
+        # Only grab focus + re-frame the scan when there is something to confirm. A clean
+        # (0-flagged) record stays at a neutral overview so the operator can glance and hit
+        # Enter, instead of the caret being yanked into the first field (#43).
+        if self.confirm_form.flagged_count() > 0:
+            self.confirm_form.focus_first_flagged()
 
     def _apply_form_to_record(self, record: Record) -> None:
         record.record_id = self.fields["record_id"].get()

@@ -32,11 +32,22 @@ def clamp_origin(origin: float, image_size: int, view_size: int, zoom: float) ->
 
 
 def field_region(record_path: str) -> tuple[float, float, float, float] | None:
-    """The 0..1 section band (x0, y0, x1, y1) of the section that recognizes ``record_path``,
-    or ``None`` when no section covers it (the viewer then leaves its view unchanged)."""
+    """The 0..1 band (x0, y0, x1, y1) covering EVERY section that recognizes
+    ``record_path``, or ``None`` when no section covers it (the viewer then leaves its view
+    unchanged). Fields split across several section crops — e.g. the 5-column 癌別 grid
+    mapped to ``patient_fields.cancers`` — frame their whole region, not just the first
+    column, so focusing the field shows all options instead of only the leftmost five."""
+    bands: list[tuple[float, float, float, float]] = []
     for section in SERVICE_RECORD_V1_LAYOUT:
         fields = {option.field for option in section.options}
         fields |= {value.field for value in section.values}
         if record_path in fields:
-            return section.band
-    return None
+            bands.append(section.band)
+    if not bands:
+        return None
+    return (
+        min(b[0] for b in bands),
+        min(b[1] for b in bands),
+        max(b[2] for b in bands),
+        max(b[3] for b in bands),
+    )

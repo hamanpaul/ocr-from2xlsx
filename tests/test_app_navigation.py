@@ -68,24 +68,29 @@ class FakeListbox:
 
 
 class FakePreview:
+    # Mirrors the ImageViewer interface (#47): show_image (static/pannable),
+    # show_frame (live), show_placeholder, frame_region. Tracks .image/.text/.mode
+    # for the camera/preview assertions.
     def __init__(self) -> None:
         self.text = ""
-        self.state = "normal"
         self.image = None
+        self.mode = "placeholder"
 
-    def configure(self, state: str | None = None) -> None:
-        if state is not None:
-            self.state = state
-
-    def delete(self, _start: str, _end: str) -> None:
-        self.text = ""
-        self.image = None
-
-    def insert(self, _index: str, value: str) -> None:
-        self.text += value
-
-    def image_create(self, _index: str, image) -> None:
+    def show_image(self, image) -> None:
+        self.mode = "static"
         self.image = image
+
+    def show_frame(self, image) -> None:
+        self.mode = "live"
+        self.image = image
+
+    def show_placeholder(self, text: str) -> None:
+        self.mode = "placeholder"
+        self.image = None
+        self.text = text
+
+    def frame_region(self, band) -> None:
+        return None
 
     def get(self, _start: str, _end: str) -> str:
         return self.text

@@ -305,6 +305,7 @@ class ImageViewer:
         self.mode = "placeholder"
         self.zoom = MIN_ZOOM
         self.origin = [0.0, 0.0]
+        self._placeholder = ""
         self._image: tk.PhotoImage | None = None
         self._display_image: tk.PhotoImage | None = None
         self._image_size = (0, 0)
@@ -348,11 +349,16 @@ class ImageViewer:
         self.mode = "placeholder"
         self._image = None
         self._display_image = None
+        self._placeholder = text
         try:
             self.canvas.delete("all")
             self.canvas.create_text(8, 8, anchor="nw", fill="#dddddd", text=text)
         except tk.TclError:
             pass
+
+    def get(self, _start: str = "1.0", _end: str = "end") -> str:
+        # Mirrors the old tk.Text preview's text accessor for tests / placeholder checks.
+        return self._placeholder if self.mode == "placeholder" else ""
 
     def frame_region(self, band: tuple[float, float, float, float]) -> None:
         from ocr_from2xlsx.image_viewer import clamp_zoom
@@ -570,9 +576,9 @@ class ReviewApp(tk.Tk):
         body = ttk.PanedWindow(self, orient=tk.HORIZONTAL)
         body.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=8, pady=8)
 
-        self.preview = tk.Text(body, width=60, wrap="word")
+        self.preview = ImageViewer(body)
         self._show_placeholder_preview()
-        body.add(self.preview, weight=1)
+        body.add(self.preview.canvas, weight=1)
 
         form = ttk.Frame(body)
         body.add(form, weight=1)
@@ -1392,9 +1398,9 @@ class ReviewApp(tk.Tk):
                 frame = rotate_frame(frame, self._preview_rotation)
             frame = self._zoom_crop(frame)
 
-            self.preview.update_idletasks()
-            target_width = self.preview.winfo_width()
-            target_height = self.preview.winfo_height()
+            self.preview.canvas.update_idletasks()
+            target_width = self.preview.canvas.winfo_width()
+            target_height = self.preview.canvas.winfo_height()
             if target_width > 1 and target_height > 1:
                 height, width = frame.shape[:2]
                 scale = min(target_width / width, target_height / height)
@@ -1414,10 +1420,7 @@ class ReviewApp(tk.Tk):
 
             image = tk.PhotoImage(data=bytes(buffer))
             self._preview_image = image
-            self.preview.configure(state="normal")
-            self.preview.delete("1.0", tk.END)
-            self.preview.image_create("1.0", image=image)
-            self.preview.configure(state="disabled")
+            self.preview.show_frame(image)  # live frame: fit-to-pane, no pan/zoom
             self._camera_failure_count = 0
             self._dismiss_splash()  # first real frame drawn — safe to drop the boot splash
         except Exception:
@@ -1463,10 +1466,7 @@ class ReviewApp(tk.Tk):
     def _show_placeholder_preview(self) -> None:
         self._stop_camera()
         self._preview_image = None
-        self.preview.configure(state="normal")
-        self.preview.delete("1.0", tk.END)
-        self.preview.insert("1.0", self._PREVIEW_PLACEHOLDER)
-        self.preview.configure(state="disabled")
+        self.preview.show_placeholder(self._PREVIEW_PLACEHOLDER)
 
     def _dismiss_splash(self) -> None:
         if self._splash_closed:
@@ -1487,9 +1487,9 @@ class ReviewApp(tk.Tk):
                 return
 
             image = tk.PhotoImage(file=str(image_path))
-            self.preview.update_idletasks()
-            target_width = self.preview.winfo_width()
-            target_height = self.preview.winfo_height()
+            self.preview.canvas.update_idletasks()
+            target_width = self.preview.canvas.winfo_width()
+            target_height = self.preview.canvas.winfo_height()
             if target_width <= 1:
                 target_width = 360
             if target_height <= 1:
@@ -1503,10 +1503,7 @@ class ReviewApp(tk.Tk):
 
             self._stop_camera()
             self._preview_image = image
-            self.preview.configure(state="normal")
-            self.preview.delete("1.0", tk.END)
-            self.preview.image_create("1.0", image=image)
-            self.preview.configure(state="disabled")
+            self.preview.show_image(image)  # static: drag-pan + wheel-zoom, remembered zoom
         except Exception:
             self._show_placeholder_preview()
 

@@ -602,7 +602,7 @@ class ReviewApp(tk.Tk):
         written = len(self.written_indices)
         text = f"已寫入 {written} / 共 {total}"
         row = getattr(self, "_written_rows", {}).get(self.current_index)
-        if row:
+        if row is not None:
             text += f"　第 {row} 列"
         self._progress_text = text
         progress_var = getattr(self, "_progress_var", None)
@@ -1090,6 +1090,8 @@ class ReviewApp(tk.Tk):
             self._written_rows[self.current_index] = result.row_number
             self._blocked_indices.discard(self.current_index)
             self.editing = False
+            working = getattr(getattr(self.session, "writer", None), "working_path", "")
+            self._push_status(f"已寫入工作檔 {working} 第 {result.row_number} 列")
             self._update_progress()
             self._update_badge()
 

@@ -194,3 +194,24 @@ def test_confirm_on_written_record_cancel_writes_nothing(monkeypatch):
     app._confirm_current()
 
     assert session.calls == []  # cancelling the overwrite confirmation writes nothing
+
+
+def test_force_write_on_written_record_overwrites_and_stays(monkeypatch):
+    from ocr_from2xlsx.session import AcceptResult
+    from tests.test_app_navigation import StubSession
+    from tests.test_json_io import make_record
+
+    session = StubSession(
+        AcceptResult(record_id="scan-0001", status="forced", row_number=7, blockers=[], warnings=[])
+    )
+    app = _headless_app([make_record("scan-0001")], session)
+    app.written_indices = {0}
+    app._written_rows = {0: 7}
+    monkeypatch.setattr("ocr_from2xlsx.app.messagebox.askyesno", lambda *a, **k: True)
+    monkeypatch.setattr("ocr_from2xlsx.app.messagebox.showinfo", lambda *a, **k: None)
+
+    app._force_write()
+
+    assert session.overwrite_rows == [7]
+    assert app._written_rows[0] == 7
+    assert app.current_index == 0

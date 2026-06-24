@@ -42,7 +42,8 @@ def _bare_app():
     app._autocapture_detector = None
     app._autocapture_output_dir = None
     app._autocapture_prev_gray = None
-    app._autocapture_ref_gray = None
+    app._autocapture_baseline_gray = None
+    app._autocapture_need_baseline = False
     app._autocapture_stills = []
     return app
 
@@ -80,6 +81,39 @@ def test_start_warns_without_selected_camera(monkeypatch):
     assert warnings == [("連續拍照", "請先選擇可用的攝影機。")]
 
 
+def test_start_prompts_clear_desk_and_enters_need_baseline(monkeypatch, tmp_path):
+    app = _bare_app()
+    monkeypatch.setattr("ocr_from2xlsx.app.filedialog.askdirectory", lambda **k: str(tmp_path))
+    monkeypatch.setattr("ocr_from2xlsx.app.messagebox.askokcancel", lambda *a, **k: True)
+    monkeypatch.setattr(app, "_has_live_camera_preview", lambda: True)
+    ReviewApp._start_continuous_capture(app)
+    assert app._autocapture_active is True
+    assert app._autocapture_need_baseline is True
+    assert app._autocapture_detector.state == "need_baseline"
+
+
+def test_observe_grabs_baseline_then_arms(monkeypatch):
+    import numpy as np
+    from ocr_from2xlsx.autocapture import AutoCaptureDetector
+    app = _bare_app()
+    app._autocapture_active = True
+    app._autocapture_need_baseline = True
+    app._autocapture_detector = AutoCaptureDetector()
+    took = ReviewApp._observe_autocapture_frame(app, np.zeros((48, 64), dtype="uint8"))
+    assert took is False
+    assert app._autocapture_need_baseline is False
+    assert app._autocapture_baseline_gray is not None
+    assert app._autocapture_detector.state == "armed"
+
+
+def test_reset_baseline_requests_regrab(monkeypatch):
+    app = _bare_app()
+    app._autocapture_active = True
+    monkeypatch.setattr("ocr_from2xlsx.app.messagebox.askokcancel", lambda *a, **k: True)
+    ReviewApp._reset_baseline(app)
+    assert app._autocapture_need_baseline is True
+
+
 def test_cancel_continuous_capture(monkeypatch):
     app = _bare_app()
     app._autocapture_active = True
@@ -114,7 +148,7 @@ from ocr_from2xlsx.autocapture import CAPTURE, DISARMED, AutoCaptureDetector
 def test_observe_delegates_to_perform_on_capture(monkeypatch):
     app = _bare_app()
     app._autocapture_active = True
-    app._autocapture_detector = SimpleNamespace(observe=lambda m: CAPTURE)
+    app._autocapture_detector = SimpleNamespace(config=SimpleNamespace(roi_fraction=1.0), observe=lambda m: CAPTURE)
     monkeypatch.setattr("ocr_from2xlsx.capture.measure_sharpness", lambda f: 100.0)
     called = []
     monkeypatch.setattr(app, "_perform_autocapture", lambda: called.append(True) or True)

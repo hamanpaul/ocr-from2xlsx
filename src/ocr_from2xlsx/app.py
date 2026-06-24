@@ -191,7 +191,8 @@ class ReviewApp(tk.Tk):
     _autocapture_detector: object | None = None
     _autocapture_output_dir: object | None = None
     _autocapture_prev_gray: object | None = None
-    _autocapture_ref_gray: object | None = None
+    _autocapture_baseline_gray: object | None = None
+    _autocapture_need_baseline: bool = False
     _splash_closed: bool = False
     _status_var: object | None = None
     _status_log_path: object | None = None
@@ -256,7 +257,8 @@ class ReviewApp(tk.Tk):
         self._autocapture_detector = None
         self._autocapture_output_dir = None
         self._autocapture_prev_gray = None
-        self._autocapture_ref_gray = None
+        self._autocapture_baseline_gray = None
+        self._autocapture_need_baseline = False
         self._autocapture_stills: list[Path] = []
         self._splash_closed = False
         self._status_log: list[str] = []
@@ -300,6 +302,9 @@ class ReviewApp(tk.Tk):
             side=tk.LEFT, padx=4
         )
         ttk.Button(toolbar, text="取消連拍", command=self._cancel_continuous_capture).pack(
+            side=tk.LEFT, padx=4
+        )
+        ttk.Button(toolbar, text="重設空桌基準", command=self._reset_baseline).pack(
             side=tk.LEFT, padx=4
         )
         ttk.Button(toolbar, text="旋轉", command=self._rotate_preview).pack(
@@ -1078,15 +1083,18 @@ class ReviewApp(tk.Tk):
         selected_dir = filedialog.askdirectory(title="選擇辨識輸出資料夾")
         if not selected_dir:
             return
+        if not messagebox.askokcancel("連續拍照", "請清空桌面，確定後擷取『空桌基準』。"):
+            return
         output_dir = Path(selected_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
         self._autocapture_output_dir = output_dir
         self._autocapture_stills = []
         self._autocapture_prev_gray = None
-        self._autocapture_ref_gray = None
+        self._autocapture_baseline_gray = None
+        self._autocapture_need_baseline = True
         self._autocapture_detector = AutoCaptureDetector(AutoCaptureConfig.from_env())
         self._autocapture_active = True
-        self._push_status("連續拍照中｜已擷取 0 張｜請放上表單…")
+        self._push_status("連續拍照：擷取空桌基準中…請保持桌面淨空。")
         if not self._has_live_camera_preview():
             self._start_camera(self._camera_index)
 
@@ -1112,6 +1120,16 @@ class ReviewApp(tk.Tk):
             pass
         self._push_status(f"已復原上一張｜已擷取 {len(self._autocapture_stills)} 張")
 
+    def _reset_baseline(self) -> None:
+        if not self._autocapture_active:
+            self._push_status("尚未開始連續拍照。")
+            return
+        if not messagebox.askokcancel("重設空桌基準", "請清空桌面，確定後重抓『空桌基準』。"):
+            return
+        self._autocapture_need_baseline = True
+        self._autocapture_prev_gray = None
+        self._push_status("連續拍照：重新擷取空桌基準中…請保持桌面淨空。")
+
     def _observe_autocapture_frame(self, frame: object) -> bool:
         """Feed one preview frame to the detector. Returns True when it took over the
         camera (a capture/restart happened) so the poll loop should stop for this tick."""
@@ -1124,16 +1142,26 @@ class ReviewApp(tk.Tk):
         )
         from ocr_from2xlsx.capture import measure_sharpness
 
-        gray = to_metric_gray(frame)
+        roi = self._autocapture_detector.config.roi_fraction
+        gray = to_metric_gray(frame, roi_fraction=roi)
+        if self._autocapture_need_baseline:
+            self._autocapture_baseline_gray = gray
+            self._autocapture_prev_gray = gray
+            self._autocapture_need_baseline = False
+            self._autocapture_detector.set_baseline()
+            self._push_status("連續拍照：已設定空桌基準｜請放上表單…")
+            return False
         motion = mean_abs_diff(gray, self._autocapture_prev_gray)
-        change = mean_abs_diff(gray, self._autocapture_ref_gray)
+        diff_from_baseline = mean_abs_diff(gray, self._autocapture_baseline_gray)
         self._autocapture_prev_gray = gray
         try:
             sharpness = measure_sharpness(frame)
         except Exception:
             sharpness = 0.0
         action = self._autocapture_detector.observe(
-            FrameMetrics(motion=motion, change_from_ref=change, sharpness=sharpness)
+            FrameMetrics(
+                motion=motion, diff_from_baseline=diff_from_baseline, sharpness=sharpness
+            )
         )
         if action == CAPTURE:
             return self._perform_autocapture()

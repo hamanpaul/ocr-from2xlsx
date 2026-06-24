@@ -8,6 +8,9 @@
 ## [Unreleased]
 
 ### Fixed
+- (#R6) 連續拍照基準強化：基準改為收集 N 張（預設 3）連續靜止影格取平均，避免單幀雜訊；動作偵測改用
+  `mean_normalized_diff`（去 DC 後差異），對均勻亮度/曝光偏移免疫；辨識結果零筆時同步清除已拍清單，
+  避免空結果循環重試。
 - 修正 PR #40 程式碼審查指出的 4 處：`recognition/backend.py` `VisionOcrBackend` 預設 `model_name` 對齊
   `qwen3-vl:2b`（與 `factory.DEFAULT_MODEL` 一致，避免漏進 `ocr.model`）；`training/eval_scan._norm` 改為明確
   `None`/`""` 判斷（不再把 `0`/`False` 誤當缺值）；`plugins/paddleocr/name_crop._trim_top_right_bleed` 改為只裁頂端
@@ -15,6 +18,7 @@
   `on_progress` 語意（傳入的是處理中檔案的 1-based index，非已完成數）。
 
 ### Changed
+- 連續拍照偵測改用**空桌基準差異法（中央 ROI）**：原本以「與上一張已拍表單的差異」判定新張，對同版型一疊會漏拍第二張；改為與本 session「空桌基準」比對、淨空循環去重，並修正中文路徑寫檔（imencode+write_bytes）、連續模糊改**暫停**、合焦收斂改雙向 abs、相機中斷/辨識失敗保留已擷取影像可續辨識，辨識完成後跳通知再進逐張校正。校正進度 resume 另立 issue #37。
 - (#31) 審核表單單選欄改用 checkbox：原本的 radio + 「清除」按鈕改為**互斥 checkbox**——點選一項即選取（自動取消
   其他），再點已選的即清除，因此不再需要清除按鈕。資料仍是單一值（StringVar 不變），collect/寫回語意不變。
 - app GUI 改版：webcam/來源預覽與審核表單兩大區塊最大化（2-pane），移除右側 status list，改為底部
@@ -48,6 +52,10 @@
   動輒十餘秒。改後列舉 ~0.9s 並穩定找到相機；`capture_still` 仍保留跨 backend 解析度協商（取最高解析度）。
 
 ### Added
+- 連續拍照（hands-free 自動掃描）：app 新增「連續拍照」，相機偵測到畫面穩定且合焦即自動拍照（快門聲＋計數回授）、
+  「拿開再放」換頁不重複拍同一張；累積整疊後「完成辨識」走既有批次辨識＋逐筆審核，另含「復原上一張」/「取消連拍」。
+  新增純狀態機 `autocapture`（可單元測試）、`prepare_records_from_images` 進度回呼、bundled 快門音。偵測門檻
+  以 `AUTOCAPTURE_*` 環境變數調校。
 - (#30) 圖片/PDF 批次處理模式：新增 app「匯入資料夾批次」鈕——選一個含圖片/PDF 的資料夾，**批次辨識完所有檔**
   後載入審核流**逐筆人工確認**；審核時左側面板自動改顯示該筆的**原始圖/PDF 頁**（停用 webcam）。新增
   `scan.prepare_records_from_folder`（glob 圖片/PDF、逐檔走既有 image/PDF 準備流程、合併成單一 batch、record_id

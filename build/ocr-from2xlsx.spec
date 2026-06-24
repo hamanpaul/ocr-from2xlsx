@@ -10,7 +10,10 @@ a = Analysis(
     [str(PROJECT_ROOT / "src/ocr_from2xlsx/__main__.py")],
     pathex=[str(PROJECT_ROOT)],
     binaries=cv2_binaries,
-    datas=[(str(PROJECT_ROOT / "VERSION"), ".")],
+    datas=[
+        (str(PROJECT_ROOT / "VERSION"), "."),
+        (str(PROJECT_ROOT / "src/ocr_from2xlsx/assets/shutter.wav"), "ocr_from2xlsx/assets"),
+    ],
     hiddenimports=["tkinter", "cv2"],
     hookspath=[],
     hooksconfig={},

@@ -211,6 +211,7 @@ class ReviewApp(tk.Tk):
     _toolbar_buttons: object | None = None
     _autocapture_state_var: object | None = None
     _autocapture_banner: object | None = None
+    _rotate_btn: object | None = None
 
     @staticmethod
     def _runtime_base_dir() -> Path:
@@ -333,7 +334,9 @@ class ReviewApp(tk.Tk):
         ttk.Button(toolbar, text="放大", command=lambda: self._zoom_preview(1.25)).pack(
             side=tk.RIGHT, padx=4
         )
-        ttk.Button(toolbar, text="旋轉", command=self._rotate_preview).pack(side=tk.RIGHT, padx=4)
+        self._rotate_btn = ttk.Button(toolbar, command=self._rotate_preview)
+        self._rotate_btn.pack(side=tk.RIGHT, padx=4)
+        self._update_rotate_button()  # show the carried-over rotation at launch
 
         # Persistent continuous-capture state banner — separate from the one-shot footer so
         # rotate/zoom/retry messages can't clobber the operator's "which state am I in?" cue.
@@ -1259,9 +1262,22 @@ class ReviewApp(tk.Tk):
         except OSError:
             pass
 
+    def _update_rotate_button(self) -> None:
+        # Reflect the current (session-persisted) rotation on the button so the carried-over
+        # state is visible at launch instead of only in a one-shot status line.
+        btn = getattr(self, "_rotate_btn", None)
+        if btn is None:
+            return
+        angle = getattr(self, "_preview_rotation", 0)
+        try:
+            btn.configure(text="旋轉" if not angle else f"旋轉 {angle}°")
+        except Exception:
+            pass
+
     def _rotate_preview(self) -> None:
         self._preview_rotation = (self._preview_rotation + 90) % 360
         self._save_preview_rotation()
+        self._update_rotate_button()
         self._push_status(f"預覽旋轉 {self._preview_rotation}°（已記住，下次啟動沿用）")
 
     def _zoom_preview(self, factor: float) -> None:

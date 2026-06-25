@@ -8,6 +8,9 @@
 ## [Unreleased]
 
 ### Fixed
+- 相機列舉新增 Media Foundation 後備：原本只用 DirectShow 探測，導致只在 MSMF 列舉的 UVC webcam
+  （Windows 相機看得到、本程式卻「找不到攝影機」）被漏掉。改為先跑快速 DirectShow pass（對缺席 index
+  仍即時失敗），若完全找不到才跑較慢的 MSMF/預設後備 pass（限前幾個 index），常見情況維持快速。
 - (#R6) 連續拍照基準強化：基準改為收集 N 張（預設 3）連續靜止影格取平均，避免單幀雜訊；動作偵測改用
   `mean_normalized_diff`（去 DC 後差異），對均勻亮度/曝光偏移免疫；辨識結果零筆時同步清除已拍清單，
   避免空結果循環重試。

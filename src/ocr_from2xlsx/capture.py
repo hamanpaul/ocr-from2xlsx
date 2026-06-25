@@ -219,33 +219,67 @@ def open_camera_capture(index: int) -> object | None:
     )
 
 
+def _probe_index_backends(cv2: object, index: int, backends: list[int | None]) -> bool:
+    for backend in backends:
+        for attempts in (DEFAULT_CAMERA_PROBE_READS, DEFAULT_CAMERA_STARTUP_READS):
+            capture = _open_backend_camera_capture(cv2, index, backend, read_attempts=attempts)
+            if capture is not None:
+                capture.release()
+                return True
+            if DEFAULT_CAMERA_PROBE_READS >= DEFAULT_CAMERA_STARTUP_READS:
+                break
+    return False
+
+
 def _default_camera_opener(index: int) -> bool:
-    # Fast, reliable enumeration probe: DirectShow only on Windows (the MSMF default
-    # backend blocks for seconds on absent indices). Keeps the two-tier slow-start
-    # budget so cameras slow to produce their first frame are still detected, but never
-    # pays the MSMF cost that made enumeration hang and miss cameras.
+    # Fast enumeration probe: DirectShow only (fails absent indices instantly; the MSMF
+    # default backend blocks for seconds on absent indices). The Media-Foundation fallback
+    # for DirectShow-invisible (MSMF-only) webcams is a SECOND pass in enumerate_cameras,
+    # run only when this fast pass finds nothing, so the common case stays fast.
     try:
         cv2 = _import_cv2()
     except CameraDependencyError:
         return False
-    backend = _enumeration_backend(cv2)
-    for attempts in (DEFAULT_CAMERA_PROBE_READS, DEFAULT_CAMERA_STARTUP_READS):
-        capture = _open_backend_camera_capture(cv2, index, backend, read_attempts=attempts)
-        if capture is not None:
-            capture.release()
-            return True
-        if DEFAULT_CAMERA_PROBE_READS >= DEFAULT_CAMERA_STARTUP_READS:
-            break
-    return False
+    dshow = getattr(cv2, "CAP_DSHOW", None)
+    return _probe_index_backends(cv2, index, [dshow] if dshow is not None else [None])
+
+
+def _fallback_camera_opener(index: int) -> bool:
+    # Correctness fallback: probe Media Foundation (MSMF) then the default backend, so a
+    # UVC webcam that enumerates ONLY via MSMF — the path Windows Camera uses — is found
+    # even when DirectShow can't see it. Slower (MSMF can block on absent indices), so it
+    # runs only after the DirectShow pass found nothing, and over only a few indices.
+    try:
+        cv2 = _import_cv2()
+    except CameraDependencyError:
+        return False
+    msmf = getattr(cv2, "CAP_MSMF", None)
+    backends: list[int | None] = []
+    if msmf is not None:
+        backends.append(msmf)
+    backends.append(None)
+    return _probe_index_backends(cv2, index, backends)
+
+
+_FALLBACK_PROBE_LIMIT = 2
 
 
 def enumerate_cameras(
     max_probe: int = 5,
     opener: Callable[[int], bool] | None = None,
 ) -> list[int]:
-    """Probe indices 0..max_probe-1 and return those that open. opener is injectable for tests."""
-    probe = opener if opener is not None else _default_camera_opener
-    return [index for index in range(max_probe) if probe(index)]
+    """Probe indices 0..max_probe-1 and return those that open. ``opener`` is injectable
+    for tests. With the default opener, a fast DirectShow pass runs first; if it finds
+    NOTHING, a slower Media-Foundation/default fallback pass probes the first couple of
+    indices, so an MSMF-only webcam (visible to Windows Camera but not DirectShow) is no
+    longer wrongly reported as 'no camera'."""
+    if opener is not None:
+        return [index for index in range(max_probe) if opener(index)]
+    found = [index for index in range(max_probe) if _default_camera_opener(index)]
+    if found:
+        return found
+    limit = min(_FALLBACK_PROBE_LIMIT, max_probe)
+    return [index for index in range(limit) if _fallback_camera_opener(index)]
 
 
 def decide_camera_selection(indices: list[int]) -> tuple:

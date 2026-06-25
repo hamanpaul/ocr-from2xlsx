@@ -5,6 +5,7 @@ output/
 .superpowers/
 __pycache__/
 .pytest_cache/
+.tmp_pytest/
 .ruff_cache/
 .mypy_cache/
 dist/

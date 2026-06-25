@@ -134,8 +134,31 @@ def test_enumerate_cameras_default_opener_requires_readable_frame(monkeypatch) -
 
     # A camera that opens but never produces a frame is not reported as available.
     assert enumerate_cameras(max_probe=1) == []
-    # Only DirectShow is attempted (probe budget then startup budget), never MSMF.
-    assert calls == [(0, 700), (0, 700)]
+    # DirectShow is tried first (probe budget then startup budget); finding nothing, the
+    # MSMF/default fallback pass also runs and likewise rejects the frameless camera.
+    assert calls[:2] == [(0, 700), (0, 700)]
+    assert (0,) in calls  # default-backend fallback was attempted
+
+
+def test_enumerate_cameras_falls_back_to_msmf_when_directshow_blind(monkeypatch) -> None:
+    calls: list[tuple[int, int | None]] = []
+
+    def fake_video_capture(index: int, backend: int | None = None) -> _FakeProbeCapture:
+        calls.append((index, backend))
+        if backend == 600:  # CAP_MSMF — the only backend that sees this UVC webcam
+            return _FakeProbeCapture(opened=True, frames=["frame"])
+        return _FakeProbeCapture(opened=False)  # DirectShow / default are blind to it
+
+    monkeypatch.setitem(
+        sys.modules,
+        "cv2",
+        SimpleNamespace(CAP_DSHOW=700, CAP_MSMF=600, VideoCapture=fake_video_capture),
+    )
+
+    # DirectShow can't see this MSMF-only camera (the Windows Camera path); the fallback finds it.
+    assert enumerate_cameras(max_probe=1) == [0]
+    assert (0, 700) in calls  # DirectShow tried first
+    assert (0, 600) in calls  # Media Foundation fallback found it
 
 
 def test_enumerate_cameras_default_opener_accepts_slow_start_plain_backend(

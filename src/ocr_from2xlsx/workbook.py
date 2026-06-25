@@ -97,8 +97,11 @@ class WorkbookWriter:
         shutil.copy2(template_path, working_path)
         return cls(working_path)
 
-    def write_record(self, record: Record) -> int:
-        row = self._next_empty_row()
+    def write_record(self, record: Record, row: int | None = None) -> int:
+        if row is None:
+            row = self._next_empty_row()
+        else:
+            self._clear_row(row)
         self._set(row, BASIC_COLUMN_BY_FIELD["service_month"], record.service_month_label())
         self._set(row, BASIC_COLUMN_BY_FIELD["service_date"], record.service_date)
         self._set(row, BASIC_COLUMN_BY_FIELD["identity"], IDENTITY_LABELS[record.identity])
@@ -260,6 +263,13 @@ class WorkbookWriter:
             if self.sheet.cell(row=row, column=name_col).value in (None, ""):
                 return row
         return self.sheet.max_row + 1
+
+    def _clear_row(self, row: int) -> None:
+        # Blank every mapped column in the row so a re-write (overwrite) leaves no
+        # stale value from the record that previously occupied it. Assign .value
+        # directly: ws.cell(row, col, value=None) is a getter (None means "don't set").
+        for column in self.header_map.values():
+            self.sheet.cell(row=row, column=column).value = None
 
     def _set(self, row: int, header: str, value: object) -> None:
         column = self.header_map[header]

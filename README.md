@@ -44,7 +44,28 @@ On startup the app auto-detects webcams: if exactly one camera is found it auto-
 
 ### 連續拍照（hands-free 自動掃描）
 
-App 工具列「連續拍照」可現場連續掃一疊紙本：開始時先**清空桌面擷取「空桌基準」**，之後把表單一張張放到鏡頭下，系統偵測到「畫面相對空桌出現內容、穩定且合焦」就自動拍照（快門聲＋計數），請拿開換下一張即可再拍（回到空桌才會再武裝，因此同版型一疊也能逐張拍）。背景/光線變了可按「重設空桌基準」重抓。連續多張太模糊會**暫停**等你處理。按「完成辨識」一次批次辨識全部，跳「辨識完成」後進入逐張人工校正（確認→寫入 xlsx→下一張）。偵測門檻可用 `AUTOCAPTURE_*` 環境變數對相機/光線微調。
+App 工具列「連續拍照」可現場連續掃一疊紙本：開始時先**清空桌面擷取「空桌基準」**，之後把表單一張張放到鏡頭下，系統偵測到「畫面相對空桌出現內容、穩定且合焦」就自動拍照（快門聲＋計數），請拿開換下一張即可再拍（回到空桌才會再武裝，因此同版型一疊也能逐張拍）。背景/光線變了可按「重設空桌基準」重抓。連續多張太模糊會**暫停**等你處理。按「結束連拍並辨識」一次批次辨識全部，跳「辨識完成」後進入逐張人工校正（確認→寫入 xlsx→下一張）。偵測門檻可用 `AUTOCAPTURE_*` 環境變數對相機/光線微調。
+
+工具列分三組常駐顯示——**設定**（選擇模板 XLSX / 匯入 JSON / 選擇攝影機）→ **掃描**（擷取並辨識 / 連續拍照 / 結束連拍並辨識 / 連拍刪除上一張 / 取消連拍 / 重設空桌基準 / 匯入資料夾批次）→ **校正**（上一筆 / 下一筆 / 確認並寫入 / 強制寫入）——加群組標題與分隔線，預覽控制（旋轉 / 放大 / 縮小）靠右；未就緒的按鈕自動 disable。
+
+### Correction keyboard shortcuts
+
+Review/correction is keyboard-first: when a record opens, focus lands on the first field that needs a human (the first `⚠` flagged field) and scrolls it into view, the active field's title is **bold**, high-confidence fields are dimmed, and the footer shows `待確認 N` (how many fields still need confirmation). A clean (0-flagged) record does *not* grab focus, so you can glance and confirm. A `快捷鍵` toolbar button shows this list, and buttons have hover hints.
+
+- `Enter` / `Ctrl+Enter` — 確認並寫入 (confirm and write, then advance)
+- `F2` / `Ctrl+Shift+Enter` — 強制寫入 (force write; if fields still fail validation, a notice follows the write)
+- `PgDn` / `PgUp` (or `Ctrl+→` / `Ctrl+←`) — 下一筆 / 上一筆 (next / previous record)
+- `Esc` — cancel the current record's edits, restoring stored values **in place** (keeps your image zoom/pan and focus)
+- `Ctrl+Tab` / `Ctrl+Shift+Tab` — jump to the next / previous field needing confirmation (cycles only `⚠` fields)
+- `F8` — jump into the 姓名 roster list (arrow to browse, `Enter` to apply, focus returns to the name field)
+- On a focused single-choice field, number keys `1`–`N` pick that option; on a focused multi-choice option, the spacebar toggles it. Digits typed into a text field stay text.
+
+### Correction workflow aids
+
+- **Progress + per-record status** — the footer shows `已寫入 X / 共 N` and the current row (or `尚未載入資料` before a batch is loaded), plus a **color-coded** per-record badge (green `已寫入` / red `被擋下` / grey `待處理`); navigating back to a written record shows its badge and row.
+- **Handwritten-name aids** — a `姓名校正` panel shows a zoomed name crop (`record.ocr.name_crop`, falling back to a placeholder when absent) and a list of roster suggestions from the confirmed-name store. Browsing the list (arrows / single click) only highlights; `Enter` or double-click applies a suggestion, which fills the name, clears its `⚠` and the `待確認` count, and returns focus to the name field (an empty list shows `（無建議名單）`). Confirming a record whose name is still flagged-and-empty is refused (use 強制寫入 to override), so a blank name is never silently written. The source preview supports drag-pan and integer-step zoom (mouse wheel, or the 放大 / 縮小 / 符合視窗 buttons).
+- **Write recovery (re-open & overwrite)** — confirming/force-writing a record that was already written prompts to overwrite its row (the dialog defaults to *No*, so a reflexive `Enter` cancels); the prompt wording differs for 確認並寫入 (validated overwrite) vs 強制寫入 (skips required-field checks). Confirming overwrites that exact row (no duplicate), cancelling writes nothing.
+- **Image verification (pan / zoom / field framing)** — the source-image preview is a Canvas viewer: drag to pan, scroll the mouse wheel to zoom (integer-step magnification, zoom remembered for the session), and focusing a field frames the image to that field's area (recognition-layout section band). The live camera preview stays fit-to-pane.
 
 ```powershell
 ocr-from2xlsx

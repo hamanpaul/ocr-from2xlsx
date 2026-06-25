@@ -69,6 +69,7 @@ class ImportSession:
         force: bool = False,
         human_confirmed: bool = False,
         allow_unconfirmed_name: bool = False,
+        overwrite_row: int | None = None,
     ) -> AcceptResult:
         result = validate_record(record, self.existing_duplicate_keys)
         blockers = list(result.blockers)
@@ -85,7 +86,9 @@ class ImportSession:
         duplicate_key = None
         if _duplicate_key_is_usable(record):
             duplicate_key = record.duplicate_key()
-            if duplicate_key in self.batch_duplicate_keys:
+            # On an overwrite we are replacing an existing row (often the record's own
+            # prior write), so its key already being present is expected — not a dup.
+            if overwrite_row is None and duplicate_key in self.batch_duplicate_keys:
                 blockers.append("duplicate.in_batch")
 
         if blockers:
@@ -124,7 +127,7 @@ class ImportSession:
                     warnings=warnings,
                 )
 
-        row_number = self.writer.write_record(record)
+        row_number = self.writer.write_record(record, row=overwrite_row)
         self.writer.save()
         if human_confirmed:
             record.ocr.warnings = [warning for warning in record.ocr.warnings if warning != NAME_UNCONFIRMED]

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import sys
+import threading
 from collections.abc import Callable
 import tkinter as tk
 from pathlib import Path
@@ -177,7 +178,10 @@ class ConfirmForm:
 
 
 class ReviewApp(tk.Tk):
-    _PREVIEW_PLACEHOLDER = "攝影機或圖片預覽區\n第一版可用 JSON 模擬連續掃描。"
+    _PREVIEW_PLACEHOLDER = (
+        "攝影機或圖片預覽區\n"
+        "請按『選擇攝影機』開始連續掃描，或用『匯入資料夾批次』/『匯入 JSON』載入既有資料。"
+    )
     _CAMERA_POLL_INTERVAL_MS = 33
     _CAMERA_RETRY_INTERVAL_MS = 100
     _CAMERA_FAILURE_LIMIT = 3
@@ -197,6 +201,17 @@ class ReviewApp(tk.Tk):
     _splash_closed: bool = False
     _status_var: object | None = None
     _status_log_path: object | None = None
+    # Class defaults so the toolbar state machine / guards can read these on the headless
+    # __new__ test harness without tripping tk.Tk.__getattr__ recursion; __init__ sets the
+    # real instance values.
+    session: object | None = None
+    records: object = ()
+    written_indices: object = frozenset()
+    current_index: int = -1
+    _toolbar_buttons: object | None = None
+    _autocapture_state_var: object | None = None
+    _autocapture_banner: object | None = None
+    _rotate_btn: object | None = None
 
     @staticmethod
     def _runtime_base_dir() -> Path:
@@ -268,59 +283,75 @@ class ReviewApp(tk.Tk):
         self._status_log_path = self._default_status_log_path()
         self.fields: dict[str, tk.StringVar] = {}
         self._build_ui()
+        self._update_toolbar_states()  # initial: disable buttons whose prerequisites are unmet
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
     def _build_ui(self) -> None:
         toolbar = ttk.Frame(self)
         toolbar.pack(fill=tk.X, padx=8, pady=8)
-        ttk.Button(toolbar, text="選擇模板 XLSX", command=self._choose_template).pack(
-            side=tk.LEFT, padx=4
-        )
-        ttk.Button(toolbar, text="匯入 JSON", command=self._load_json).pack(side=tk.LEFT, padx=4)
-        ttk.Button(toolbar, text="上一筆", command=self._previous_record).pack(side=tk.LEFT, padx=4)
-        ttk.Button(toolbar, text="下一筆", command=self._next_record).pack(
-            side=tk.LEFT, padx=4
-        )
-        ttk.Button(toolbar, text="確認並寫入", command=self._confirm_current).pack(
-            side=tk.LEFT, padx=4
-        )
-        ttk.Button(toolbar, text="強制寫入", command=self._force_write).pack(side=tk.LEFT, padx=4)
-        ttk.Button(toolbar, text="選擇攝影機", command=self._choose_camera).pack(
-            side=tk.LEFT, padx=4
-        )
-        ttk.Button(toolbar, text="擷取並辨識", command=self._capture_and_recognize).pack(
-            side=tk.LEFT, padx=4
-        )
-        ttk.Button(toolbar, text="匯入資料夾批次", command=self._import_folder_batch).pack(
-            side=tk.LEFT, padx=4
-        )
-        ttk.Button(toolbar, text="連續拍照", command=self._start_continuous_capture).pack(
-            side=tk.LEFT, padx=4
-        )
-        ttk.Button(toolbar, text="完成辨識", command=self._finish_continuous_capture).pack(
-            side=tk.LEFT, padx=4
-        )
-        ttk.Button(toolbar, text="復原上一張", command=self._undo_last_continuous_capture).pack(
-            side=tk.LEFT, padx=4
-        )
-        ttk.Button(toolbar, text="取消連拍", command=self._cancel_continuous_capture).pack(
-            side=tk.LEFT, padx=4
-        )
-        ttk.Button(toolbar, text="重設空桌基準", command=self._reset_baseline).pack(
-            side=tk.LEFT, padx=4
-        )
-        ttk.Button(toolbar, text="旋轉", command=self._rotate_preview).pack(
-            side=tk.LEFT, padx=4
+
+        # Toolbar grouped by workflow phase — 設定 → 掃描 → 校正 — with a small caption per
+        # group and vertical separators, so the operator can see where to start instead of
+        # facing one undifferentiated 17-button row. View controls are pushed to the right.
+        def _group(label: str) -> None:
+            ttk.Separator(toolbar, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=(6, 4))
+            ttk.Label(toolbar, text=label, foreground="#5f6368").pack(side=tk.LEFT, padx=(0, 4))
+
+        self._toolbar_buttons = {}
+
+        def _btn(text: str, command, key: str | None = None) -> None:
+            button = ttk.Button(toolbar, text=text, command=command)
+            button.pack(side=tk.LEFT, padx=4)
+            if key is not None:
+                self._toolbar_buttons[key] = button
+
+        # 設定（先做）
+        ttk.Label(toolbar, text="設定", foreground="#5f6368").pack(side=tk.LEFT, padx=(0, 4))
+        _btn("選擇模板 XLSX", self._choose_template, "choose_template")
+        _btn("匯入 JSON", self._load_json, "load_json")
+        _btn("選擇攝影機", self._choose_camera, "choose_camera")
+        # 掃描
+        _group("掃描")
+        _btn("擷取並辨識", self._capture_and_recognize, "capture_recognize")
+        _btn("連續拍照", self._start_continuous_capture, "start_continuous")
+        # Name says what it does: recognize the batch the continuous capture just collected —
+        # not a generic "recognise" (single-shot is 擷取並辨識; existing files are 匯入資料夾批次).
+        _btn("結束連拍並辨識", self._finish_continuous_capture, "complete_recognize")
+        _btn("連拍刪除上一張", self._undo_last_continuous_capture, "undo_last")
+        _btn("取消連拍", self._cancel_continuous_capture, "cancel_continuous")
+        _btn("重設空桌基準", self._reset_baseline, "reset_baseline")
+        _btn("匯入資料夾批次", self._import_folder_batch, "import_folder_batch")
+        # 校正
+        _group("校正")
+        _btn("上一筆", self._previous_record, "prev_record")
+        _btn("下一筆", self._next_record, "next_record")
+        _btn("確認並寫入", self._confirm_current, "confirm")
+        _btn("強制寫入", self._force_write, "force")
+        # 預覽（靠右，與寫入/掃描動作分開）
+        ttk.Button(toolbar, text="縮小", command=lambda: self._zoom_preview(1 / 1.25)).pack(
+            side=tk.RIGHT, padx=4
         )
         ttk.Button(toolbar, text="放大", command=lambda: self._zoom_preview(1.25)).pack(
-            side=tk.LEFT, padx=4
+            side=tk.RIGHT, padx=4
         )
-        ttk.Button(toolbar, text="縮小", command=lambda: self._zoom_preview(1 / 1.25)).pack(
-            side=tk.LEFT, padx=4
+        self._rotate_btn = ttk.Button(toolbar, command=self._rotate_preview)
+        self._rotate_btn.pack(side=tk.RIGHT, padx=4)
+        self._update_rotate_button()  # show the carried-over rotation at launch
+
+        # Persistent continuous-capture state banner — separate from the one-shot footer so
+        # rotate/zoom/retry messages can't clobber the operator's "which state am I in?" cue.
+        # Empty (thin strip) when not scanning; coloured + text while a session is live (#cc-01).
+        self._autocapture_state_var = tk.StringVar(value="")
+        self._autocapture_banner = tk.Label(
+            self, textvariable=self._autocapture_state_var, anchor="w",
+            background="#f3f3f3", foreground="#202124",
         )
+        self._autocapture_banner.pack(side=tk.TOP, fill=tk.X, padx=8)
 
         # Footer status bar: shows only the latest status; full history goes to the log file.
-        self._status_var = tk.StringVar(value="就緒")
+        self._status_var = tk.StringVar(
+            value="請先按『選擇模板 XLSX』，再按『選擇攝影機』開始掃描。"
+        )
         ttk.Label(self, textvariable=self._status_var, anchor="w", relief="sunken").pack(
             side=tk.BOTTOM, fill=tk.X, padx=8, pady=(0, 8)
         )
@@ -398,6 +429,7 @@ class ReviewApp(tk.Tk):
             return
         self.written_indices = set()
         self._push_status(f"工作檔: {working}")
+        self._update_toolbar_states()  # template ready → write buttons can enable
 
     def _load_json(self) -> None:
         path = filedialog.askopenfilename(filetypes=[("JSON files", "*.json")])
@@ -422,6 +454,7 @@ class ReviewApp(tk.Tk):
             self._next_record()
         else:
             self._show_placeholder_preview()
+        self._update_toolbar_states()
 
     def _has_live_camera_preview(self) -> bool:
         return self._camera_capture is not None or self._camera_after_id is not None
@@ -448,58 +481,75 @@ class ReviewApp(tk.Tk):
                 require_camera_support()
             except CameraDependencyError as exc:
                 self._clear_inactive_camera_selection()
-                messagebox.showerror("擷取並辨識", str(exc))
+                messagebox.showerror(
+                "擷取並辨識",
+                f"攝影機功能尚未安裝，請聯絡系統管理員。\n（技術細節：{exc}）",
+            )
                 return
             self._clear_inactive_camera_selection()
             messagebox.showwarning("擷取並辨識", "請先選擇可用的攝影機。")
             return
-        should_restore_preview = restore_live_preview
+        self._paint_busy("擷取中…請稍候")  # legible feedback before the blocking capture freeze
         self._stop_camera()
         try:
             result = capture_still(
                 restore_camera_index,
                 min_sharpness=DEFAULT_MIN_SHARPNESS,
             )
-            if result is None:
-                should_restore_preview = False
-                self._clear_inactive_camera_selection()
-                messagebox.showwarning("擷取並辨識", "找不到可用的攝影機。")
-                return
-            if not result.passed:
-                messagebox.showwarning(
-                    "擷取並辨識",
-                    f"畫面太模糊（清晰度 {result.sharpness:.0f}）。請調整對焦/光線/距離後重試。",
-                )
-                return
-            recognized = self._recognize_capture(result.frame)
-            should_restore_preview = restore_live_preview and not recognized
         except CameraDependencyError as exc:
-            should_restore_preview = False
             self._clear_inactive_camera_selection()
-            messagebox.showerror("擷取並辨識", str(exc))
-        except Exception as exc:
-            messagebox.showerror("擷取並辨識", f"辨識失敗：{exc}")
-        finally:
-            if should_restore_preview:
-                if restore_camera_index is None:
-                    self._init_camera()
-                else:
-                    self._start_camera(restore_camera_index)
+            messagebox.showerror(
+                "擷取並辨識",
+                f"攝影機功能尚未安裝，請聯絡系統管理員。\n（技術細節：{exc}）",
+            )
+            return
+        except Exception as exc:  # noqa: BLE001
+            messagebox.showerror("擷取並辨識", f"擷取失敗：{exc}")
+            if restore_live_preview:
+                self._start_camera(restore_camera_index)
+            return
+        if result is None:
+            self._clear_inactive_camera_selection()
+            messagebox.showwarning("擷取並辨識", "找不到可用的攝影機。")
+            return
+        if not result.passed:
+            messagebox.showwarning(
+                "擷取並辨識",
+                f"畫面太模糊（清晰度 {result.sharpness:.0f}）。請調整對焦/光線/距離後重試。",
+            )
+            if restore_live_preview:
+                self._start_camera(restore_camera_index)
+            return
+        self._play_shutter()  # same moment-of-capture cue as continuous mode
+        self._flash_preview()
+        self._recognize_capture(
+            result.frame,
+            restore_live_preview=restore_live_preview,
+            restore_index=restore_camera_index,
+        )
 
-    def _recognize_capture(self, frame: object) -> bool:
+    def _recognize_capture(
+        self,
+        frame: object,
+        *,
+        restore_live_preview: bool = False,
+        restore_index: int | None = None,
+    ) -> None:
         import cv2
 
         from ocr_from2xlsx.cli import _resolve_template
         from ocr_from2xlsx.json_io import dump_batch
-        from ocr_from2xlsx.plugin_backend import (
-            PluginOcrBackend,
-            scan_doc_preprocess_env_overrides,
-        )
+        from ocr_from2xlsx.plugin_backend import scan_doc_preprocess_env_overrides
         from ocr_from2xlsx.scan import next_output_artifact_path, prepare_records_from_images
+
+        def restore() -> None:
+            if restore_live_preview and restore_index is not None:
+                self._start_camera(restore_index)
 
         selected_dir = filedialog.askdirectory(title="選擇辨識輸出資料夾")
         if not selected_dir:
-            return False
+            restore()
+            return
         output_dir = Path(selected_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
         image_path = next_output_artifact_path(output_dir, "scan-capture.png")
@@ -508,30 +558,31 @@ class ReviewApp(tk.Tk):
 
             frame = rotate_frame(frame, self._preview_rotation)
         if not cv2.imwrite(str(image_path), frame):
-            raise OSError(f"無法寫入擷取影像：{image_path}")
+            messagebox.showerror("擷取並辨識", f"無法寫入擷取影像：{image_path}")
+            restore()
+            return
         env_overrides = scan_doc_preprocess_env_overrides()
-        modal = self._open_processing_modal(
-            "辨識中，請稍候…\n首次辨識需載入模型，可能需要數十秒。"
-        )
-        try:
-            try:
-                backend = self._resolve_recognition_backend(image_path, env_overrides)
-            except Exception as exc:
-                raise RuntimeError(
-                    "找不到可用的 OCR plugin。請先建置 plugin bundle："
-                    "python build/build_paddle_plugin.py（產生 dist/plugins/paddleocr）。"
-                ) from exc
+
+        def prepare(report, on_progress, should_cancel):
+            report("辨識中，請稍候…首次辨識需載入模型，可能需要數十秒。")
+            backend = self._resolve_recognition_backend(image_path, env_overrides)
             template = _resolve_template("service_record.v1")
-            batch = prepare_records_from_images([image_path], output_dir, template, backend)
+            batch = prepare_records_from_images(
+                [image_path], output_dir, template, backend, should_cancel=should_cancel
+            )
             json_path = next_output_artifact_path(output_dir, "scan-prepared.json")
             dump_batch(batch, json_path)
-        finally:
-            self._close_processing_modal(modal)
-        records = list(JsonRecordSource(json_path).records())
-        if not records:
-            raise ValueError("辨識結果沒有任何紀錄。")
-        self._set_loaded_records(records, json_path)
-        return True
+            return list(JsonRecordSource(json_path).records()), json_path
+
+        self._run_recognition_async(
+            prepare,
+            message="辨識中，請稍候…",
+            on_records=lambda records, json_path: self._set_loaded_records(records, json_path),
+            empty_msg="辨識結果沒有任何紀錄。",
+            on_aborted=restore,
+            error_title="擷取並辨識",
+            error_message=lambda exc: f"辨識失敗：{exc}",
+        )
 
     def _resolve_recognition_backend(self, roster_path, env_overrides):
         # Shared by single-capture and batch import: default to the local vision
@@ -569,36 +620,37 @@ class ReviewApp(tk.Tk):
         output_dir = Path(selected_out)
         output_dir.mkdir(parents=True, exist_ok=True)
         json_path = next_output_artifact_path(output_dir, "batch-prepared.json")
-        modal = self._open_processing_modal("批次辨識中…")
-        try:
+
+        def prepare(report, on_progress, should_cancel):
+            report("批次辨識中…啟動辨識服務 / 載入模型（首次較久）…")
             backend = self._resolve_recognition_backend(
                 json_path, scan_doc_preprocess_env_overrides()
             )
             template = _resolve_template("service_record.v1")
-
-            def _progress(done: int, total: int, name: str) -> None:
-                self._set_modal_message(modal, f"批次辨識中… {done}/{total}\n{name}")
-
             batch = prepare_records_from_folder(
-                Path(input_dir), output_dir, template, backend, on_progress=_progress
+                Path(input_dir), output_dir, template, backend,
+                on_progress=on_progress, should_cancel=should_cancel,
             )
             dump_batch(batch, json_path)
-        except Exception as exc:  # noqa: BLE001 - surface any failure to the user
-            self._close_processing_modal(modal)
-            messagebox.showerror("批次辨識失敗", str(exc))
-            return
-        else:
-            self._close_processing_modal(modal)
-        records = list(JsonRecordSource(json_path).records())
-        if not records:
-            messagebox.showwarning("沒有可辨識的檔案", "所選資料夾沒有圖片或 PDF。")
-            return
-        self._set_loaded_records(records, json_path)
-        self._push_status(f"批次辨識完成：{len(records)} 筆，請逐筆確認後寫入。")
+            return list(JsonRecordSource(json_path).records()), json_path
 
-    def _open_processing_modal(self, message: str):
-        # Global modal "processing" indicator during the blocking OCR call. Defensive: returns
-        # None when there is no real Tk root (e.g. unit-test fixtures), so callers stay testable.
+        def on_records(records, json_path_):
+            self._set_loaded_records(records, json_path_)
+            self._push_status(f"批次辨識完成：{len(records)} 筆，請逐筆確認後寫入。")
+
+        self._run_recognition_async(
+            prepare,
+            message="批次辨識中…",
+            on_records=on_records,
+            empty_msg="所選資料夾沒有圖片或 PDF，或沒有可辨識內容。",
+            error_title="批次辨識失敗",
+        )
+
+    def _open_processing_modal(self, message: str, *, on_cancel=None):
+        # Modal "processing" indicator shown while recognition runs on a WORKER thread. The
+        # indeterminate progressbar animates because the Tk event loop stays free (the heavy
+        # work is off-thread), so the operator sees the app is alive and Cancel works. Returns
+        # None when there is no real Tk root (unit-test fixtures), so callers stay testable.
         try:
             modal = tk.Toplevel(self)
         except Exception:
@@ -607,12 +659,19 @@ class ReviewApp(tk.Tk):
             modal.title("處理中")
             modal.transient(self)
             modal.resizable(False, False)
-            label = ttk.Label(modal, text=message, padding=24, justify="center")
+            label = ttk.Label(modal, text=message, padding=(24, 24, 24, 8), justify="center")
             label.pack()
             modal._message_label = label
+            bar = ttk.Progressbar(modal, mode="indeterminate", length=260)
+            bar.pack(padx=24, pady=(0, 8))
+            bar.start(12)
+            modal._progress_bar = bar
+            if on_cancel is not None:
+                ttk.Button(modal, text="取消", command=on_cancel).pack(pady=(0, 16))
+                modal.protocol("WM_DELETE_WINDOW", on_cancel)
             modal.update_idletasks()
-            modal.grab_set()  # global input lock while recognizing
-            modal.update()  # force a draw before the blocking OCR call
+            modal.grab_set()  # global input lock; the Cancel button inside stays usable
+            modal.update()
         except Exception:
             pass
         return modal
@@ -630,10 +689,81 @@ class ReviewApp(tk.Tk):
         if modal is None:
             return
         try:
+            bar = getattr(modal, "_progress_bar", None)
+            if bar is not None:
+                bar.stop()
             modal.grab_release()
             modal.destroy()
         except Exception:
             pass
+
+    # Real app runs recognition off the Tk main thread; tests set this False to run inline
+    # (synchronously) since the headless harness has no Tk event loop to marshal back to.
+    _recognition_threaded: bool = True
+
+    def _run_recognition_async(
+        self, prepare, *, message, on_records, empty_msg, on_aborted=None,
+        on_empty=None, error_title="辨識失敗", error_message=None,
+    ) -> None:
+        # Run recognition off the Tk main thread so the UI stays responsive (no white/ghosted
+        # "Not Responding" window that reads as a crash). ``prepare(report, on_progress,
+        # should_cancel)`` does ensure_server + backend + prepare_records + dump on the worker
+        # and returns (records, json_path); ALL Tk work is marshalled back via self.after.
+        inline = not getattr(self, "_recognition_threaded", True)
+        cancel = threading.Event()
+        modal = self._open_processing_modal(message, on_cancel=None if inline else cancel.set)
+
+        def report(text: str) -> None:
+            if inline:
+                self._set_modal_message(modal, text)
+            else:
+                self.after(0, lambda t=text: self._set_modal_message(modal, t))
+
+        def on_progress(done: int, total: int, name: str) -> None:
+            report(f"{message}　{done}/{total}\n{name}")
+
+        state: dict = {}
+
+        def run_prepare() -> None:
+            try:
+                state["ok"] = prepare(report, on_progress, cancel.is_set)
+            except Exception as exc:  # noqa: BLE001 - surface to the user on the main thread
+                state["err"] = exc
+
+        def finish() -> None:
+            self._close_processing_modal(modal)
+            if "err" in state:
+                err = state["err"]
+                msg = error_message(err) if error_message else f"{err}\n（已擷取的影像保留，可再次重試。）"
+                messagebox.showerror(error_title, msg)
+                if on_aborted is not None:
+                    on_aborted()
+                return
+            records, json_path = state["ok"]
+            if cancel.is_set():
+                self._push_status("已取消辨識（已擷取的影像保留，可再次重試）。")
+                if on_aborted is not None:
+                    on_aborted()
+                return
+            if not records:
+                messagebox.showwarning("辨識", empty_msg)
+                if on_empty is not None:
+                    on_empty()
+                elif on_aborted is not None:
+                    on_aborted()
+                return
+            on_records(records, json_path)
+
+        if inline:
+            run_prepare()
+            finish()
+            return
+
+        def worker() -> None:
+            run_prepare()
+            self.after(0, finish)
+
+        threading.Thread(target=worker, daemon=True, name="recognition").start()
 
     def _next_record(self) -> None:
         if not self.records:
@@ -736,6 +866,7 @@ class ReviewApp(tk.Tk):
         )
         self._show_source_image(record)
         self.editing = False
+        self._update_toolbar_states()
 
     def _apply_form_to_record(self, record: Record) -> None:
         record.record_id = self.fields["record_id"].get()
@@ -807,6 +938,16 @@ class ReviewApp(tk.Tk):
         if not decision or decision[0] == "none":
             self._clear_inactive_camera_selection()
             self._push_status("找不到攝影機")
+            # Loud, actionable guidance (the most common real cause is a busy camera): the
+            # operator opened Windows 相機 to "check" the webcam, which holds it exclusively.
+            messagebox.showwarning(
+                "找不到攝影機",
+                "找不到可用的攝影機。請依序確認：\n\n"
+                "1. 是否有其他程式正在使用鏡頭——特別是 Windows「相機」、Teams、Zoom。"
+                "鏡頭被占用時本程式也會「找不到」，請先關閉它們再試。\n"
+                "2. USB 連接是否正常（重新插拔一次）。\n"
+                "3. 目前僅掃描裝置編號 0–4。",
+            )
             return
         if decision[0] == "auto":
             self._start_camera(int(decision[1]))
@@ -950,11 +1091,23 @@ class ReviewApp(tk.Tk):
                 self._CAMERA_RETRY_INTERVAL_MS, self._poll_camera_frame
             )
             return
-        self._fail_camera_preview(message)
+        self._fail_camera_preview(message, disconnect=True)
 
-    def _fail_camera_preview(self, message: str) -> None:
-        self._push_status(message)
+    def _fail_camera_preview(self, message: str, *, disconnect: bool = False) -> None:
         self._show_placeholder_preview()
+        if disconnect:
+            # A read failure mid-session = the camera was unplugged / hung. Keep the selected
+            # index so the operator can one-click reconnect via「選擇攝影機」/擷取 instead of
+            # being told「請先選擇可用的攝影機」; if a continuous session was live, pause it (#cam-disconnect).
+            self._push_status("攝影機連線中斷，請確認 USB 連接後按「選擇攝影機」重試。")
+            if getattr(self, "_autocapture_active", False):
+                self._autocapture_active = False
+                self._update_toolbar_states()
+                self._set_autocapture_state(
+                    "⚠ 攝影機連線中斷，連拍已暫停 → 接回攝影機後請重新『連續拍照』", tone="warn"
+                )
+            return
+        self._push_status(message)
         self._clear_inactive_camera_selection()
 
     def _show_placeholder_preview(self) -> None:
@@ -1019,6 +1172,84 @@ class ReviewApp(tk.Tk):
                 pass
         self._append_status_log_file(message)
 
+    def _paint_busy(self, message: str) -> None:
+        # Show an in-progress message AND force it to paint BEFORE the main thread blocks on
+        # a synchronous capture/recognition — a plain status set does not repaint mid-freeze.
+        # _status_var is None on the headless test harness; skip the Tk pump there.
+        self._push_status(message)
+        if self._status_var is not None:
+            try:
+                self.update_idletasks()
+            except Exception:
+                pass
+
+    def _update_toolbar_states(self) -> None:
+        # Advertise the workflow by enabling only the buttons valid in the current state — so
+        # the operator can't press 完成辨識/取消連拍 before 連續拍照, or 確認並寫入 with no
+        # template/record, and doesn't have to learn the order by being scolded by dialogs.
+        btns = getattr(self, "_toolbar_buttons", None)
+        if not btns:
+            return
+        active = bool(getattr(self, "_autocapture_active", False))
+        has_stills = bool(getattr(self, "_autocapture_stills", None))
+        has_session = getattr(self, "session", None) is not None
+        records = getattr(self, "records", ()) or ()
+        written = getattr(self, "written_indices", frozenset()) or frozenset()
+        idx = getattr(self, "current_index", -1)
+        valid_record = 0 <= idx < len(records)
+
+        def _set(key: str, enabled: bool) -> None:
+            button = btns.get(key)
+            if button is not None:
+                try:
+                    button.configure(state="normal" if enabled else "disabled")
+                except Exception:
+                    pass
+
+        # Continuous-capture cluster: 連續拍照 starts a session; the rest only apply during one
+        # (完成辨識 stays usable when a camera-interrupt left stills to recognize).
+        _set("start_continuous", not active)
+        _set("complete_recognize", active or has_stills)
+        _set("undo_last", active and has_stills)
+        _set("cancel_continuous", active)
+        _set("reset_baseline", active)
+        # Buttons unrelated to scanning are disabled while a continuous session is live, so a
+        # stray click can't hijack or abandon it.
+        for key in (
+            "capture_recognize", "import_folder_batch", "choose_camera",
+            "load_json", "choose_template",
+        ):
+            _set(key, not active)
+        # Write buttons need a working file (template) AND a current, not-yet-written record.
+        write_ok = has_session and valid_record and idx not in written
+        _set("confirm", write_ok)
+        _set("force", write_ok)
+        _set("prev_record", bool(records))
+        _set("next_record", bool(records))
+
+    def _set_autocapture_state(self, text: str, *, tone: str = "active") -> None:
+        # Drive the persistent continuous-capture banner (separate from the transient footer).
+        # tone picks the colour: active (scanning), warn (paused/interrupted); "" clears it.
+        var = getattr(self, "_autocapture_state_var", None)
+        if var is None:
+            return
+        try:
+            var.set(text)
+        except Exception:
+            pass
+        banner = getattr(self, "_autocapture_banner", None)
+        if banner is not None:
+            palette = {
+                "active": ("#fff4ce", "#5f4b00"),
+                "warn": ("#fde7e9", "#a4262c"),
+                "": ("#f3f3f3", "#202124"),
+            }
+            bg, fg = palette.get(tone if text else "", palette[""])
+            try:
+                banner.configure(background=bg, foreground=fg)
+            except Exception:
+                pass
+
     def _append_status_log_file(self, message: str) -> None:
         path = self._status_log_path
         if path is None:
@@ -1031,9 +1262,22 @@ class ReviewApp(tk.Tk):
         except OSError:
             pass
 
+    def _update_rotate_button(self) -> None:
+        # Reflect the current (session-persisted) rotation on the button so the carried-over
+        # state is visible at launch instead of only in a one-shot status line.
+        btn = getattr(self, "_rotate_btn", None)
+        if btn is None:
+            return
+        angle = getattr(self, "_preview_rotation", 0)
+        try:
+            btn.configure(text="旋轉" if not angle else f"旋轉 {angle}°")
+        except Exception:
+            pass
+
     def _rotate_preview(self) -> None:
         self._preview_rotation = (self._preview_rotation + 90) % 360
         self._save_preview_rotation()
+        self._update_rotate_button()
         self._push_status(f"預覽旋轉 {self._preview_rotation}°（已記住，下次啟動沿用）")
 
     def _zoom_preview(self, factor: float) -> None:
@@ -1092,10 +1336,30 @@ class ReviewApp(tk.Tk):
                 require_camera_support()
             except CameraDependencyError as exc:
                 self._clear_inactive_camera_selection()
-                messagebox.showerror("連續拍照", str(exc))
+                messagebox.showerror(
+                    "連續拍照",
+                    f"攝影機功能尚未安裝，請聯絡系統管理員。\n（技術細節：{exc}）",
+                )
                 return
             self._clear_inactive_camera_selection()
             messagebox.showwarning("連續拍照", "請先選擇可用的攝影機。")
+            return
+        # Don't let a stray 連續拍照 silently abandon an in-progress correction batch (#TB-03).
+        records = self.records or ()
+        written = self.written_indices or frozenset()
+        if records and len(written) < len(records):
+            remaining = len(records) - len(written)
+            if not messagebox.askokcancel(
+                "連續拍照",
+                f"目前還有 {remaining} 筆校正未寫入（共 {len(records)} 筆，已寫入 {len(written)} 筆）。"
+                "開始連續拍照會離開目前校正，確定要開始？",
+            ):
+                return
+        # Warn about a missing template up front, before the slow scan/OCR (#scan-no-template).
+        if self.session is None and not messagebox.askokcancel(
+            "尚未選擇模板",
+            "尚未選擇模板 XLSX，辨識後將無法寫入工作檔。是否仍要繼續擷取？",
+        ):
             return
         selected_dir = filedialog.askdirectory(title="選擇辨識輸出資料夾")
         if not selected_dir:
@@ -1112,16 +1376,21 @@ class ReviewApp(tk.Tk):
         self._autocapture_baseline_samples = []
         self._autocapture_detector = AutoCaptureDetector(AutoCaptureConfig.from_env())
         self._autocapture_active = True
+        self._update_toolbar_states()
+        self._set_autocapture_state("● 連續拍照中：擷取空桌基準中…請保持桌面淨空")
         self._push_status("連續拍照：擷取空桌基準中…請保持桌面淨空。")
         if not self._has_live_camera_preview():
             self._start_camera(self._camera_index)
 
     def _cancel_continuous_capture(self) -> None:
         if not self._autocapture_active:
+            self._push_status("尚未開始連續拍照；沒有可取消的連拍。")
             return
         restore = self._has_live_camera_preview()
         self._stop_camera()
         self._autocapture_active = False
+        self._update_toolbar_states()
+        self._set_autocapture_state("")
         count = len(self._autocapture_stills)
         self._push_status(f"已取消連續拍照（保留 {count} 張於輸出資料夾，未辨識）。")
         if restore:
@@ -1136,7 +1405,19 @@ class ReviewApp(tk.Tk):
             Path(last).unlink()
         except OSError:
             pass
-        self._push_status(f"已復原上一張｜已擷取 {len(self._autocapture_stills)} 張")
+        # Re-arm so the SAME form can be re-shot in place — undo usually means "that shot was
+        # bad, retake". Without this the detector stays DISARMED and never retakes (#cc-07).
+        detector = self._autocapture_detector
+        if detector is not None:
+            try:
+                detector.set_baseline()
+            except Exception:
+                pass
+        self._autocapture_prev_gray = None
+        self._update_toolbar_states()
+        self._push_status(
+            f"已復原上一張，對準同一表單將自動重拍｜已擷取 {len(self._autocapture_stills)} 張"
+        )
 
     def _reset_baseline(self) -> None:
         if not self._autocapture_active:
@@ -1147,6 +1428,7 @@ class ReviewApp(tk.Tk):
         self._autocapture_need_baseline = True
         self._autocapture_prev_gray = None
         self._autocapture_baseline_samples = []
+        self._set_autocapture_state("● 連續拍照中：重新擷取空桌基準中…請保持桌面淨空")
         self._push_status("連續拍照：重新擷取空桌基準中…請保持桌面淨空。")
 
     def _observe_autocapture_frame(self, frame: object) -> bool:
@@ -1177,8 +1459,14 @@ class ReviewApp(tk.Tk):
                 self._autocapture_baseline_samples = []
                 self._autocapture_need_baseline = False
                 self._autocapture_detector.set_baseline()
+                self._set_autocapture_state("● 連續拍照中：空桌基準完成，請放上第一張表單")
+                self._play_shutter()  # distinct positive signal that the baseline locked (#cc-05)
+                self._flash_preview()
                 self._push_status("連續拍照：已設定空桌基準｜請放上表單…")
             else:
+                self._set_autocapture_state(
+                    f"● 連續拍照中：等待空桌基準（{len(samples)}/{need}）請保持桌面淨空"
+                )
                 self._push_status(
                     f"連續拍照：擷取空桌基準中…（{len(samples)}/{need}）請保持桌面淨空。"
                 )
@@ -1198,6 +1486,9 @@ class ReviewApp(tk.Tk):
         if action == CAPTURE:
             return self._perform_autocapture()
         if action == REARMED:
+            self._set_autocapture_state(
+                f"● 連續拍照中：已擷取 {len(self._autocapture_stills)} 張，請放上下一張"
+            )
             self._push_status(
                 f"連續拍照中｜已擷取 {len(self._autocapture_stills)} 張｜請放上下一張…"
             )
@@ -1210,6 +1501,7 @@ class ReviewApp(tk.Tk):
 
         index = self._camera_index
         self._stop_camera()
+        self._paint_busy("拍攝中…請勿移動")  # legible feedback during the synchronous capture
         result = None
         try:
             result = capture_still(index, min_sharpness=DEFAULT_MIN_SHARPNESS)
@@ -1217,6 +1509,10 @@ class ReviewApp(tk.Tk):
             self._push_status(f"連續拍照擷取失敗：{exc}")
         if result is None:
             self._autocapture_active = False
+            self._update_toolbar_states()
+            self._set_autocapture_state(
+                "⚠ 相機中斷，連拍已停 → 請按【完成辨識】辨識或【取消連拍】放棄", tone="warn"
+            )
             self._push_status(
                 f"連續拍照：相機中斷，已擷取 {len(self._autocapture_stills)} 張；"
                 "可按『完成辨識』辨識，或『取消連拍』放棄。"
@@ -1225,6 +1521,9 @@ class ReviewApp(tk.Tk):
         if not result.passed:
             outcome = self._autocapture_detector.note_failed_capture()
             if outcome == STALLED:
+                self._set_autocapture_state(
+                    "⏸ 已暫停：連續多張太模糊 → 請按【重設空桌基準】恢復", tone="warn"
+                )
                 self._push_status(
                     f"連續拍照：連續多張太模糊（清晰度 {result.sharpness:.0f}），已暫停；"
                     "請調整對焦/光線後按『重設空桌基準』。"
@@ -1260,6 +1559,9 @@ class ReviewApp(tk.Tk):
         self._autocapture_detector.mark_captured()
         self._play_shutter()
         self._flash_preview()
+        self._set_autocapture_state(
+            f"● 連續拍照中：已擷取 {len(self._autocapture_stills)} 張，請拿開換下一張"
+        )
         self._push_status(
             f"連續拍照中｜已擷取 {len(self._autocapture_stills)} 張｜請拿開換下一張…"
         )
@@ -1274,44 +1576,45 @@ class ReviewApp(tk.Tk):
 
         stills = list(self._autocapture_stills)
         if not self._autocapture_active and not stills:
+            self._push_status("尚未開始連續拍照；請先按『連續拍照』。")
             return
         self._stop_camera()
         self._autocapture_active = False
+        self._update_toolbar_states()
+        self._set_autocapture_state("")
         if not stills:
             messagebox.showwarning("連續拍照", "尚未擷取任何影像，沒有可辨識的內容。")
             return
         json_path = next_output_artifact_path(self._autocapture_output_dir, "scan-prepared.json")
-        modal = self._open_processing_modal("批次辨識中…")
-        try:
+        output_dir = self._autocapture_output_dir
+
+        def prepare(report, on_progress, should_cancel):
+            report("結束連拍並辨識中…啟動辨識服務 / 載入模型（首次較久）…")
             backend = self._resolve_recognition_backend(
                 json_path, scan_doc_preprocess_env_overrides()
             )
             template = _resolve_template("service_record.v1")
-
-            def _progress(done: int, total: int, name: str) -> None:
-                self._set_modal_message(modal, f"批次辨識中… {done}/{total}\n{name}")
-
             batch = prepare_records_from_images(
-                stills, self._autocapture_output_dir, template, backend, on_progress=_progress
+                stills, output_dir, template, backend,
+                on_progress=on_progress, should_cancel=should_cancel,
             )
             dump_batch(batch, json_path)
-        except Exception as exc:  # noqa: BLE001 - keep the stills for a retry
-            self._close_processing_modal(modal)
-            messagebox.showerror(
-                "批次辨識失敗", f"{exc}\n（已擷取的影像保留，可再次按『完成辨識』重試。）"
-            )
-            return
-        else:
-            self._close_processing_modal(modal)
-        records = list(JsonRecordSource(json_path).records())
-        if not records:
-            self._autocapture_stills = []
-            messagebox.showwarning("沒有可辨識的影像", "辨識結果沒有任何紀錄。")
-            return
-        self._autocapture_stills = []  # consumed
-        messagebox.showinfo("辨識完成", f"已辨識 {len(records)} 筆，進入逐張人工校正。")
-        self._set_loaded_records(records, json_path)
-        self._push_status(f"連續拍照完成：{len(records)} 筆，請逐筆確認後寫入。")
+            return list(JsonRecordSource(json_path).records()), json_path
+
+        def on_records(records, json_path_):
+            self._autocapture_stills = []  # consumed only on success; kept for retry otherwise
+            messagebox.showinfo("辨識完成", f"已辨識 {len(records)} 筆，進入逐張人工校正。")
+            self._set_loaded_records(records, json_path_)
+            self._push_status(f"連續拍照完成：{len(records)} 筆，請逐筆確認後寫入。")
+
+        self._run_recognition_async(
+            prepare,
+            message="結束連拍並辨識中…",
+            on_records=on_records,
+            empty_msg="辨識結果沒有任何紀錄，沒有可辨識的內容。",
+            on_empty=lambda: setattr(self, "_autocapture_stills", []),
+            error_title="批次辨識失敗",
+        )
 
     def _flash_preview(self) -> None:
         try:

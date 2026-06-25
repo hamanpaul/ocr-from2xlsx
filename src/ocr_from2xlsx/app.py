@@ -177,7 +177,10 @@ class ConfirmForm:
 
 
 class ReviewApp(tk.Tk):
-    _PREVIEW_PLACEHOLDER = "攝影機或圖片預覽區\n第一版可用 JSON 模擬連續掃描。"
+    _PREVIEW_PLACEHOLDER = (
+        "攝影機或圖片預覽區\n"
+        "請按『選擇攝影機』開始連續掃描，或用『匯入資料夾批次』/『匯入 JSON』載入既有資料。"
+    )
     _CAMERA_POLL_INTERVAL_MS = 33
     _CAMERA_RETRY_INTERVAL_MS = 100
     _CAMERA_FAILURE_LIMIT = 3
@@ -320,7 +323,9 @@ class ReviewApp(tk.Tk):
         )
 
         # Footer status bar: shows only the latest status; full history goes to the log file.
-        self._status_var = tk.StringVar(value="就緒")
+        self._status_var = tk.StringVar(
+            value="請先按『選擇模板 XLSX』，再按『選擇攝影機』開始掃描。"
+        )
         ttk.Label(self, textvariable=self._status_var, anchor="w", relief="sunken").pack(
             side=tk.BOTTOM, fill=tk.X, padx=8, pady=(0, 8)
         )
@@ -454,6 +459,7 @@ class ReviewApp(tk.Tk):
             messagebox.showwarning("擷取並辨識", "請先選擇可用的攝影機。")
             return
         should_restore_preview = restore_live_preview
+        self._paint_busy("擷取中…請稍候")  # legible feedback before the blocking capture freeze
         self._stop_camera()
         try:
             result = capture_still(
@@ -471,6 +477,8 @@ class ReviewApp(tk.Tk):
                     f"畫面太模糊（清晰度 {result.sharpness:.0f}）。請調整對焦/光線/距離後重試。",
                 )
                 return
+            self._play_shutter()  # same moment-of-capture cue as continuous mode
+            self._flash_preview()
             recognized = self._recognize_capture(result.frame)
             should_restore_preview = restore_live_preview and not recognized
         except CameraDependencyError as exc:
@@ -807,6 +815,16 @@ class ReviewApp(tk.Tk):
         if not decision or decision[0] == "none":
             self._clear_inactive_camera_selection()
             self._push_status("找不到攝影機")
+            # Loud, actionable guidance (the most common real cause is a busy camera): the
+            # operator opened Windows 相機 to "check" the webcam, which holds it exclusively.
+            messagebox.showwarning(
+                "找不到攝影機",
+                "找不到可用的攝影機。請依序確認：\n\n"
+                "1. 是否有其他程式正在使用鏡頭——特別是 Windows「相機」、Teams、Zoom。"
+                "鏡頭被占用時本程式也會「找不到」，請先關閉它們再試。\n"
+                "2. USB 連接是否正常（重新插拔一次）。\n"
+                "3. 目前僅掃描裝置編號 0–4。",
+            )
             return
         if decision[0] == "auto":
             self._start_camera(int(decision[1]))
@@ -1019,6 +1037,17 @@ class ReviewApp(tk.Tk):
                 pass
         self._append_status_log_file(message)
 
+    def _paint_busy(self, message: str) -> None:
+        # Show an in-progress message AND force it to paint BEFORE the main thread blocks on
+        # a synchronous capture/recognition — a plain status set does not repaint mid-freeze.
+        # _status_var is None on the headless test harness; skip the Tk pump there.
+        self._push_status(message)
+        if self._status_var is not None:
+            try:
+                self.update_idletasks()
+            except Exception:
+                pass
+
     def _append_status_log_file(self, message: str) -> None:
         path = self._status_log_path
         if path is None:
@@ -1118,6 +1147,7 @@ class ReviewApp(tk.Tk):
 
     def _cancel_continuous_capture(self) -> None:
         if not self._autocapture_active:
+            self._push_status("尚未開始連續拍照；沒有可取消的連拍。")
             return
         restore = self._has_live_camera_preview()
         self._stop_camera()
@@ -1210,6 +1240,7 @@ class ReviewApp(tk.Tk):
 
         index = self._camera_index
         self._stop_camera()
+        self._paint_busy("拍攝中…請勿移動")  # legible feedback during the synchronous capture
         result = None
         try:
             result = capture_still(index, min_sharpness=DEFAULT_MIN_SHARPNESS)
@@ -1274,6 +1305,7 @@ class ReviewApp(tk.Tk):
 
         stills = list(self._autocapture_stills)
         if not self._autocapture_active and not stills:
+            self._push_status("尚未開始連續拍照；請先按『連續拍照』。")
             return
         self._stop_camera()
         self._autocapture_active = False

@@ -202,7 +202,7 @@ def test_writer_failure_does_not_reserve_duplicate_key() -> None:
         def existing_duplicate_keys(self) -> set[tuple[str, str, str, str]]:
             return set()
 
-        def write_record(self, record) -> int:
+        def write_record(self, record, row: int | None = None) -> int:
             return 2
 
         def save(self) -> None:
@@ -218,3 +218,43 @@ def test_writer_failure_does_not_reserve_duplicate_key() -> None:
         session.accept_scan(record)
 
     assert record.duplicate_key() not in session.batch_duplicate_keys
+
+
+def test_accept_scan_overwrite_row_writes_to_that_row(tmp_path: Path) -> None:
+    from ocr_from2xlsx.constants import GENDER_LABELS
+
+    template = tmp_path / "template.xlsx"
+    working = tmp_path / "working.xlsx"
+    create_workbook_template(template)
+    session = ImportSession.start(template, working)
+    try:
+        first = make_record("a")
+        first.name = "王小明"
+        first.medical_record_no = "A1"
+        second = make_record("b")
+        second.name = "李大華"
+        second.medical_record_no = "B2"
+        r1 = session.accept_scan(first, human_confirmed=True).row_number
+        session.accept_scan(second, human_confirmed=True)
+
+        # Re-open the first record (same duplicate key) and overwrite its row with a fix.
+        corrected = make_record("a2")
+        corrected.name = "王小明"
+        corrected.medical_record_no = "A1"
+        corrected.gender = "male"
+        result = session.accept_scan(corrected, human_confirmed=True, overwrite_row=r1)
+
+        assert result.row_number == r1
+        assert result.status in {"written", "forced"}
+        # Re-using the same key on an overwrite must not be flagged as an in-batch dup.
+        assert "duplicate.in_batch" not in result.blockers
+    finally:
+        session.close()
+
+    wb = load_workbook(working)
+    try:
+        sheet = wb["個案總表"]
+        gender_col = _column_for_header(sheet, BASIC_COLUMN_BY_FIELD["gender"])
+        assert sheet.cell(row=r1, column=gender_col).value == GENDER_LABELS["male"]
+    finally:
+        wb.close()

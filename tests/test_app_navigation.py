@@ -26,11 +26,17 @@ class StubSession:
     def __init__(self, result: AcceptResult) -> None:
         self.result = result
         self.calls: list[tuple[str, bool, bool]] = []
+        self.overwrite_rows: list[int | None] = []
 
     def accept_scan(
-        self, record, force: bool = False, human_confirmed: bool = False
+        self,
+        record,
+        force: bool = False,
+        human_confirmed: bool = False,
+        overwrite_row: int | None = None,
     ) -> AcceptResult:
         self.calls.append((record.record_id, force, human_confirmed))
+        self.overwrite_rows.append(overwrite_row)
         if human_confirmed and self.result.status in {"forced", "written"}:
             record.ocr.warnings = [warning for warning in record.ocr.warnings if warning != "name.unconfirmed"]
         return self.result
@@ -62,24 +68,33 @@ class FakeListbox:
 
 
 class FakePreview:
+    # Mirrors the ImageViewer interface (#47): show_image (static/pannable),
+    # show_frame (live), show_placeholder, frame_region. Tracks .image/.text/.mode
+    # for the camera/preview assertions.
     def __init__(self) -> None:
         self.text = ""
-        self.state = "normal"
         self.image = None
+        self.mode = "placeholder"
+        self.reset_called = False
 
-    def configure(self, state: str | None = None) -> None:
-        if state is not None:
-            self.state = state
+    def reset_view(self) -> None:
+        self.reset_called = True
 
-    def delete(self, _start: str, _end: str) -> None:
-        self.text = ""
-        self.image = None
-
-    def insert(self, _index: str, value: str) -> None:
-        self.text += value
-
-    def image_create(self, _index: str, image) -> None:
+    def show_image(self, image) -> None:
+        self.mode = "static"
         self.image = image
+
+    def show_frame(self, image) -> None:
+        self.mode = "live"
+        self.image = image
+
+    def show_placeholder(self, text: str) -> None:
+        self.mode = "placeholder"
+        self.image = None
+        self.text = text
+
+    def frame_region(self, band) -> None:
+        return None
 
     def get(self, _start: str, _end: str) -> str:
         return self.text
@@ -106,6 +121,26 @@ class FakeConfirmForm:
             if key in self._fields:
                 collected[key] = self._fields[key].get()
         return collected
+
+    def flagged_keys(self) -> list[str]:
+        # NOTE: returns dict insertion order, not the real ConfirmForm's layout order.
+        # Fine for the headless tests here (single flag); assert multi-flag focus order
+        # against the real ConfirmForm (tests/test_confirm_form_keyboard.py) instead.
+        return list(getattr(self, "flagged", {}).keys())
+
+    def flagged_count(self) -> int:
+        return len(getattr(self, "flagged", {}))
+
+    def focus_first_flagged(self) -> str | None:
+        keys = self.flagged_keys()
+        self.focused = keys[0] if keys else None
+        return self.focused
+
+    def focus_next_flagged(self) -> str | None:
+        return None
+
+    def focus_prev_flagged(self) -> str | None:
+        return None
 
 
 class _FakePreviewCapture:
@@ -348,6 +383,8 @@ def app(monkeypatch: pytest.MonkeyPatch) -> ReviewApp:
     review_app.session = None
     review_app.editing = False
     review_app.written_indices = set()
+    review_app._written_rows = {}
+    review_app._blocked_indices = set()
     review_app.loaded_json_path = None
     review_app.correction_store_path = None
     review_app.layout = service_record_layout()
@@ -365,6 +402,9 @@ def app(monkeypatch: pytest.MonkeyPatch) -> ReviewApp:
     review_app._preview_rotation = 0
     review_app._status_log = []
     review_app._status_var = None
+    review_app._pending_var = None
+    review_app._progress_var = None
+    review_app._badge_var = None
     review_app._status_log_path = None
     review_app._recognition_threaded = False  # run recognition inline in the headless harness
     return review_app
@@ -433,7 +473,7 @@ def test_force_write_skips_when_already_written(
     )
 
     class FailingSession:
-        def accept_scan(self, record, force: bool = False) -> AcceptResult:
+        def accept_scan(self, record, force: bool = False, overwrite_row: int | None = None) -> AcceptResult:
             raise AssertionError("accept_scan should not be called")
 
         def close(self) -> None:
@@ -454,7 +494,7 @@ def test_next_record_browses_without_writing_current_record(app: ReviewApp) -> N
     app._show_record(records[0])
 
     class FailingSession:
-        def accept_scan(self, record, force: bool = False) -> AcceptResult:
+        def accept_scan(self, record, force: bool = False, overwrite_row: int | None = None) -> AcceptResult:
             raise AssertionError("accept_scan should not be called")
 
         def close(self) -> None:
@@ -476,7 +516,7 @@ def test_previous_record_browses_without_writing_current_record(app: ReviewApp) 
     app._show_record(records[1])
 
     class FailingSession:
-        def accept_scan(self, record, force: bool = False) -> AcceptResult:
+        def accept_scan(self, record, force: bool = False, overwrite_row: int | None = None) -> AcceptResult:
             raise AssertionError("accept_scan should not be called")
 
         def close(self) -> None:
@@ -495,7 +535,7 @@ def test_next_record_from_initial_index_shows_first_record(app: ReviewApp) -> No
     app.records = [record]
 
     class FailingSession:
-        def accept_scan(self, record, force: bool = False) -> AcceptResult:
+        def accept_scan(self, record, force: bool = False, overwrite_row: int | None = None) -> AcceptResult:
             raise AssertionError("accept_scan should not be called")
 
         def close(self) -> None:
@@ -1289,6 +1329,30 @@ def test_confirm_current_blocked_warns_user_with_blockers(
     assert any("service_date.invalid" in str(a) for a in shown)
 
 
+def test_confirm_blocks_empty_unconfirmed_name(
+    app: ReviewApp, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    record = make_record("scan-0001")
+    record.ocr.warnings = ["name.unconfirmed"]
+    app.records = [record]
+    app.current_index = 0
+    app.session = StubSession(
+        AcceptResult(record_id=record.record_id, status="written", row_number=2, blockers=[], warnings=[])
+    )
+    app._show_record(record)
+    app.fields["name"].set("")  # operator left the待確認 name blank
+    warned: list = []
+    monkeypatch.setattr("ocr_from2xlsx.app.messagebox.showwarning", lambda *a, **k: warned.append(a))
+
+    ReviewApp._confirm_current(app)
+
+    # Empty + unconfirmed must NOT be written or silently marked confirmed.
+    assert app.session.calls == []
+    assert app.written_indices == set()
+    assert record.ocr.warnings == ["name.unconfirmed"]
+    assert warned
+
+
 def test_force_write_failure_does_not_persist_unconfirmed_name(app: ReviewApp, tmp_path: Path) -> None:
     record = make_record("scan-0001")
     record.ocr.warnings = ["name.unconfirmed"]
@@ -1300,7 +1364,8 @@ def test_force_write_failure_does_not_persist_unconfirmed_name(app: ReviewApp, t
 
     class FailingSession:
         def accept_scan(
-            self, record, force: bool = False, human_confirmed: bool = False
+            self, record, force: bool = False, human_confirmed: bool = False,
+            overwrite_row: int | None = None,
         ) -> AcceptResult:
             raise OSError("disk full")
 

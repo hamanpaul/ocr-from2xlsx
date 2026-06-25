@@ -17,6 +17,11 @@ from ocr_from2xlsx.capture import (
 from ocr_from2xlsx.confirm_form import apply_form_state, record_to_form_state
 from ocr_from2xlsx.recognition.layout import SERVICE_RECORD_V1_LAYOUT
 from ocr_from2xlsx.recognition.review_flags import flagged_fields
+from ocr_from2xlsx.review_nav import (
+    next_flagged_key,
+    option_index_for_digit,
+    prev_flagged_key,
+)
 from ocr_from2xlsx.correction_store import default_correction_store_path
 from ocr_from2xlsx.domain import Record
 from ocr_from2xlsx.form_layout import FormLayout, service_record_layout
@@ -37,15 +42,58 @@ def _wheel_scroll_units(delta: int) -> int:
     return units
 
 
+class _Tooltip:
+    """A minimal hover tooltip: a borderless Toplevel shown under ``widget`` on <Enter>
+    and destroyed on <Leave>. Used to surface keyboard accelerators / button guidance in
+    the GUI without baking them into button labels (which tests assert on)."""
+
+    def __init__(self, widget: tk.Misc, text: str) -> None:
+        self.widget = widget
+        self.text = text
+        self._tip: tk.Toplevel | None = None
+        widget.bind("<Enter>", self._show, add="+")
+        widget.bind("<Leave>", self._hide, add="+")
+
+    def _show(self, _event: "tk.Event | None" = None) -> None:
+        if self._tip is not None or not self.text:
+            return
+        try:
+            x = self.widget.winfo_rootx() + 12
+            y = self.widget.winfo_rooty() + self.widget.winfo_height() + 4
+            tip = tk.Toplevel(self.widget)
+            tip.wm_overrideredirect(True)
+            tip.wm_geometry(f"+{x}+{y}")
+            tk.Label(
+                tip, text=self.text, background="#ffffe0", relief="solid", borderwidth=1,
+                justify="left", padx=6, pady=3,
+            ).pack()
+            self._tip = tip
+        except Exception:
+            self._tip = None
+
+    def _hide(self, _event: "tk.Event | None" = None) -> None:
+        tip = self._tip
+        self._tip = None
+        if tip is not None:
+            try:
+                tip.destroy()
+            except Exception:
+                pass
+
+
 class ConfirmForm:
     def __init__(
         self,
         parent: tk.Misc,
         layout: FormLayout,
         on_change: Callable[[], None] | None = None,
+        on_field_focused: Callable[[tk.Misc], None] | None = None,
+        on_field_region: Callable[[str], None] | None = None,
     ) -> None:
         self.layout = layout
         self._on_change = on_change
+        self._on_field_focused = on_field_focused
+        self._on_field_region = on_field_region
         self.frame = ttk.Frame(parent)
         self.text_fields: dict[str, tk.StringVar] = {}
         self.single_choice_fields: dict[str, tk.StringVar] = {}
@@ -55,10 +103,31 @@ class ConfirmForm:
         # low-confidence / unfilled fields for the reviewer.
         self._field_labels: dict[str, ttk.Label] = {}
         self._field_titles: dict[str, str] = {}
+        # Keyboard-first review surface (#42/#43): the ordered list of navigable
+        # fields (by record_path), the focus widget per field, the current flagged
+        # set + last-focused field for cycling, and per-field digit-select handlers.
+        self._nav_order: list[str] = []
+        self._focus_widgets: dict[str, tk.Misc] = {}
+        self._flagged: dict[str, str] = {}
+        self._current_focus: str | None = None
+        self._single_choice_select_by_digit: dict[str, Callable[[str], bool]] = {}
+        # Active-field emphasis: the focused field's title goes bold so the operator can
+        # see which field is active while Ctrl+Tab-cycling, a separate channel from the
+        # flagged/de-emphasis foreground colors so the two never fight.
+        self._active_label_path: str | None = None
+        self._label_base_font = None
+        self._label_bold_font = None
         self.frame.columnconfigure(0, weight=1)
 
         for section_row, section in enumerate(layout.sections):
-            group = ttk.LabelFrame(self.frame, text=f"{section.id} {section.title}")
+            # Keep the A/B/C prefixes (they match the paper form) but don't leak an internal
+            # lowercase id like "top" into the operator UI.
+            prefix = (
+                f"{section.id} "
+                if section.id and section.id.isalpha() and section.id.isupper() and len(section.id) <= 2
+                else ""
+            )
+            group = ttk.LabelFrame(self.frame, text=f"{prefix}{section.title}")
             group.grid(row=section_row, column=0, sticky="ew", padx=4, pady=4)
             group.columnconfigure(1, weight=1)
             for field_row, field in enumerate(section.fields):
@@ -75,6 +144,9 @@ class ConfirmForm:
                     )
                     entry.bind("<Key>", self._mark_changed)
                     self.text_fields[field.key] = var
+                    if field.record_path:
+                        self._focus_widgets[field.record_path] = entry
+                        self._nav_order.append(field.record_path)
                 elif field.kind == "single_choice":
                     # Single-choice rendered as mutually-exclusive checkboxes (per the
                     # UI request: no radios, no "清除" button). A StringVar holds the
@@ -85,6 +157,8 @@ class ConfirmForm:
                     option_vars: dict[str, tk.BooleanVar] = {}
                     options = ttk.Frame(group)
                     options.grid(row=field_row, column=1, sticky="w", pady=3)
+                    for _col in range(4):  # even, aligned option columns for ragged grids
+                        options.columnconfigure(_col, uniform="opt", minsize=120)
 
                     def _select(code: str, _var=var, _opts=option_vars) -> None:
                         chosen = "" if _var.get() == code else code
@@ -93,43 +167,87 @@ class ConfirmForm:
                             option_var.set(option_code == chosen)
                         self._notify_change()
 
+                    option_codes = [option.code for option in field.options]
+                    option_checkboxes: list[ttk.Checkbutton] = []
                     for option_index, option in enumerate(field.options):
                         bvar = tk.BooleanVar(value=False)
                         option_vars[option.code] = bvar
-                        ttk.Checkbutton(
+                        checkbox = ttk.Checkbutton(
                             options,
                             text=option.label,
                             variable=bvar,
                             command=lambda code=option.code: _select(code),
-                        ).grid(
+                        )
+                        checkbox.grid(
                             row=option_index // 4,
                             column=option_index % 4,
                             sticky="w",
                             padx=(0, 8),
                             pady=2,
                         )
+                        option_checkboxes.append(checkbox)
+
+                    def _digit_select(char: str, _codes=option_codes, _select=_select) -> bool:
+                        index = option_index_for_digit(char, len(_codes))
+                        if index is None:
+                            return False
+                        _select(_codes[index])
+                        return True
+
+                    # Number-key option entry is bound ONLY on this field's option
+                    # checkboxes, so digits never get stolen from text entries. Bind on
+                    # the checkboxes we just built (not winfo_children()) so the digit→
+                    # option index never drifts if the options frame gains other widgets.
+                    for checkbox in option_checkboxes:
+                        checkbox.bind(
+                            "<Key>",
+                            lambda event, handler=_digit_select: (
+                                "break" if handler(event.char) else None
+                            ),
+                        )
                     self.single_choice_fields[field.key] = var
                     self._single_choice_option_vars[field.key] = option_vars
+                    self._single_choice_select_by_digit[field.key] = _digit_select
+                    if field.record_path and option_checkboxes:
+                        self._focus_widgets[field.record_path] = option_checkboxes[0]
+                        self._nav_order.append(field.record_path)
                 elif field.kind == "multi_choice":
                     options = ttk.Frame(group)
                     options.grid(row=field_row, column=1, sticky="w", pady=3)
+                    for _col in range(4):  # even, aligned option columns for ragged grids
+                        options.columnconfigure(_col, uniform="opt", minsize=120)
                     code_vars: dict[str, tk.BooleanVar] = {}
+                    first_checkbox = None
                     for option_index, option in enumerate(field.options):
                         bvar = tk.BooleanVar(value=False)
-                        ttk.Checkbutton(
+                        checkbox = ttk.Checkbutton(
                             options,
                             text=option.label,
                             variable=bvar,
                             command=self._notify_change,
-                        ).grid(
+                        )
+                        checkbox.grid(
                             row=option_index // 4,
                             column=option_index % 4,
                             sticky="w",
                             padx=(0, 8),
                             pady=2,
                         )
+                        # Explicit space-toggle (deterministic + testable); "break"
+                        # suppresses the native toggle so the option flips exactly once.
+                        checkbox.bind(
+                            "<space>",
+                            lambda event, key=field.key, code=option.code: (
+                                self.toggle_multi_choice_option(key, code) or "break"
+                            ),
+                        )
                         code_vars[option.code] = bvar
+                        if first_checkbox is None:
+                            first_checkbox = checkbox
                     self.multi_choice_fields[field.key] = code_vars
+                    if field.record_path and first_checkbox is not None:
+                        self._focus_widgets[field.record_path] = first_checkbox
+                        self._nav_order.append(field.record_path)
                 else:
                     raise TypeError(f"Unsupported field kind: {field.kind!r}")
 
@@ -142,13 +260,118 @@ class ConfirmForm:
 
     def set_flagged_fields(self, flagged: dict[str, str]) -> None:
         """Mark fields needing the reviewer's attention (low-confidence / empty /
-        unconfirmed) and clear marks on the rest. ``flagged`` maps record_path -> reason."""
+        unconfirmed) and de-emphasize the rest. ``flagged`` maps record_path -> reason.
+        When at least one field is flagged, high-confidence fields are greyed so the
+        flagged ones stand out (#43)."""
+        self._flagged = dict(flagged)
+        any_flagged = bool(flagged)
         for record_path, label in self._field_labels.items():
             title = self._field_titles[record_path]
             if record_path in flagged:
                 label.configure(text=f"⚠ {title}", foreground="#b00020")
+            elif any_flagged:
+                label.configure(text=title, foreground="#9aa0a6")
             else:
                 label.configure(text=title, foreground="")
+
+    def flagged_keys(self) -> list[str]:
+        """Flagged fields in layout (navigable) order."""
+        return [key for key in self._nav_order if key in self._flagged]
+
+    def flagged_count(self) -> int:
+        # Count only navigable flagged fields: flagged_fields() can fall back to a raw
+        # field-id key that is not in _nav_order, and the "待確認 N" badge must match the
+        # fields the reviewer can actually jump to (flagged_keys filters by _nav_order).
+        return len(self.flagged_keys())
+
+    def _focus(self, record_path: str | None) -> str | None:
+        if record_path is None:
+            return None
+        widget = self._focus_widgets.get(record_path)
+        if widget is None:
+            return None
+        self._current_focus = record_path
+        self._set_active_label(record_path)
+        try:
+            widget.focus_set()
+        except Exception:
+            pass
+        if self._on_field_focused is not None:
+            try:
+                self._on_field_focused(widget)
+            except Exception:
+                pass
+        if self._on_field_region is not None:
+            try:
+                self._on_field_region(record_path)
+            except Exception:
+                pass
+        return record_path
+
+    def _ensure_label_fonts(self, label: "ttk.Label | None") -> None:
+        if self._label_bold_font is not None or label is None:
+            return
+        import tkinter.font as tkfont
+
+        try:
+            base = tkfont.Font(font=label.cget("font"))
+            bold = base.copy()
+            bold.configure(weight="bold")
+            self._label_base_font = base
+            self._label_bold_font = bold
+        except Exception:
+            self._label_base_font = None
+            self._label_bold_font = None
+
+    def _set_active_label(self, record_path: str | None) -> None:
+        prev = self._active_label_path
+        if prev == record_path:
+            return
+        self._ensure_label_fonts(
+            self._field_labels.get(record_path) or self._field_labels.get(prev or "")
+        )
+        if self._label_bold_font is None:
+            self._active_label_path = record_path
+            return
+        prev_label = self._field_labels.get(prev or "")
+        if prev_label is not None:
+            try:
+                prev_label.configure(font=self._label_base_font)
+            except Exception:
+                pass
+        new_label = self._field_labels.get(record_path or "")
+        if new_label is not None:
+            try:
+                new_label.configure(font=self._label_bold_font)
+            except Exception:
+                pass
+        self._active_label_path = record_path
+
+    def clear_active_label(self) -> None:
+        """Revert any active-field bold (used when a record shows nothing focused, e.g. a
+        clean 0-flagged record) so a stale bold title never lingers across records."""
+        self._set_active_label(None)
+
+    def focus_first_flagged(self) -> str | None:
+        """Focus the first flagged field, or the first editable field if none are
+        flagged. Returns the focused field's record_path (or ``None``)."""
+        flagged = self.flagged_keys()
+        target = flagged[0] if flagged else (self._nav_order[0] if self._nav_order else None)
+        return self._focus(target)
+
+    def focus_next_flagged(self) -> str | None:
+        return self._focus(next_flagged_key(self._nav_order, self._flagged, self._current_focus))
+
+    def focus_prev_flagged(self) -> str | None:
+        return self._focus(prev_flagged_key(self._nav_order, self._flagged, self._current_focus))
+
+    def toggle_multi_choice_option(self, field_key: str, code: str) -> None:
+        """Flip one multi-choice option (the spacebar action) and notify change."""
+        bvar = self.multi_choice_fields.get(field_key, {}).get(code)
+        if bvar is None:
+            return
+        bvar.set(not bvar.get())
+        self._notify_change()
 
     def prefill(self, state: dict[str, object]) -> None:
         for key, var in self.text_fields.items():
@@ -177,11 +400,168 @@ class ConfirmForm:
         return state
 
 
+class ImageViewer:
+    """A Canvas-based image viewer for the review pane (#47): drag-pan + integer-step
+    wheel-zoom on a static source image (zoom remembered per session), fit-to-pane for
+    live camera frames, and a text placeholder. The transform math is pure
+    (image_viewer.py); this widget holds Tk state and renders. Zoom magnifies via
+    ``PhotoImage.zoom`` (integer factors; no PIL dependency, matching the repo)."""
+
+    def __init__(self, parent: tk.Misc) -> None:
+        from ocr_from2xlsx.image_viewer import MIN_ZOOM
+
+        self.canvas = tk.Canvas(parent, highlightthickness=0, background="#202020")
+        self.mode = "placeholder"
+        self.zoom = MIN_ZOOM
+        self.origin = [0.0, 0.0]
+        self._placeholder = ""
+        self._image: tk.PhotoImage | None = None
+        self._display_image: tk.PhotoImage | None = None
+        self._image_size = (0, 0)
+        self._view_size = (1, 1)
+        self._drag_anchor: tuple[int, int] | None = None
+        self.canvas.bind("<MouseWheel>", self._on_wheel)
+        self.canvas.bind("<ButtonPress-1>", self._on_drag_start)
+        self.canvas.bind("<B1-Motion>", self._on_drag_move)
+
+    def set_zoom(self, zoom: float) -> None:
+        from ocr_from2xlsx.image_viewer import clamp_zoom
+
+        self.zoom = clamp_zoom(zoom)
+        # Re-clamp the origin to the new zoom (a smaller zoom has a larger valid window),
+        # then redraw — so zooming out from a panned position can't leave a dark edge gap.
+        self.pan_to(self.origin[0], self.origin[1])
+
+    def pan_to(self, origin_x: float, origin_y: float) -> None:
+        from ocr_from2xlsx.image_viewer import clamp_origin
+
+        image_w, image_h = self._image_size
+        view_w, view_h = self._view_size
+        self.origin = [
+            clamp_origin(origin_x, image_w, view_w, self.zoom),
+            clamp_origin(origin_y, image_h, view_h, self.zoom),
+        ]
+        self._redraw()
+
+    def show_image(self, image: "tk.PhotoImage") -> None:
+        self.mode = "static"
+        self._image = image
+        self._image_size = (image.width(), image.height())
+        self._refresh_view_size()
+        self.pan_to(self.origin[0], self.origin[1])  # re-clamp + redraw at session zoom
+
+    def show_frame(self, image: "tk.PhotoImage") -> None:
+        self.mode = "live"
+        self._image = image
+        self._image_size = (image.width(), image.height())
+        self._redraw()
+
+    def show_placeholder(self, text: str) -> None:
+        self.mode = "placeholder"
+        self._image = None
+        self._display_image = None
+        self._placeholder = text
+        try:
+            self.canvas.delete("all")
+            self.canvas.create_text(8, 8, anchor="nw", fill="#dddddd", text=text)
+        except tk.TclError:
+            pass
+
+    def get(self, _start: str = "1.0", _end: str = "end") -> str:
+        # Mirrors the old tk.Text preview's text accessor for tests / placeholder checks.
+        return self._placeholder if self.mode == "placeholder" else ""
+
+    def reset_view(self) -> None:
+        """Fit the whole source image (zoom 1, origin top-left) — the neutral overview a
+        clean record returns to so the operator isn't left zoomed into a prior field."""
+        from ocr_from2xlsx.image_viewer import MIN_ZOOM
+
+        if self.mode != "static" or self._image is None:
+            return
+        self.zoom = MIN_ZOOM
+        self._refresh_view_size()
+        self.pan_to(0.0, 0.0)
+
+    def frame_region(self, band: tuple[float, float, float, float]) -> None:
+        from ocr_from2xlsx.image_viewer import clamp_zoom
+
+        if self.mode != "static" or self._image is None:
+            return
+        image_w, image_h = self._image_size
+        self._refresh_view_size()
+        view_w, view_h = self._view_size
+        x0, y0, x1, y1 = band
+        band_w = max(1.0, (x1 - x0) * image_w)
+        band_h = max(1.0, (y1 - y0) * image_h)
+        # Snap to an integer zoom (floor) so it equals the integer render factor in
+        # _redraw — otherwise clamp_origin's window (view/zoom) disagrees with the
+        # rendered factor and a dark gap shows past the image edge.
+        self.zoom = clamp_zoom(float(int(min(view_w / band_w, view_h / band_h))))
+        cx = (x0 + x1) / 2 * image_w
+        cy = (y0 + y1) / 2 * image_h
+        self.pan_to(cx - view_w / self.zoom / 2, cy - view_h / self.zoom / 2)
+
+    def _refresh_view_size(self) -> None:
+        try:
+            self.canvas.update_idletasks()
+            self._view_size = (max(1, self.canvas.winfo_width()), max(1, self.canvas.winfo_height()))
+        except tk.TclError:
+            pass
+
+    def _on_wheel(self, event: "tk.Event") -> str:
+        from ocr_from2xlsx.image_viewer import anchored_origin, clamp_zoom
+
+        if self.mode != "static" or self._image is None:
+            return "break"
+        old = self.zoom
+        new = clamp_zoom(old + (1.0 if event.delta > 0 else -1.0))
+        if new != old:
+            ox = anchored_origin(self.origin[0], event.x, old, new)
+            oy = anchored_origin(self.origin[1], event.y, old, new)
+            self.zoom = new
+            self.pan_to(ox, oy)
+        return "break"
+
+    def _on_drag_start(self, event: "tk.Event") -> None:
+        self._drag_anchor = (event.x, event.y)
+
+    def _on_drag_move(self, event: "tk.Event") -> str:
+        if self.mode != "static" or self._drag_anchor is None:
+            return "break"
+        dx = (event.x - self._drag_anchor[0]) / self.zoom
+        dy = (event.y - self._drag_anchor[1]) / self.zoom
+        self._drag_anchor = (event.x, event.y)
+        self.pan_to(self.origin[0] - dx, self.origin[1] - dy)
+        return "break"
+
+    def _redraw(self) -> None:
+        if self._image is None:
+            return
+        try:
+            self.canvas.delete("all")
+            if self.mode == "live":
+                self._display_image = self._image
+                self.canvas.create_image(0, 0, anchor="nw", image=self._image)
+                return
+            factor = max(1, int(round(self.zoom)))
+            display = self._image if factor == 1 else self._image.zoom(factor, factor)
+            self._display_image = display  # hold a reference so Tk does not GC it
+            self.canvas.create_image(
+                int(-self.origin[0] * factor),
+                int(-self.origin[1] * factor),
+                anchor="nw",
+                image=display,
+            )
+        except tk.TclError:
+            pass
+
+
 class ReviewApp(tk.Tk):
     _PREVIEW_PLACEHOLDER = (
         "攝影機或圖片預覽區\n"
         "請按『選擇攝影機』開始連續掃描，或用『匯入資料夾批次』/『匯入 JSON』載入既有資料。"
     )
+    _ROSTER_EMPTY_HINT = "（無建議名單）"
     _CAMERA_POLL_INTERVAL_MS = 33
     _CAMERA_RETRY_INTERVAL_MS = 100
     _CAMERA_FAILURE_LIMIT = 3
@@ -212,6 +592,12 @@ class ReviewApp(tk.Tk):
     _autocapture_state_var: object | None = None
     _autocapture_banner: object | None = None
     _rotate_btn: object | None = None
+    # Name-correction aids (#46) + colored record badge (#45); class-level defaults so
+    # headless ReviewApp.__new__ instances (no Tk) resolve them via getattr without
+    # tripping the tk.Tk.__getattr__ recursion.
+    _name_crop_label: object | None = None
+    _roster_listbox: object | None = None
+    _badge_label: object | None = None
 
     @staticmethod
     def _runtime_base_dir() -> Path:
@@ -262,6 +648,11 @@ class ReviewApp(tk.Tk):
         self.correction_store_path: Path | None = None
         self.editing = False
         self.written_indices: set[int] = set()
+        self._written_rows: dict[int, int] = {}
+        self._blocked_indices: set[int] = set()
+        self._pending_count: int = 0
+        self._progress_text: str = ""
+        self._badge_state: str = "pending"
         self._preview_image: tk.PhotoImage | None = None
         self._camera_capture = None
         self._camera_after_id: str | None = None
@@ -337,6 +728,21 @@ class ReviewApp(tk.Tk):
         self._rotate_btn = ttk.Button(toolbar, command=self._rotate_preview)
         self._rotate_btn.pack(side=tk.RIGHT, padx=4)
         self._update_rotate_button()  # show the carried-over rotation at launch
+        # Discoverability (#42/#48): a persistent 快捷鍵 cheat-sheet button (right edge) plus
+        # hover tooltips that clarify 確認 vs 強制寫入, carried over from the correction-UX pass.
+        ttk.Button(toolbar, text="快捷鍵", command=self._show_shortcut_help).pack(
+            side=tk.RIGHT, padx=4
+        )
+        button_tooltips = {
+            "confirm": "Enter / Ctrl+Enter：驗證必填欄位後寫入；缺漏會被擋下",
+            "force": "F2 / Ctrl+Shift+Enter：跳過必填檢查強制寫入，可能寫入不完整資料",
+            "prev_record": "PgUp / Ctrl+←：上一筆",
+            "next_record": "PgDn / Ctrl+→：下一筆",
+        }
+        for key, hint in button_tooltips.items():
+            button = self._toolbar_buttons.get(key)
+            if button is not None:
+                _Tooltip(button, hint)
 
         # Persistent continuous-capture state banner — separate from the one-shot footer so
         # rotate/zoom/retry messages can't clobber the operator's "which state am I in?" cue.
@@ -348,34 +754,81 @@ class ReviewApp(tk.Tk):
         )
         self._autocapture_banner.pack(side=tk.TOP, fill=tk.X, padx=8)
 
-        # Footer status bar: shows only the latest status; full history goes to the log file.
+        # Footer: latest status on the left; batch/record progress + badge on the right (#45).
+        footer = ttk.Frame(self)
+        footer.pack(side=tk.BOTTOM, fill=tk.X, padx=8, pady=(0, 8))
         self._status_var = tk.StringVar(
             value="請先按『選擇模板 XLSX』，再按『選擇攝影機』開始掃描。"
         )
-        ttk.Label(self, textvariable=self._status_var, anchor="w", relief="sunken").pack(
-            side=tk.BOTTOM, fill=tk.X, padx=8, pady=(0, 8)
+        ttk.Label(footer, textvariable=self._status_var, anchor="w", relief="sunken").pack(
+            side=tk.LEFT, fill=tk.X, expand=True
         )
+        # Right-side group, packed right-to-left so the visual L→R is: progress (batch) |
+        # badge (record) | 待確認 (record). A separator divides batch- from record-scope (#45).
+        # Exception-first review (#43): how many fields on this record still need a human.
+        self._pending_var = tk.StringVar(value="")
+        ttk.Label(footer, textvariable=self._pending_var, anchor="e", relief="sunken").pack(
+            side=tk.RIGHT, padx=(8, 0)
+        )
+        # Colored per-record status badge (#45): 已寫入/被擋下/待處理 read at a glance via
+        # background color, not identical grey text. tk.Label honors bg across themes.
+        self._badge_var = tk.StringVar(value="")
+        self._badge_label = tk.Label(
+            footer, textvariable=self._badge_var, anchor="e", relief="sunken", padx=6
+        )
+        self._badge_label.pack(side=tk.RIGHT, padx=(8, 0))
+        # Persistent batch progress baseline (#45): always show a count, even before load.
+        self._progress_var = tk.StringVar(value="尚未載入資料")
+        ttk.Label(footer, textvariable=self._progress_var, anchor="e", relief="sunken").pack(
+            side=tk.RIGHT, padx=(8, 0)
+        )
+        ttk.Separator(footer, orient=tk.VERTICAL).pack(side=tk.RIGHT, fill=tk.Y, padx=4)
 
         # Two maximized panes: webcam/source preview on the left, the review form on the right.
         body = ttk.PanedWindow(self, orient=tk.HORIZONTAL)
         body.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=8, pady=8)
 
-        self.preview = tk.Text(body, width=60, wrap="word")
+        self.preview = ImageViewer(body)
         self._show_placeholder_preview()
-        body.add(self.preview, weight=1)
+        body.add(self.preview.canvas, weight=1)
 
         form = ttk.Frame(body)
         body.add(form, weight=1)
         form.columnconfigure(0, weight=1)
-        form.rowconfigure(0, weight=1)
+        form.rowconfigure(1, weight=1)
+
+        # Name-correction aids (#46): a zoomed name crop + selectable roster candidates,
+        # pinned above the scrollable form (the most-corrected field gets the most help).
+        name_aids = ttk.LabelFrame(form, text="姓名校正")
+        name_aids.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 6))
+        name_aids.columnconfigure(1, weight=1)
+        self._name_crop_label = ttk.Label(name_aids, text="（無姓名裁圖）", anchor="center")
+        self._name_crop_label.grid(row=0, column=0, padx=6, pady=4, sticky="w")
+        self._roster_listbox = tk.Listbox(name_aids, height=4, exportselection=False)
+        self._roster_listbox.grid(row=0, column=1, padx=6, pady=4, sticky="ew")
+        # Browse vs. commit (#46): arrow keys / single clicks only move the highlight;
+        # Enter or double-click commits the candidate. Avoids overwriting the name field
+        # the instant focus lands on the list or an arrow is pressed.
+        self._roster_listbox.bind("<Return>", self._on_roster_commit)
+        self._roster_listbox.bind("<Double-Button-1>", self._on_roster_commit)
+        # Esc bails out of the list back to the name field (without committing), so focus is
+        # never trapped on the listbox where the next Enter would re-apply a candidate.
+        self._roster_listbox.bind("<Escape>", self._on_roster_escape)
 
         canvas = tk.Canvas(form, highlightthickness=0)
-        canvas.grid(row=0, column=0, sticky="nsew")
+        canvas.grid(row=1, column=0, sticky="nsew")
         scrollbar = ttk.Scrollbar(form, orient="vertical", command=canvas.yview)
-        scrollbar.grid(row=0, column=1, sticky="ns")
+        scrollbar.grid(row=1, column=1, sticky="ns")
         canvas.configure(yscrollcommand=scrollbar.set)
 
-        self.confirm_form = ConfirmForm(canvas, self.layout, on_change=self._mark_editing)
+        self._form_canvas = canvas
+        self.confirm_form = ConfirmForm(
+            canvas,
+            self.layout,
+            on_change=self._mark_editing,
+            on_field_focused=self._scroll_form_widget_into_view,
+            on_field_region=self._frame_field_region,
+        )
         canvas_window = canvas.create_window((0, 0), window=self.confirm_form.frame, anchor="nw")
         self.confirm_form.frame.bind(
             "<Configure>",
@@ -405,6 +858,323 @@ class ReviewApp(tk.Tk):
         }
 
         self._init_camera()
+        self._bind_review_shortcuts()
+
+    def _show_shortcut_help(self) -> None:
+        messagebox.showinfo(
+            "鍵盤快捷鍵",
+            "Enter / Ctrl+Enter　確認並寫入\n"
+            "F2 / Ctrl+Shift+Enter　強制寫入\n"
+            "PgDn / PgUp（或 Ctrl+→ / Ctrl+←）　下一筆 / 上一筆\n"
+            "Esc　取消本筆編輯\n"
+            "Ctrl+Tab / Ctrl+Shift+Tab　跳下一個 / 上一個待確認欄位\n"
+            "數字鍵 1–N　選擇單選欄選項；空白鍵　切換多選欄\n"
+            "F8　跳到姓名候選清單（方向鍵選、Enter 套用）",
+        )
+
+    def _bind_review_shortcuts(self) -> None:
+        # Keyboard-first review (#42): window-level shortcuts fire over any focused
+        # field. Single-line ttk.Entry does not consume <Return>, so confirm-on-Enter
+        # is safe; number-key option entry is bound per single-choice field, not here.
+        self.bind("<Return>", self._on_confirm_key)
+        self.bind("<KP_Enter>", self._on_confirm_key)
+        self.bind("<Control-Return>", self._on_confirm_key)
+        self.bind("<F2>", self._on_force_key)
+        self.bind("<Control-Shift-Return>", self._on_force_key)
+        self.bind("<Next>", self._on_next_record_key)        # PgDn
+        self.bind("<Prior>", self._on_prev_record_key)       # PgUp
+        self.bind("<Control-Right>", self._on_next_record_key)
+        self.bind("<Control-Left>", self._on_prev_record_key)
+        self.bind("<Escape>", self._on_cancel_key)
+        self.bind("<Control-Tab>", self._on_next_flagged_key)
+        # NOTE: Ctrl+Shift+Tab may be intercepted by the OS tab-switcher on macOS/GNOME;
+        # the app targets Windows, where it reaches Tk.
+        self.bind("<Control-Shift-Tab>", self._on_prev_flagged_key)
+        # Jump into the name roster (#46) so candidates are reachable without the mouse.
+        self.bind("<F8>", self._on_focus_roster_key)
+
+    def _on_confirm_key(self, _event: "tk.Event | None" = None) -> str:
+        self._confirm_current()
+        return "break"
+
+    def _on_force_key(self, _event: "tk.Event | None" = None) -> str:
+        self._force_write()
+        return "break"
+
+    def _on_next_record_key(self, _event: "tk.Event | None" = None) -> str:
+        self._next_record()
+        return "break"
+
+    def _on_prev_record_key(self, _event: "tk.Event | None" = None) -> str:
+        self._previous_record()
+        return "break"
+
+    def _on_cancel_key(self, _event: "tk.Event | None" = None) -> str:
+        self._cancel_edit()
+        return "break"
+
+    def _on_next_flagged_key(self, _event: "tk.Event | None" = None) -> str:
+        self.confirm_form.focus_next_flagged()
+        return "break"
+
+    def _on_prev_flagged_key(self, _event: "tk.Event | None" = None) -> str:
+        self.confirm_form.focus_prev_flagged()
+        return "break"
+
+    def _cancel_edit(self) -> None:
+        # Esc discards in-form edits. Restore values in place rather than repainting the
+        # whole record (image re-frame, roster rebuild, focus jump): a one-field undo
+        # should not yank the operator out of their current context.
+        if self.current_index < 0 or self.current_index >= len(self.records):
+            self.editing = False
+            return
+        if not self.editing:
+            # Nothing to undo; use Esc as a safe "recenter" to the first field needing
+            # attention (no-op on a clean record) rather than a dead key (#43).
+            if self.confirm_form.flagged_count() > 0:
+                self.confirm_form.focus_first_flagged()
+            return
+        record = self.records[self.current_index]
+        self.confirm_form.prefill(record_to_form_state(self.layout, record))
+        self.confirm_form.set_flagged_fields(
+            flagged_fields(list(record.ocr.warnings), SERVICE_RECORD_V1_LAYOUT)
+        )
+        self._update_pending_count()
+        self.editing = False
+        self._push_status("已還原本筆")
+
+    def _frame_field_region(self, record_path: str) -> None:
+        # On field focus, frame the source-image viewer to that field's section band (#47).
+        from ocr_from2xlsx.image_viewer import field_region
+
+        viewer = getattr(self, "preview", None)
+        if viewer is None or getattr(viewer, "mode", None) != "static":
+            return
+        band = field_region(record_path)
+        if band is not None:
+            try:
+                viewer.frame_region(band)
+            except Exception:
+                pass
+
+    def _scroll_form_widget_into_view(self, widget: "tk.Misc") -> None:
+        canvas = getattr(self, "_form_canvas", None)
+        if canvas is None:
+            return
+        try:
+            canvas.update_idletasks()
+            offset = widget.winfo_rooty() - self.confirm_form.frame.winfo_rooty()
+            total = self.confirm_form.frame.winfo_height()
+            if total > 0:
+                canvas.yview_moveto(max(0.0, min(1.0, offset / total)))
+        except tk.TclError:
+            pass
+
+    def _update_pending_count(self) -> None:
+        count = self.confirm_form.flagged_count()
+        self._pending_count = count
+        pending_var = getattr(self, "_pending_var", None)
+        if pending_var is not None:
+            try:
+                pending_var.set(f"待確認 {count}（Ctrl+Tab 跳轉）" if count else "本筆已確認 ✓")
+            except Exception:
+                pass
+
+    def _update_progress(self) -> None:
+        total = len(self.records)
+        if total == 0:
+            text = "尚未載入資料"
+        else:
+            written = len(self.written_indices)
+            text = f"已寫入 {written} / 共 {total}"
+            row = getattr(self, "_written_rows", {}).get(self.current_index)
+            if row is not None:
+                text += f"　第 {row} 列"
+        self._progress_text = text
+        progress_var = getattr(self, "_progress_var", None)
+        if progress_var is not None:
+            try:
+                progress_var.set(text)
+            except Exception:
+                pass
+
+    def _update_badge(self) -> None:
+        from ocr_from2xlsx.review_workflow import record_badge_state
+
+        # No current record (cold start / just-picked template / empty load): blank the badge
+        # rather than show a misleading 待處理 chip or a stale colored one from a prior batch.
+        if not self.records or not (0 <= self.current_index < len(self.records)):
+            self._badge_state = "pending"
+            badge_var = getattr(self, "_badge_var", None)
+            if badge_var is not None:
+                try:
+                    badge_var.set("")
+                except Exception:
+                    pass
+            badge_label = getattr(self, "_badge_label", None)
+            if badge_label is not None:
+                try:
+                    badge_label.configure(background="#e8eaed", foreground="#202124")
+                except Exception:
+                    pass
+            return
+
+        state = record_badge_state(
+            self.current_index, self.written_indices, getattr(self, "_blocked_indices", set())
+        )
+        self._badge_state = state
+        # (text, background, foreground) per state so 成功/被擋下/待處理 differ at a glance.
+        styles = {
+            "written": ("✓ 已寫入", "#1e7d34", "#ffffff"),
+            "blocked": ("⛔ 被擋下", "#b00020", "#ffffff"),
+            "pending": ("• 待處理", "#e8eaed", "#202124"),
+        }
+        text, bg, fg = styles[state]
+        badge_var = getattr(self, "_badge_var", None)
+        if badge_var is not None:
+            try:
+                badge_var.set(text)
+            except Exception:
+                pass
+        badge_label = getattr(self, "_badge_label", None)
+        if badge_label is not None:
+            try:
+                badge_label.configure(background=bg, foreground=fg)
+            except Exception:
+                pass
+
+    def _roster_candidates_for(self, record: Record) -> list[str]:
+        # Confirmed-name roster (from the correction store) ranked against this record's
+        # current name, for the selectable suggestions beside the name field (#46).
+        from ocr_from2xlsx.correction_store import roster_from_store
+        from ocr_from2xlsx.review_workflow import rank_roster_candidates
+
+        store = self.correction_store_path
+        if store is None:
+            return []
+        try:
+            roster = roster_from_store(store)
+        except (OSError, ValueError):
+            return []
+        return rank_roster_candidates(record.name, roster)
+
+    def _apply_roster_choice(self, name: str) -> None:
+        # Fill the name field from a roster pick and clear the unconfirmed-name marker (#46).
+        chosen = (name or "").strip()
+        if not chosen or chosen == self._ROSTER_EMPTY_HINT:
+            return
+        self.fields["name"].set(chosen)
+        if 0 <= self.current_index < len(self.records):
+            record = self.records[self.current_index]
+            record.ocr.warnings = [w for w in record.ocr.warnings if w != NAME_UNCONFIRMED]
+            # Name no longer unconfirmed: refresh the ⚠/grey marks and the "待確認 N" count
+            # so they reflect the pick immediately (#46), mirroring _show_record.
+            self.confirm_form.set_flagged_fields(
+                flagged_fields(list(record.ocr.warnings), SERVICE_RECORD_V1_LAYOUT)
+            )
+            self._update_pending_count()
+        self.editing = True
+        # Return focus to the name field so the operator can keep typing / advance, instead
+        # of leaving focus trapped on the listbox where arrows would re-browse candidates.
+        self._focus_name_field()
+
+    def _focus_name_field(self) -> None:
+        # Route through ConfirmForm._focus so the active-label bold, _current_focus and the
+        # source-image re-frame all track the name field, then place the caret at the end.
+        focus = getattr(self.confirm_form, "_focus", None)
+        if not callable(focus):
+            return
+        try:
+            focus("name")
+        except Exception:
+            return
+        widget = getattr(self.confirm_form, "_focus_widgets", {}).get("name")
+        if widget is not None:
+            try:
+                widget.icursor("end")
+            except Exception:
+                pass
+
+    def _on_roster_commit(self, _event: "tk.Event | None" = None) -> str:
+        listbox = self._roster_listbox
+        if listbox is None:
+            return "break"
+        try:
+            selection = listbox.curselection()
+            if not selection:
+                # No real selection (e.g. Tab-focused but never browsed): do NOT commit the
+                # default-ACTIVE top candidate the operator never chose (#46 browse-vs-commit).
+                return "break"
+            self._apply_roster_choice(listbox.get(selection[0]))
+        except tk.TclError:
+            pass
+        return "break"  # stop Return from also firing the window-level 確認並寫入
+
+    def _on_roster_escape(self, _event: "tk.Event | None" = None) -> str:
+        # Bail out of the roster back to the name field WITHOUT committing a candidate, so the
+        # operator's next Enter confirms the record rather than re-applying a name (R1 trap).
+        self._focus_name_field()
+        return "break"
+
+    def _on_focus_roster_key(self, _event: "tk.Event | None" = None) -> str:
+        # F8 moves the keyboard into the roster so pure-keyboard operators can reach the
+        # candidates; arrows browse, Enter commits, Esc bails back to the name field (#46).
+        listbox = self._roster_listbox
+        if listbox is None:
+            return "break"
+        try:
+            if listbox.size() > 0:
+                listbox.focus_set()
+                listbox.activate(0)
+                listbox.selection_clear(0, tk.END)
+                listbox.selection_set(0)
+        except Exception:
+            pass
+        return "break"
+
+    def _update_name_aids(self, record: Record) -> None:
+        # Populate the roster suggestions and the zoomed name-crop preview (#46).
+        listbox = self._roster_listbox
+        if listbox is not None:
+            try:
+                listbox.delete(0, tk.END)
+                candidates = self._roster_candidates_for(record)
+                for candidate in candidates:
+                    listbox.insert(tk.END, candidate)
+                if not candidates:
+                    # Explicit hint instead of a blank box that looks broken; the commit
+                    # paths ignore this row so it can't be applied as a name.
+                    listbox.insert(tk.END, self._ROSTER_EMPTY_HINT)
+            except tk.TclError:
+                pass
+        self._show_name_crop(record)
+
+    def _show_name_crop(self, record: Record) -> None:
+        label = self._name_crop_label
+        if label is None:
+            return
+        try:
+            relative = record.ocr.name_crop
+            if not relative or self.loaded_json_path is None:
+                label.configure(image="", text="（無姓名裁圖）")
+                self._name_crop_image = None
+                return
+            crop_path = self.loaded_json_path.parent / relative
+            if crop_path.suffix.lower() != ".png" or not crop_path.is_file():
+                label.configure(image="", text="（無姓名裁圖）")
+                self._name_crop_image = None
+                return
+            image = tk.PhotoImage(file=str(crop_path))
+            if image.width() < 240:
+                image = image.zoom(2, 2)  # enlarge small crops so handwriting is legible
+            self._name_crop_image = image
+            label.configure(image=image, text="")
+        except Exception:
+            try:
+                label.configure(image="", text="（無姓名裁圖）")
+            except tk.TclError:
+                pass
+            self._name_crop_image = None
 
     @staticmethod
     def _bind_mousewheel_recursive(widget: tk.Misc, handler) -> None:
@@ -428,8 +1198,14 @@ class ReviewApp(tk.Tk):
             messagebox.showerror("無法建立工作檔", str(exc))
             return
         self.written_indices = set()
+        self._written_rows = {}
+        self._blocked_indices = set()
         self._push_status(f"工作檔: {working}")
         self._update_toolbar_states()  # template ready → write buttons can enable
+        # New working file → reset the persistent corner so it does not show the old
+        # batch's "已寫入 X / 列號" or a stale badge (#45).
+        self._update_progress()
+        self._update_badge()
 
     def _load_json(self) -> None:
         path = filedialog.askopenfilename(filetypes=[("JSON files", "*.json")])
@@ -454,6 +1230,8 @@ class ReviewApp(tk.Tk):
             self._next_record()
         else:
             self._show_placeholder_preview()
+            self._update_progress()  # show the 尚未載入資料 baseline, not a blank corner (#45)
+            self._update_badge()     # and blank the badge (no stale chip from a prior batch)
         self._update_toolbar_states()
 
     def _has_live_camera_preview(self) -> bool:
@@ -804,19 +1582,34 @@ class ReviewApp(tk.Tk):
         if self.current_index < 0 or self.current_index >= len(self.records):
             messagebox.showerror("缺少資料", "請先載入 JSON 資料。")
             return
-        if self.current_index in self.written_indices:
-            messagebox.showinfo("提示", "目前資料已寫入，請切換下一筆。")
+        overwrite_row = self._overwrite_row_for_confirm()
+        if overwrite_row is False:
             return
         record = self.records[self.current_index]
         self._apply_form_to_record(record)
+        # Data-integrity guard (#46): 確認並寫入 sends human_confirmed=True, which clears the
+        # name.unconfirmed flag — so a reflexive confirm with the name still blank would write
+        # an empty name and silently mark it confirmed. Refuse it here; 強制寫入 stays the override.
+        if NAME_UNCONFIRMED in record.ocr.warnings and not record.name.strip():
+            messagebox.showwarning(
+                "姓名未填",
+                "此筆姓名待確認且目前為空。請先填入姓名（或按 F8 從候選挑選）再「確認並寫入」；"
+                "若確定要留空，請改用「強制寫入」。",
+            )
+            self._focus_name_field()
+            return
         human_confirmed = self._needs_name_confirmation(record)
         try:
-            result = self.session.accept_scan(record, human_confirmed=True)
+            result = self.session.accept_scan(
+                record, human_confirmed=True, overwrite_row=overwrite_row
+            )
         except (OSError, ValueError) as exc:
             messagebox.showerror("寫入失敗", str(exc))
             return
         self._push_status(f"{result.record_id}: {result.status} row={result.row_number} blockers={result.blockers}")
         if result.status == "blocked":
+            self._blocked_indices.add(self.current_index)
+            self._update_badge()
             messagebox.showwarning(
                 "未寫入工作檔",
                 "此筆未寫入，因為有缺少或不合法的必填欄位：\n\n"
@@ -828,10 +1621,37 @@ class ReviewApp(tk.Tk):
             if human_confirmed:
                 self._persist_confirmed_name_after_write(record)
             self.written_indices.add(self.current_index)
+            self._written_rows[self.current_index] = result.row_number
+            self._blocked_indices.discard(self.current_index)
             self.editing = False
             working = getattr(getattr(self.session, "writer", None), "working_path", "")
             self._push_status(f"已寫入工作檔 {working} 第 {result.row_number} 列")
-            self._next_record()
+            if overwrite_row is None:
+                self._next_record()
+            else:
+                # Overwrite stays on the corrected record (no advance) so the operator
+                # can verify the fix in place.
+                self._update_progress()
+                self._update_badge()
+
+    def _overwrite_row_for_confirm(self, forced: bool = False) -> int | None | bool:
+        """Decide the write target when (re-)confirming the current record (#48):
+        ``None`` to append normally; the row number to overwrite an already-written
+        record after a confirmation; ``False`` if the operator declined (caller returns).
+        ``forced`` tailors the prompt so the operator knows whether validation will run
+        (確認並寫入) or be skipped (強制寫入). Defaults the dialog to *No* so a reflexive
+        Enter cancels rather than silently overwriting a written row."""
+        if self.current_index not in self.written_indices:
+            return None
+        row = self._written_rows.get(self.current_index)
+        if forced:
+            prompt = f"強制覆寫第 {row} 列：將跳過必填檢查，可能寫入不完整資料。確定？"
+        else:
+            prompt = f"將以驗證後的內容覆寫第 {row} 列。確定？"
+        if row is None or not messagebox.askyesno("覆寫確認", prompt, default=messagebox.NO):
+            messagebox.showinfo("提示", "目前資料已寫入，請切換下一筆。")
+            return False
+        return row
 
     def _force_write(self) -> None:
         if not self.session:
@@ -840,23 +1660,50 @@ class ReviewApp(tk.Tk):
         if self.current_index < 0 or self.current_index >= len(self.records):
             messagebox.showerror("缺少資料", "請先載入 JSON 資料。")
             return
-        if self.current_index in self.written_indices:
-            messagebox.showinfo("提示", "目前資料已寫入，請切換下一筆。")
+        overwrite_row = self._overwrite_row_for_confirm(forced=True)
+        if overwrite_row is False:
             return
         record = self.records[self.current_index]
         self._apply_form_to_record(record)
         human_confirmed = self._needs_name_confirmation(record)
         try:
-            result = self.session.accept_scan(record, force=True, human_confirmed=True)
+            result = self.session.accept_scan(
+                record, force=True, human_confirmed=True, overwrite_row=overwrite_row
+            )
         except (OSError, ValueError) as exc:
             messagebox.showerror("寫入失敗", str(exc))
             return
         self._push_status(f"{result.record_id}: {result.status} row={result.row_number} blockers={result.blockers}")
+        if result.status == "blocked":
+            self._blocked_indices.add(self.current_index)
+            self._update_badge()
+            messagebox.showwarning(
+                "強制寫入仍被擋下",
+                "此筆即使強制寫入仍無法寫入（有不可寫入的問題）：\n\n"
+                + "\n".join(result.blockers)
+                + "\n\n請更正後再寫入。",
+            )
+            return
         if result.status in {"forced", "written"}:
             if human_confirmed:
                 self._persist_confirmed_name_after_write(record)
             self.written_indices.add(self.current_index)
+            self._written_rows[self.current_index] = result.row_number
+            self._blocked_indices.discard(self.current_index)
             self.editing = False
+            working = getattr(getattr(self.session, "writer", None), "working_path", "")
+            self._push_status(f"已寫入工作檔 {working} 第 {result.row_number} 列")
+            self._update_progress()
+            self._update_badge()
+            # 強制寫入 can write a row that still fails validation; make that visible after
+            # the fact (no extra gate, so the F2 / no-advance flow is unchanged) (#48).
+            if result.blockers:
+                messagebox.showwarning(
+                    "已強制寫入（含缺漏）",
+                    f"此筆已強制寫入第 {result.row_number} 列，但仍有未通過的欄位：\n\n"
+                    + "\n".join(result.blockers)
+                    + "\n\n如為誤覆寫，請更正後重新寫入。",
+                )
 
     def _show_record(self, record: Record) -> None:
         self.fields["record_id"].set(record.record_id)
@@ -867,6 +1714,26 @@ class ReviewApp(tk.Tk):
         self._show_source_image(record)
         self.editing = False
         self._update_toolbar_states()
+        self._update_pending_count()
+        self._update_progress()
+        self._update_badge()
+        self._update_name_aids(record)
+        # Only grab focus + re-frame the scan when there is something to confirm. A clean
+        # (0-flagged) record clears any stale active-field bold and resets the scan to a full
+        # overview, so the operator can glance and hit Enter — instead of the caret being
+        # yanked into the first field or the image staying zoomed into a prior field (#43).
+        if self.confirm_form.flagged_count() > 0:
+            self.confirm_form.focus_first_flagged()
+        else:
+            clear_active = getattr(self.confirm_form, "clear_active_label", None)
+            if callable(clear_active):
+                clear_active()
+            reset_view = getattr(self.preview, "reset_view", None)
+            if callable(reset_view):
+                try:
+                    reset_view()
+                except Exception:
+                    pass
 
     def _apply_form_to_record(self, record: Record) -> None:
         record.record_id = self.fields["record_id"].get()
@@ -1030,9 +1897,9 @@ class ReviewApp(tk.Tk):
                 frame = rotate_frame(frame, self._preview_rotation)
             frame = self._zoom_crop(frame)
 
-            self.preview.update_idletasks()
-            target_width = self.preview.winfo_width()
-            target_height = self.preview.winfo_height()
+            self.preview.canvas.update_idletasks()
+            target_width = self.preview.canvas.winfo_width()
+            target_height = self.preview.canvas.winfo_height()
             if target_width > 1 and target_height > 1:
                 height, width = frame.shape[:2]
                 scale = min(target_width / width, target_height / height)
@@ -1052,10 +1919,7 @@ class ReviewApp(tk.Tk):
 
             image = tk.PhotoImage(data=bytes(buffer))
             self._preview_image = image
-            self.preview.configure(state="normal")
-            self.preview.delete("1.0", tk.END)
-            self.preview.image_create("1.0", image=image)
-            self.preview.configure(state="disabled")
+            self.preview.show_frame(image)  # live frame: fit-to-pane, no pan/zoom
             self._camera_failure_count = 0
             self._dismiss_splash()  # first real frame drawn — safe to drop the boot splash
         except Exception:
@@ -1113,10 +1977,7 @@ class ReviewApp(tk.Tk):
     def _show_placeholder_preview(self) -> None:
         self._stop_camera()
         self._preview_image = None
-        self.preview.configure(state="normal")
-        self.preview.delete("1.0", tk.END)
-        self.preview.insert("1.0", self._PREVIEW_PLACEHOLDER)
-        self.preview.configure(state="disabled")
+        self.preview.show_placeholder(self._PREVIEW_PLACEHOLDER)
 
     def _dismiss_splash(self) -> None:
         if self._splash_closed:
@@ -1137,9 +1998,9 @@ class ReviewApp(tk.Tk):
                 return
 
             image = tk.PhotoImage(file=str(image_path))
-            self.preview.update_idletasks()
-            target_width = self.preview.winfo_width()
-            target_height = self.preview.winfo_height()
+            self.preview.canvas.update_idletasks()
+            target_width = self.preview.canvas.winfo_width()
+            target_height = self.preview.canvas.winfo_height()
             if target_width <= 1:
                 target_width = 360
             if target_height <= 1:
@@ -1153,10 +2014,7 @@ class ReviewApp(tk.Tk):
 
             self._stop_camera()
             self._preview_image = image
-            self.preview.configure(state="normal")
-            self.preview.delete("1.0", tk.END)
-            self.preview.image_create("1.0", image=image)
-            self.preview.configure(state="disabled")
+            self.preview.show_image(image)  # static: drag-pan + wheel-zoom (integer steps)
         except Exception:
             self._show_placeholder_preview()
 
@@ -1617,11 +2475,26 @@ class ReviewApp(tk.Tk):
         )
 
     def _flash_preview(self) -> None:
+        # Flash the viewer canvas green on capture. self.preview is an ImageViewer (#47),
+        # not a tk widget, so drive its .canvas. The broad try/except also absorbs headless
+        # test harnesses that never set .preview (would trip tk.Tk.__getattr__ recursion).
         try:
-            self.preview.configure(background="#d0ffd0")
-            self.preview.after(120, lambda: self.preview.configure(background="white"))
+            canvas = self.preview.canvas
+            canvas.configure(background="#d0ffd0")
+            canvas.after(120, lambda: canvas.configure(background="white"))
         except Exception:
             pass
+
+    def _zoom_in_static(self) -> None:
+        # Correction-mode buttons drive the static source-image viewer (#47), matching the
+        # mouse-wheel step, so zoom is discoverable without knowing about the wheel.
+        self.preview.set_zoom(self.preview.zoom + 1)
+
+    def _zoom_out_static(self) -> None:
+        self.preview.set_zoom(self.preview.zoom - 1)
+
+    def _reset_static_view(self) -> None:
+        self.preview.reset_view()
 
     def _zoom_crop(self, frame: object):
         # Zoom by cropping a centered region (then the fit-resize scales it up to the pane).

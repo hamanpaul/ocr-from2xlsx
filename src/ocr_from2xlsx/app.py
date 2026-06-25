@@ -276,51 +276,45 @@ class ReviewApp(tk.Tk):
     def _build_ui(self) -> None:
         toolbar = ttk.Frame(self)
         toolbar.pack(fill=tk.X, padx=8, pady=8)
-        ttk.Button(toolbar, text="選擇模板 XLSX", command=self._choose_template).pack(
-            side=tk.LEFT, padx=4
-        )
-        ttk.Button(toolbar, text="匯入 JSON", command=self._load_json).pack(side=tk.LEFT, padx=4)
-        ttk.Button(toolbar, text="上一筆", command=self._previous_record).pack(side=tk.LEFT, padx=4)
-        ttk.Button(toolbar, text="下一筆", command=self._next_record).pack(
-            side=tk.LEFT, padx=4
-        )
-        ttk.Button(toolbar, text="確認並寫入", command=self._confirm_current).pack(
-            side=tk.LEFT, padx=4
-        )
-        ttk.Button(toolbar, text="強制寫入", command=self._force_write).pack(side=tk.LEFT, padx=4)
-        ttk.Button(toolbar, text="選擇攝影機", command=self._choose_camera).pack(
-            side=tk.LEFT, padx=4
-        )
-        ttk.Button(toolbar, text="擷取並辨識", command=self._capture_and_recognize).pack(
-            side=tk.LEFT, padx=4
-        )
-        ttk.Button(toolbar, text="匯入資料夾批次", command=self._import_folder_batch).pack(
-            side=tk.LEFT, padx=4
-        )
-        ttk.Button(toolbar, text="連續拍照", command=self._start_continuous_capture).pack(
-            side=tk.LEFT, padx=4
-        )
-        ttk.Button(toolbar, text="完成辨識", command=self._finish_continuous_capture).pack(
-            side=tk.LEFT, padx=4
-        )
-        ttk.Button(toolbar, text="復原上一張", command=self._undo_last_continuous_capture).pack(
-            side=tk.LEFT, padx=4
-        )
-        ttk.Button(toolbar, text="取消連拍", command=self._cancel_continuous_capture).pack(
-            side=tk.LEFT, padx=4
-        )
-        ttk.Button(toolbar, text="重設空桌基準", command=self._reset_baseline).pack(
-            side=tk.LEFT, padx=4
-        )
-        ttk.Button(toolbar, text="旋轉", command=self._rotate_preview).pack(
-            side=tk.LEFT, padx=4
+
+        # Toolbar grouped by workflow phase — 設定 → 掃描 → 校正 — with a small caption per
+        # group and vertical separators, so the operator can see where to start instead of
+        # facing one undifferentiated 17-button row. View controls are pushed to the right.
+        def _group(label: str) -> None:
+            ttk.Separator(toolbar, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=(6, 4))
+            ttk.Label(toolbar, text=label, foreground="#5f6368").pack(side=tk.LEFT, padx=(0, 4))
+
+        def _btn(text: str, command) -> None:
+            ttk.Button(toolbar, text=text, command=command).pack(side=tk.LEFT, padx=4)
+
+        # 設定（先做）
+        ttk.Label(toolbar, text="設定", foreground="#5f6368").pack(side=tk.LEFT, padx=(0, 4))
+        _btn("選擇模板 XLSX", self._choose_template)
+        _btn("匯入 JSON", self._load_json)
+        _btn("選擇攝影機", self._choose_camera)
+        # 掃描
+        _group("掃描")
+        _btn("擷取並辨識", self._capture_and_recognize)
+        _btn("連續拍照", self._start_continuous_capture)
+        _btn("完成辨識", self._finish_continuous_capture)
+        _btn("復原上一張", self._undo_last_continuous_capture)
+        _btn("取消連拍", self._cancel_continuous_capture)
+        _btn("重設空桌基準", self._reset_baseline)
+        _btn("匯入資料夾批次", self._import_folder_batch)
+        # 校正
+        _group("校正")
+        _btn("上一筆", self._previous_record)
+        _btn("下一筆", self._next_record)
+        _btn("確認並寫入", self._confirm_current)
+        _btn("強制寫入", self._force_write)
+        # 預覽（靠右，與寫入/掃描動作分開）
+        ttk.Button(toolbar, text="縮小", command=lambda: self._zoom_preview(1 / 1.25)).pack(
+            side=tk.RIGHT, padx=4
         )
         ttk.Button(toolbar, text="放大", command=lambda: self._zoom_preview(1.25)).pack(
-            side=tk.LEFT, padx=4
+            side=tk.RIGHT, padx=4
         )
-        ttk.Button(toolbar, text="縮小", command=lambda: self._zoom_preview(1 / 1.25)).pack(
-            side=tk.LEFT, padx=4
-        )
+        ttk.Button(toolbar, text="旋轉", command=self._rotate_preview).pack(side=tk.RIGHT, padx=4)
 
         # Footer status bar: shows only the latest status; full history goes to the log file.
         self._status_var = tk.StringVar(

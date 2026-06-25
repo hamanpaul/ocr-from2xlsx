@@ -366,6 +366,7 @@ def app(monkeypatch: pytest.MonkeyPatch) -> ReviewApp:
     review_app._status_log = []
     review_app._status_var = None
     review_app._status_log_path = None
+    review_app._recognition_threaded = False  # run recognition inline in the headless harness
     return review_app
 
 
@@ -889,57 +890,44 @@ def test_capture_and_recognize_warns_when_capture_is_blurry_without_live_preview
     assert calls == ["stop"]
 
 
-def test_capture_and_recognize_preserves_loaded_preview_on_recognition_error_without_live_preview(
+def test_capture_and_recognize_delegates_without_restore_when_preview_not_live(
     app: ReviewApp, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    # Recognition (and its error/restore handling) now lives in _recognize_capture, which runs
+    # off-thread; _capture_and_recognize captures, then delegates with the restore info.
     import ocr_from2xlsx.capture as capture_module
 
-    errors: list[tuple[str, str]] = []
+    captured: dict = {}
     calls: list[str] = []
     start_calls: list[int] = []
     app._camera_capture = None
     app._camera_after_id = None
     app._camera_index = 7
-    app.preview.image = "loaded-record-preview"
     monkeypatch.setattr(
         capture_module,
         "capture_still",
         lambda *args, **kwargs: CaptureResult(
-            frame="frame",
-            resolution=(1920, 1080),
-            sharpness=180.0,
-            brightness=128.0,
-            passed=True,
+            frame="frame", resolution=(1920, 1080), sharpness=180.0, brightness=128.0, passed=True
         ),
     )
     monkeypatch.setattr(app, "_stop_camera", lambda: calls.append("stop"))
     monkeypatch.setattr(app, "_start_camera", lambda index: start_calls.append(index))
-    monkeypatch.setattr(
-        app,
-        "_recognize_capture",
-        lambda frame: (_ for _ in ()).throw(RuntimeError("plugin missing")),
-    )
-    monkeypatch.setattr(
-        "ocr_from2xlsx.app.messagebox.showerror",
-        lambda title, message: errors.append((title, message)),
-    )
+    monkeypatch.setattr(app, "_recognize_capture", lambda frame, **kw: captured.update(frame=frame, kw=kw))
 
     ReviewApp._capture_and_recognize(app)
 
-    assert errors == [("擷取並辨識", "辨識失敗：plugin missing")]
+    assert captured["frame"] == "frame"
+    assert captured["kw"] == {"restore_live_preview": False, "restore_index": 7}
     assert calls == ["stop"]
-    assert start_calls == []
-    assert app.preview.image == "loaded-record-preview"
+    assert start_calls == []  # capture itself does not restart the camera; recognise handles restore
 
 
-def test_capture_and_recognize_restores_live_preview_on_failure_when_it_was_active(
+def test_capture_and_recognize_delegates_with_restore_when_preview_was_live(
     app: ReviewApp, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     import ocr_from2xlsx.capture as capture_module
 
-    errors: list[tuple[str, str]] = []
-    calls: list[str] = []
-    start_calls: list[int] = []
+    captured: dict = {}
     app._camera_capture = object()
     app._camera_after_id = "after-33"
     app._camera_index = 7
@@ -947,30 +935,17 @@ def test_capture_and_recognize_restores_live_preview_on_failure_when_it_was_acti
         capture_module,
         "capture_still",
         lambda *args, **kwargs: CaptureResult(
-            frame="frame",
-            resolution=(1920, 1080),
-            sharpness=180.0,
-            brightness=128.0,
-            passed=True,
+            frame="frame", resolution=(1920, 1080), sharpness=180.0, brightness=128.0, passed=True
         ),
     )
-    monkeypatch.setattr(app, "_stop_camera", lambda: calls.append("stop"))
-    monkeypatch.setattr(app, "_start_camera", lambda index: start_calls.append(index))
-    monkeypatch.setattr(
-        app,
-        "_recognize_capture",
-        lambda frame: (_ for _ in ()).throw(RuntimeError("plugin missing")),
-    )
-    monkeypatch.setattr(
-        "ocr_from2xlsx.app.messagebox.showerror",
-        lambda title, message: errors.append((title, message)),
-    )
+    monkeypatch.setattr(app, "_stop_camera", lambda: None)
+    monkeypatch.setattr(app, "_start_camera", lambda index: None)
+    monkeypatch.setattr(app, "_recognize_capture", lambda frame, **kw: captured.update(kw=kw))
 
     ReviewApp._capture_and_recognize(app)
 
-    assert errors == [("擷取並辨識", "辨識失敗：plugin missing")]
-    assert calls == ["stop"]
-    assert start_calls == [7]
+    # A live preview must be handed to _recognize_capture so it can restore it on abort.
+    assert captured["kw"] == {"restore_live_preview": True, "restore_index": 7}
 
 
 def test_capture_and_recognize_does_not_reopen_preview_after_no_camera_warning(
@@ -1094,7 +1069,7 @@ def test_capture_and_recognize_keeps_recognized_still_preview_on_success(
     monkeypatch.setattr(
         app,
         "_recognize_capture",
-        lambda frame: setattr(app.preview, "image", "recognized-still") or True,
+        lambda frame, **kw: setattr(app.preview, "image", "recognized-still"),
     )
 
     ReviewApp._capture_and_recognize(app)

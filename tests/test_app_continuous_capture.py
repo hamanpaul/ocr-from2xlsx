@@ -46,6 +46,7 @@ def _bare_app():
     app._autocapture_need_baseline = False
     app._autocapture_stills = []
     app._autocapture_baseline_samples = []
+    app._recognition_threaded = False  # run recognition inline in the headless harness
     return app
 
 
@@ -273,7 +274,7 @@ def test_finish_routes_stills_to_batch_and_loads_review(monkeypatch, tmp_path):
     app._autocapture_stills = [s1, s2]
 
     seen = {}
-    def fake_prepare(stills, out, template, backend, on_progress=None):
+    def fake_prepare(stills, out, template, backend, on_progress=None, should_cancel=None):
         seen["stills"] = list(stills)
         if on_progress:
             on_progress(2, 2, "scan-capture-2.png")
@@ -281,7 +282,7 @@ def test_finish_routes_stills_to_batch_and_loads_review(monkeypatch, tmp_path):
     monkeypatch.setattr(scan, "prepare_records_from_images", fake_prepare)
     monkeypatch.setattr("ocr_from2xlsx.cli._resolve_template", lambda name: SimpleNamespace(template_id=name))
     monkeypatch.setattr(app, "_resolve_recognition_backend", lambda *a, **k: object())
-    monkeypatch.setattr(app, "_open_processing_modal", lambda msg: None)
+    monkeypatch.setattr(app, "_open_processing_modal", lambda msg, **k: None)
     monkeypatch.setattr(app, "_set_modal_message", lambda m, msg: None)
     monkeypatch.setattr(app, "_close_processing_modal", lambda m: None)
     monkeypatch.setattr(app, "_stop_camera", lambda: None)
@@ -449,7 +450,7 @@ def test_finish_works_after_camera_loss_when_stills_exist(monkeypatch, tmp_path)
                         lambda *a, **k: Batch(source_batch=SourceBatch(created_at="t", source_type="scan_records", template_name="service_record.v1"), records=[]))
     monkeypatch.setattr("ocr_from2xlsx.cli._resolve_template", lambda name: SimpleNamespace(template_id=name))
     monkeypatch.setattr(app, "_resolve_recognition_backend", lambda *a, **k: object())
-    monkeypatch.setattr(app, "_open_processing_modal", lambda msg: None)
+    monkeypatch.setattr(app, "_open_processing_modal", lambda msg, **k: None)
     monkeypatch.setattr(app, "_set_modal_message", lambda m, msg: None)
     monkeypatch.setattr(app, "_close_processing_modal", lambda m: None)
     monkeypatch.setattr(app, "_stop_camera", lambda: None)
@@ -474,7 +475,7 @@ def test_finish_recognition_error_preserves_stills_for_retry(monkeypatch, tmp_pa
     monkeypatch.setattr(app, "_stop_camera", lambda: None)
     monkeypatch.setattr(app, "_resolve_recognition_backend", lambda *a, **k: object())
     monkeypatch.setattr("ocr_from2xlsx.cli._resolve_template", lambda name: SimpleNamespace(template_id=name))
-    monkeypatch.setattr(app, "_open_processing_modal", lambda msg: None)
+    monkeypatch.setattr(app, "_open_processing_modal", lambda msg, **k: None)
     monkeypatch.setattr(app, "_close_processing_modal", lambda m: None)
     errors = []
     monkeypatch.setattr("ocr_from2xlsx.app.messagebox.showerror", lambda t, m: errors.append((t, m)))
@@ -558,7 +559,7 @@ def test_finish_zero_records_clears_stills(monkeypatch, tmp_path):
     )
     monkeypatch.setattr("ocr_from2xlsx.cli._resolve_template", lambda name: SimpleNamespace(template_id=name))
     monkeypatch.setattr(app, "_resolve_recognition_backend", lambda *a, **k: object())
-    monkeypatch.setattr(app, "_open_processing_modal", lambda msg: None)
+    monkeypatch.setattr(app, "_open_processing_modal", lambda msg, **k: None)
     monkeypatch.setattr(app, "_set_modal_message", lambda m, msg: None)
     monkeypatch.setattr(app, "_close_processing_modal", lambda m: None)
     monkeypatch.setattr(app, "_stop_camera", lambda: None)

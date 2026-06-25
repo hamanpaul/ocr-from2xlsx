@@ -81,12 +81,15 @@ def prepare_records_from_images(
     backend: OcrBackend,
     created_at: str | None = None,
     on_progress: "Callable[[int, int, str], None] | None" = None,
+    should_cancel: "Callable[[], bool] | None" = None,
 ) -> Batch:
     """Prepare normalized records from still images (one Record per image).
 
     ``on_progress(current, total, name)`` is called as each image begins
     (``current`` is the 1-based index of the image being processed, not a
-    completed count), matching ``prepare_records_from_folder``.
+    completed count), matching ``prepare_records_from_folder``. ``should_cancel``,
+    when supplied, is checked before each image; a True return stops early and
+    returns the records prepared so far (a partial batch).
     """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -96,6 +99,8 @@ def prepare_records_from_images(
     paths = [Path(path) for path in image_paths]
     total = len(paths)
     for sequence, image_path in enumerate(paths, start=1):
+        if should_cancel is not None and should_cancel():
+            break
         if on_progress is not None:
             on_progress(sequence, total, image_path.name)
         local_image = _copy_image_to_output(image_path, output_dir)
@@ -156,6 +161,7 @@ def prepare_records_from_folder(
     backend: OcrBackend,
     created_at: str | None = None,
     on_progress: "Callable[[int, int, str], None] | None" = None,
+    should_cancel: "Callable[[], bool] | None" = None,
 ) -> Batch:
     """Batch-recognise every image/PDF in ``folder`` into one normalized Batch.
 
@@ -177,6 +183,8 @@ def prepare_records_from_folder(
     records: list = []
     total = len(files)
     for index, path in enumerate(files, start=1):
+        if should_cancel is not None and should_cancel():
+            break
         if on_progress is not None:
             on_progress(index, total, path.name)
         if path.suffix.lower() == ".pdf":

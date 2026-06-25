@@ -475,7 +475,10 @@ class ReviewApp(tk.Tk):
                 require_camera_support()
             except CameraDependencyError as exc:
                 self._clear_inactive_camera_selection()
-                messagebox.showerror("擷取並辨識", str(exc))
+                messagebox.showerror(
+                "擷取並辨識",
+                f"攝影機功能尚未安裝，請聯絡系統管理員。\n（技術細節：{exc}）",
+            )
                 return
             self._clear_inactive_camera_selection()
             messagebox.showwarning("擷取並辨識", "請先選擇可用的攝影機。")
@@ -506,7 +509,10 @@ class ReviewApp(tk.Tk):
         except CameraDependencyError as exc:
             should_restore_preview = False
             self._clear_inactive_camera_selection()
-            messagebox.showerror("擷取並辨識", str(exc))
+            messagebox.showerror(
+                "擷取並辨識",
+                f"攝影機功能尚未安裝，請聯絡系統管理員。\n（技術細節：{exc}）",
+            )
         except Exception as exc:
             messagebox.showerror("擷取並辨識", f"辨識失敗：{exc}")
         finally:
@@ -991,11 +997,23 @@ class ReviewApp(tk.Tk):
                 self._CAMERA_RETRY_INTERVAL_MS, self._poll_camera_frame
             )
             return
-        self._fail_camera_preview(message)
+        self._fail_camera_preview(message, disconnect=True)
 
-    def _fail_camera_preview(self, message: str) -> None:
-        self._push_status(message)
+    def _fail_camera_preview(self, message: str, *, disconnect: bool = False) -> None:
         self._show_placeholder_preview()
+        if disconnect:
+            # A read failure mid-session = the camera was unplugged / hung. Keep the selected
+            # index so the operator can one-click reconnect via「選擇攝影機」/擷取 instead of
+            # being told「請先選擇可用的攝影機」; if a continuous session was live, pause it (#cam-disconnect).
+            self._push_status("攝影機連線中斷，請確認 USB 連接後按「選擇攝影機」重試。")
+            if getattr(self, "_autocapture_active", False):
+                self._autocapture_active = False
+                self._update_toolbar_states()
+                self._set_autocapture_state(
+                    "⚠ 攝影機連線中斷，連拍已暫停 → 接回攝影機後請重新『連續拍照』", tone="warn"
+                )
+            return
+        self._push_status(message)
         self._clear_inactive_camera_selection()
 
     def _show_placeholder_preview(self) -> None:
@@ -1211,7 +1229,10 @@ class ReviewApp(tk.Tk):
                 require_camera_support()
             except CameraDependencyError as exc:
                 self._clear_inactive_camera_selection()
-                messagebox.showerror("連續拍照", str(exc))
+                messagebox.showerror(
+                    "連續拍照",
+                    f"攝影機功能尚未安裝，請聯絡系統管理員。\n（技術細節：{exc}）",
+                )
                 return
             self._clear_inactive_camera_selection()
             messagebox.showwarning("連續拍照", "請先選擇可用的攝影機。")

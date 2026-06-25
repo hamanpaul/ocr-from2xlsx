@@ -416,11 +416,6 @@ class ImageViewer:
         self._placeholder = ""
         self._image: tk.PhotoImage | None = None
         self._display_image: tk.PhotoImage | None = None
-        # Full-resolution source kept alongside the fit thumbnail (#47): zooming re-samples
-        # the visible window from these real pixels instead of magnifying the thumbnail, so
-        # handwriting stays legible. ``_base_scale`` = the subsample factor fit = original/base.
-        self._original: tk.PhotoImage | None = None
-        self._base_scale = 1
         self._image_size = (0, 0)
         self._view_size = (1, 1)
         self._drag_anchor: tuple[int, int] | None = None
@@ -432,7 +427,9 @@ class ImageViewer:
         from ocr_from2xlsx.image_viewer import clamp_zoom
 
         self.zoom = clamp_zoom(zoom)
-        self._redraw()
+        # Re-clamp the origin to the new zoom (a smaller zoom has a larger valid window),
+        # then redraw — so zooming out from a panned position can't leave a dark edge gap.
+        self.pan_to(self.origin[0], self.origin[1])
 
     def pan_to(self, origin_x: float, origin_y: float) -> None:
         from ocr_from2xlsx.image_viewer import clamp_origin
@@ -445,15 +442,9 @@ class ImageViewer:
         ]
         self._redraw()
 
-    def show_image(
-        self, image: "tk.PhotoImage", original: "tk.PhotoImage | None" = None, base_scale: int = 1
-    ) -> None:
+    def show_image(self, image: "tk.PhotoImage") -> None:
         self.mode = "static"
         self._image = image
-        # _image_size stays the FIT dimensions so all pan/zoom math is unchanged; the original
-        # + base_scale only feed the high-detail re-sample in _render_static.
-        self._original = original
-        self._base_scale = max(1, int(base_scale))
         self._image_size = (image.width(), image.height())
         self._refresh_view_size()
         self.pan_to(self.origin[0], self.origin[1])  # re-clamp + redraw at session zoom
@@ -552,12 +543,6 @@ class ImageViewer:
                 self.canvas.create_image(0, 0, anchor="nw", image=self._image)
                 return
             factor = max(1, int(round(self.zoom)))
-            detailed = self._render_static(factor)
-            if detailed is not None:
-                # Visible window already cropped from the full-res original — draw at the origin.
-                self._display_image = detailed
-                self.canvas.create_image(0, 0, anchor="nw", image=detailed)
-                return
             display = self._image if factor == 1 else self._image.zoom(factor, factor)
             self._display_image = display  # hold a reference so Tk does not GC it
             self.canvas.create_image(
@@ -568,35 +553,6 @@ class ImageViewer:
             )
         except tk.TclError:
             pass
-
-    def _render_static(self, factor: int) -> "tk.PhotoImage | None":
-        """Re-sample the visible window from the full-resolution original (#47): crop the
-        window in original pixels, then scale to the canvas with a single integer zoom or
-        subsample so detail comes from real pixels, not the magnified thumbnail. Returns
-        ``None`` (caller falls back to thumbnail zoom) when no original is held or on error."""
-        original = self._original
-        base = self._base_scale
-        if original is None or base <= 1:
-            return None
-        try:
-            view_w, view_h = self._view_size
-            orig_w, orig_h = original.width(), original.height()
-            x0 = max(0, int(self.origin[0] * base))
-            y0 = max(0, int(self.origin[1] * base))
-            x1 = min(orig_w, int((self.origin[0] + view_w / factor) * base))
-            y1 = min(orig_h, int((self.origin[1] + view_h / factor) * base))
-            if x1 - x0 < 1 or y1 - y0 < 1:
-                return None
-            dest = tk.PhotoImage(master=self.canvas)
-            if factor >= base:
-                z = max(1, round(factor / base))
-                dest.tk.call(str(dest), "copy", str(original), "-from", x0, y0, x1, y1, "-zoom", z, z)
-            else:
-                s = max(1, round(base / factor))
-                dest.tk.call(str(dest), "copy", str(original), "-from", x0, y0, x1, y1, "-subsample", s, s)
-            return dest
-        except Exception:
-            return None
 
 
 class ReviewApp(tk.Tk):
@@ -1953,7 +1909,7 @@ class ReviewApp(tk.Tk):
                 self._show_placeholder_preview()
                 return
 
-            original = tk.PhotoImage(file=str(image_path))
+            image = tk.PhotoImage(file=str(image_path))
             self.preview.canvas.update_idletasks()
             target_width = self.preview.canvas.winfo_width()
             target_height = self.preview.canvas.winfo_height()
@@ -1962,17 +1918,15 @@ class ReviewApp(tk.Tk):
             if target_height <= 1:
                 target_height = 640
 
-            scale_x = max(1, (original.width() + target_width - 1) // target_width)
-            scale_y = max(1, (original.height() + target_height - 1) // target_height)
+            scale_x = max(1, (image.width() + target_width - 1) // target_width)
+            scale_y = max(1, (image.height() + target_height - 1) // target_height)
             scale = max(scale_x, scale_y)
-            fit = original.subsample(scale, scale) if scale > 1 else original
+            if scale > 1:
+                image = image.subsample(scale, scale)
 
             self._stop_camera()
-            self._preview_image = fit
-            # Keep the full-res original alive (Tk GCs unreferenced PhotoImages) so zoom can
-            # re-sample real pixels rather than the downscaled fit thumbnail (#47).
-            self._source_original = original
-            self.preview.show_image(fit, original=original, base_scale=scale)
+            self._preview_image = image
+            self.preview.show_image(image)  # static: drag-pan + wheel-zoom (integer steps)
         except Exception:
             self._show_placeholder_preview()
 

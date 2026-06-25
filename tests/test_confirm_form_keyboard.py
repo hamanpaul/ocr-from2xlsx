@@ -86,7 +86,7 @@ def test_focus_bolds_active_field_label_and_reverts_previous():
         root.destroy()
 
 
-def test_image_viewer_resamples_from_original_when_zoomed():
+def test_set_zoom_reclamps_origin_so_zoom_out_has_no_edge_gap():
     try:
         root = tk.Tk()
     except tk.TclError as exc:
@@ -94,17 +94,18 @@ def test_image_viewer_resamples_from_original_when_zoomed():
     root.withdraw()
     try:
         viewer = app_module.ImageViewer(root)
-        original = tk.PhotoImage(master=root, width=40, height=40)
-        fit = original.subsample(2, 2)  # 20x20 fit, base_scale 2 (#47)
-        viewer.canvas.configure(width=20, height=20)
-        viewer.show_image(fit, original=original, base_scale=2)
-
-        # With a retained original, zooming re-samples a real crop (not None -> thumbnail).
-        out = viewer._render_static(2)
-        assert out is not None and out.width() >= 1
-        # Without an original (or base_scale 1) it returns None so the caller uses thumbnail zoom.
-        viewer._original = None
-        assert viewer._render_static(2) is None
+        img = tk.PhotoImage(master=root, width=200, height=200)
+        viewer.canvas.configure(width=100, height=100)
+        viewer.canvas.update_idletasks()
+        viewer.show_image(img)
+        viewer.set_zoom(4)
+        viewer.pan_to(1000, 1000)  # pan hard to the bottom-right; clamps to the max origin
+        max_at_4 = list(viewer.origin)
+        viewer.set_zoom(2)  # zooming out must re-clamp, not leave the stale (too-large) origin
+        assert viewer.origin[0] <= max_at_4[0] and viewer.origin[1] <= max_at_4[1]
+        # origin must stay within the larger window's valid range (no dark edge gap)
+        from ocr_from2xlsx.image_viewer import clamp_origin
+        assert viewer.origin[0] == clamp_origin(viewer.origin[0], 200, viewer._view_size[0], 2)
     finally:
         root.destroy()
 

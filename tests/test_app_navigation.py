@@ -80,11 +80,9 @@ class FakePreview:
     def reset_view(self) -> None:
         self.reset_called = True
 
-    def show_image(self, image, original=None, base_scale=1) -> None:
+    def show_image(self, image) -> None:
         self.mode = "static"
         self.image = image
-        self.original = original
-        self.base_scale = base_scale
 
     def show_frame(self, image) -> None:
         self.mode = "live"

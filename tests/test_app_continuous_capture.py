@@ -83,6 +83,27 @@ def test_start_warns_without_selected_camera(monkeypatch):
     assert warnings == [("連續拍照", "請先選擇可用的攝影機。")]
 
 
+def test_start_continuous_capture_confirms_before_abandoning_batch(monkeypatch):
+    app = _bare_app()
+    app.records = [object(), object()]  # an in-progress correction batch...
+    app.written_indices = {0}  # ...with record 1 still unwritten
+    app.session = None
+    asked = []
+
+    def fake_askokcancel(title, _message):
+        asked.append(title)
+        return False  # operator cancels the abandon-batch confirm
+
+    monkeypatch.setattr("ocr_from2xlsx.app.messagebox.askokcancel", fake_askokcancel)
+    monkeypatch.setattr("ocr_from2xlsx.capture.require_camera_support", lambda: None)
+
+    ReviewApp._start_continuous_capture(app)
+
+    # A stray 連續拍照 must not silently abandon the loaded batch.
+    assert app._autocapture_active is False
+    assert asked == ["連續拍照"]
+
+
 def test_start_prompts_clear_desk_and_enters_need_baseline(monkeypatch, tmp_path):
     app = _bare_app()
     monkeypatch.setattr("ocr_from2xlsx.app.filedialog.askdirectory", lambda **k: str(tmp_path))

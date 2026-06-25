@@ -200,6 +200,14 @@ class ReviewApp(tk.Tk):
     _splash_closed: bool = False
     _status_var: object | None = None
     _status_log_path: object | None = None
+    # Class defaults so the toolbar state machine / guards can read these on the headless
+    # __new__ test harness without tripping tk.Tk.__getattr__ recursion; __init__ sets the
+    # real instance values.
+    session: object | None = None
+    records: object = ()
+    written_indices: object = frozenset()
+    current_index: int = -1
+    _toolbar_buttons: object | None = None
 
     @staticmethod
     def _runtime_base_dir() -> Path:
@@ -271,6 +279,7 @@ class ReviewApp(tk.Tk):
         self._status_log_path = self._default_status_log_path()
         self.fields: dict[str, tk.StringVar] = {}
         self._build_ui()
+        self._update_toolbar_states()  # initial: disable buttons whose prerequisites are unmet
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
     def _build_ui(self) -> None:
@@ -284,29 +293,34 @@ class ReviewApp(tk.Tk):
             ttk.Separator(toolbar, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=(6, 4))
             ttk.Label(toolbar, text=label, foreground="#5f6368").pack(side=tk.LEFT, padx=(0, 4))
 
-        def _btn(text: str, command) -> None:
-            ttk.Button(toolbar, text=text, command=command).pack(side=tk.LEFT, padx=4)
+        self._toolbar_buttons = {}
+
+        def _btn(text: str, command, key: str | None = None) -> None:
+            button = ttk.Button(toolbar, text=text, command=command)
+            button.pack(side=tk.LEFT, padx=4)
+            if key is not None:
+                self._toolbar_buttons[key] = button
 
         # 設定（先做）
         ttk.Label(toolbar, text="設定", foreground="#5f6368").pack(side=tk.LEFT, padx=(0, 4))
-        _btn("選擇模板 XLSX", self._choose_template)
-        _btn("匯入 JSON", self._load_json)
-        _btn("選擇攝影機", self._choose_camera)
+        _btn("選擇模板 XLSX", self._choose_template, "choose_template")
+        _btn("匯入 JSON", self._load_json, "load_json")
+        _btn("選擇攝影機", self._choose_camera, "choose_camera")
         # 掃描
         _group("掃描")
-        _btn("擷取並辨識", self._capture_and_recognize)
-        _btn("連續拍照", self._start_continuous_capture)
-        _btn("完成辨識", self._finish_continuous_capture)
-        _btn("復原上一張", self._undo_last_continuous_capture)
-        _btn("取消連拍", self._cancel_continuous_capture)
-        _btn("重設空桌基準", self._reset_baseline)
-        _btn("匯入資料夾批次", self._import_folder_batch)
+        _btn("擷取並辨識", self._capture_and_recognize, "capture_recognize")
+        _btn("連續拍照", self._start_continuous_capture, "start_continuous")
+        _btn("完成辨識", self._finish_continuous_capture, "complete_recognize")
+        _btn("復原上一張", self._undo_last_continuous_capture, "undo_last")
+        _btn("取消連拍", self._cancel_continuous_capture, "cancel_continuous")
+        _btn("重設空桌基準", self._reset_baseline, "reset_baseline")
+        _btn("匯入資料夾批次", self._import_folder_batch, "import_folder_batch")
         # 校正
         _group("校正")
-        _btn("上一筆", self._previous_record)
-        _btn("下一筆", self._next_record)
-        _btn("確認並寫入", self._confirm_current)
-        _btn("強制寫入", self._force_write)
+        _btn("上一筆", self._previous_record, "prev_record")
+        _btn("下一筆", self._next_record, "next_record")
+        _btn("確認並寫入", self._confirm_current, "confirm")
+        _btn("強制寫入", self._force_write, "force")
         # 預覽（靠右，與寫入/掃描動作分開）
         ttk.Button(toolbar, text="縮小", command=lambda: self._zoom_preview(1 / 1.25)).pack(
             side=tk.RIGHT, padx=4
@@ -397,6 +411,7 @@ class ReviewApp(tk.Tk):
             return
         self.written_indices = set()
         self._push_status(f"工作檔: {working}")
+        self._update_toolbar_states()  # template ready → write buttons can enable
 
     def _load_json(self) -> None:
         path = filedialog.askopenfilename(filetypes=[("JSON files", "*.json")])
@@ -421,6 +436,7 @@ class ReviewApp(tk.Tk):
             self._next_record()
         else:
             self._show_placeholder_preview()
+        self._update_toolbar_states()
 
     def _has_live_camera_preview(self) -> bool:
         return self._camera_capture is not None or self._camera_after_id is not None
@@ -738,6 +754,7 @@ class ReviewApp(tk.Tk):
         )
         self._show_source_image(record)
         self.editing = False
+        self._update_toolbar_states()
 
     def _apply_form_to_record(self, record: Record) -> None:
         record.record_id = self.fields["record_id"].get()
@@ -1042,6 +1059,50 @@ class ReviewApp(tk.Tk):
             except Exception:
                 pass
 
+    def _update_toolbar_states(self) -> None:
+        # Advertise the workflow by enabling only the buttons valid in the current state — so
+        # the operator can't press 完成辨識/取消連拍 before 連續拍照, or 確認並寫入 with no
+        # template/record, and doesn't have to learn the order by being scolded by dialogs.
+        btns = getattr(self, "_toolbar_buttons", None)
+        if not btns:
+            return
+        active = bool(getattr(self, "_autocapture_active", False))
+        has_stills = bool(getattr(self, "_autocapture_stills", None))
+        has_session = getattr(self, "session", None) is not None
+        records = getattr(self, "records", ()) or ()
+        written = getattr(self, "written_indices", frozenset()) or frozenset()
+        idx = getattr(self, "current_index", -1)
+        valid_record = 0 <= idx < len(records)
+
+        def _set(key: str, enabled: bool) -> None:
+            button = btns.get(key)
+            if button is not None:
+                try:
+                    button.configure(state="normal" if enabled else "disabled")
+                except Exception:
+                    pass
+
+        # Continuous-capture cluster: 連續拍照 starts a session; the rest only apply during one
+        # (完成辨識 stays usable when a camera-interrupt left stills to recognize).
+        _set("start_continuous", not active)
+        _set("complete_recognize", active or has_stills)
+        _set("undo_last", active and has_stills)
+        _set("cancel_continuous", active)
+        _set("reset_baseline", active)
+        # Buttons unrelated to scanning are disabled while a continuous session is live, so a
+        # stray click can't hijack or abandon it.
+        for key in (
+            "capture_recognize", "import_folder_batch", "choose_camera",
+            "load_json", "choose_template",
+        ):
+            _set(key, not active)
+        # Write buttons need a working file (template) AND a current, not-yet-written record.
+        write_ok = has_session and valid_record and idx not in written
+        _set("confirm", write_ok)
+        _set("force", write_ok)
+        _set("prev_record", bool(records))
+        _set("next_record", bool(records))
+
     def _append_status_log_file(self, message: str) -> None:
         path = self._status_log_path
         if path is None:
@@ -1120,6 +1181,23 @@ class ReviewApp(tk.Tk):
             self._clear_inactive_camera_selection()
             messagebox.showwarning("連續拍照", "請先選擇可用的攝影機。")
             return
+        # Don't let a stray 連續拍照 silently abandon an in-progress correction batch (#TB-03).
+        records = self.records or ()
+        written = self.written_indices or frozenset()
+        if records and len(written) < len(records):
+            remaining = len(records) - len(written)
+            if not messagebox.askokcancel(
+                "連續拍照",
+                f"目前還有 {remaining} 筆校正未寫入（共 {len(records)} 筆，已寫入 {len(written)} 筆）。"
+                "開始連續拍照會離開目前校正，確定要開始？",
+            ):
+                return
+        # Warn about a missing template up front, before the slow scan/OCR (#scan-no-template).
+        if self.session is None and not messagebox.askokcancel(
+            "尚未選擇模板",
+            "尚未選擇模板 XLSX，辨識後將無法寫入工作檔。是否仍要繼續擷取？",
+        ):
+            return
         selected_dir = filedialog.askdirectory(title="選擇辨識輸出資料夾")
         if not selected_dir:
             return
@@ -1135,6 +1213,7 @@ class ReviewApp(tk.Tk):
         self._autocapture_baseline_samples = []
         self._autocapture_detector = AutoCaptureDetector(AutoCaptureConfig.from_env())
         self._autocapture_active = True
+        self._update_toolbar_states()
         self._push_status("連續拍照：擷取空桌基準中…請保持桌面淨空。")
         if not self._has_live_camera_preview():
             self._start_camera(self._camera_index)
@@ -1146,6 +1225,7 @@ class ReviewApp(tk.Tk):
         restore = self._has_live_camera_preview()
         self._stop_camera()
         self._autocapture_active = False
+        self._update_toolbar_states()
         count = len(self._autocapture_stills)
         self._push_status(f"已取消連續拍照（保留 {count} 張於輸出資料夾，未辨識）。")
         if restore:
@@ -1160,7 +1240,19 @@ class ReviewApp(tk.Tk):
             Path(last).unlink()
         except OSError:
             pass
-        self._push_status(f"已復原上一張｜已擷取 {len(self._autocapture_stills)} 張")
+        # Re-arm so the SAME form can be re-shot in place — undo usually means "that shot was
+        # bad, retake". Without this the detector stays DISARMED and never retakes (#cc-07).
+        detector = self._autocapture_detector
+        if detector is not None:
+            try:
+                detector.set_baseline()
+            except Exception:
+                pass
+        self._autocapture_prev_gray = None
+        self._update_toolbar_states()
+        self._push_status(
+            f"已復原上一張，對準同一表單將自動重拍｜已擷取 {len(self._autocapture_stills)} 張"
+        )
 
     def _reset_baseline(self) -> None:
         if not self._autocapture_active:
@@ -1242,6 +1334,7 @@ class ReviewApp(tk.Tk):
             self._push_status(f"連續拍照擷取失敗：{exc}")
         if result is None:
             self._autocapture_active = False
+            self._update_toolbar_states()
             self._push_status(
                 f"連續拍照：相機中斷，已擷取 {len(self._autocapture_stills)} 張；"
                 "可按『完成辨識』辨識，或『取消連拍』放棄。"
@@ -1303,6 +1396,7 @@ class ReviewApp(tk.Tk):
             return
         self._stop_camera()
         self._autocapture_active = False
+        self._update_toolbar_states()
         if not stills:
             messagebox.showwarning("連續拍照", "尚未擷取任何影像，沒有可辨識的內容。")
             return

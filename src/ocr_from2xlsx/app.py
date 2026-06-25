@@ -208,6 +208,8 @@ class ReviewApp(tk.Tk):
     written_indices: object = frozenset()
     current_index: int = -1
     _toolbar_buttons: object | None = None
+    _autocapture_state_var: object | None = None
+    _autocapture_banner: object | None = None
 
     @staticmethod
     def _runtime_base_dir() -> Path:
@@ -329,6 +331,16 @@ class ReviewApp(tk.Tk):
             side=tk.RIGHT, padx=4
         )
         ttk.Button(toolbar, text="旋轉", command=self._rotate_preview).pack(side=tk.RIGHT, padx=4)
+
+        # Persistent continuous-capture state banner — separate from the one-shot footer so
+        # rotate/zoom/retry messages can't clobber the operator's "which state am I in?" cue.
+        # Empty (thin strip) when not scanning; coloured + text while a session is live (#cc-01).
+        self._autocapture_state_var = tk.StringVar(value="")
+        self._autocapture_banner = tk.Label(
+            self, textvariable=self._autocapture_state_var, anchor="w",
+            background="#f3f3f3", foreground="#202124",
+        )
+        self._autocapture_banner.pack(side=tk.TOP, fill=tk.X, padx=8)
 
         # Footer status bar: shows only the latest status; full history goes to the log file.
         self._status_var = tk.StringVar(
@@ -1103,6 +1115,29 @@ class ReviewApp(tk.Tk):
         _set("prev_record", bool(records))
         _set("next_record", bool(records))
 
+    def _set_autocapture_state(self, text: str, *, tone: str = "active") -> None:
+        # Drive the persistent continuous-capture banner (separate from the transient footer).
+        # tone picks the colour: active (scanning), warn (paused/interrupted); "" clears it.
+        var = getattr(self, "_autocapture_state_var", None)
+        if var is None:
+            return
+        try:
+            var.set(text)
+        except Exception:
+            pass
+        banner = getattr(self, "_autocapture_banner", None)
+        if banner is not None:
+            palette = {
+                "active": ("#fff4ce", "#5f4b00"),
+                "warn": ("#fde7e9", "#a4262c"),
+                "": ("#f3f3f3", "#202124"),
+            }
+            bg, fg = palette.get(tone if text else "", palette[""])
+            try:
+                banner.configure(background=bg, foreground=fg)
+            except Exception:
+                pass
+
     def _append_status_log_file(self, message: str) -> None:
         path = self._status_log_path
         if path is None:
@@ -1214,6 +1249,7 @@ class ReviewApp(tk.Tk):
         self._autocapture_detector = AutoCaptureDetector(AutoCaptureConfig.from_env())
         self._autocapture_active = True
         self._update_toolbar_states()
+        self._set_autocapture_state("● 連續拍照中：擷取空桌基準中…請保持桌面淨空")
         self._push_status("連續拍照：擷取空桌基準中…請保持桌面淨空。")
         if not self._has_live_camera_preview():
             self._start_camera(self._camera_index)
@@ -1226,6 +1262,7 @@ class ReviewApp(tk.Tk):
         self._stop_camera()
         self._autocapture_active = False
         self._update_toolbar_states()
+        self._set_autocapture_state("")
         count = len(self._autocapture_stills)
         self._push_status(f"已取消連續拍照（保留 {count} 張於輸出資料夾，未辨識）。")
         if restore:
@@ -1263,6 +1300,7 @@ class ReviewApp(tk.Tk):
         self._autocapture_need_baseline = True
         self._autocapture_prev_gray = None
         self._autocapture_baseline_samples = []
+        self._set_autocapture_state("● 連續拍照中：重新擷取空桌基準中…請保持桌面淨空")
         self._push_status("連續拍照：重新擷取空桌基準中…請保持桌面淨空。")
 
     def _observe_autocapture_frame(self, frame: object) -> bool:
@@ -1293,8 +1331,14 @@ class ReviewApp(tk.Tk):
                 self._autocapture_baseline_samples = []
                 self._autocapture_need_baseline = False
                 self._autocapture_detector.set_baseline()
+                self._set_autocapture_state("● 連續拍照中：空桌基準完成，請放上第一張表單")
+                self._play_shutter()  # distinct positive signal that the baseline locked (#cc-05)
+                self._flash_preview()
                 self._push_status("連續拍照：已設定空桌基準｜請放上表單…")
             else:
+                self._set_autocapture_state(
+                    f"● 連續拍照中：等待空桌基準（{len(samples)}/{need}）請保持桌面淨空"
+                )
                 self._push_status(
                     f"連續拍照：擷取空桌基準中…（{len(samples)}/{need}）請保持桌面淨空。"
                 )
@@ -1314,6 +1358,9 @@ class ReviewApp(tk.Tk):
         if action == CAPTURE:
             return self._perform_autocapture()
         if action == REARMED:
+            self._set_autocapture_state(
+                f"● 連續拍照中：已擷取 {len(self._autocapture_stills)} 張，請放上下一張"
+            )
             self._push_status(
                 f"連續拍照中｜已擷取 {len(self._autocapture_stills)} 張｜請放上下一張…"
             )
@@ -1335,6 +1382,9 @@ class ReviewApp(tk.Tk):
         if result is None:
             self._autocapture_active = False
             self._update_toolbar_states()
+            self._set_autocapture_state(
+                "⚠ 相機中斷，連拍已停 → 請按【完成辨識】辨識或【取消連拍】放棄", tone="warn"
+            )
             self._push_status(
                 f"連續拍照：相機中斷，已擷取 {len(self._autocapture_stills)} 張；"
                 "可按『完成辨識』辨識，或『取消連拍』放棄。"
@@ -1343,6 +1393,9 @@ class ReviewApp(tk.Tk):
         if not result.passed:
             outcome = self._autocapture_detector.note_failed_capture()
             if outcome == STALLED:
+                self._set_autocapture_state(
+                    "⏸ 已暫停：連續多張太模糊 → 請按【重設空桌基準】恢復", tone="warn"
+                )
                 self._push_status(
                     f"連續拍照：連續多張太模糊（清晰度 {result.sharpness:.0f}），已暫停；"
                     "請調整對焦/光線後按『重設空桌基準』。"
@@ -1378,6 +1431,9 @@ class ReviewApp(tk.Tk):
         self._autocapture_detector.mark_captured()
         self._play_shutter()
         self._flash_preview()
+        self._set_autocapture_state(
+            f"● 連續拍照中：已擷取 {len(self._autocapture_stills)} 張，請拿開換下一張"
+        )
         self._push_status(
             f"連續拍照中｜已擷取 {len(self._autocapture_stills)} 張｜請拿開換下一張…"
         )
@@ -1397,6 +1453,7 @@ class ReviewApp(tk.Tk):
         self._stop_camera()
         self._autocapture_active = False
         self._update_toolbar_states()
+        self._set_autocapture_state("")
         if not stills:
             messagebox.showwarning("連續拍照", "尚未擷取任何影像，沒有可辨識的內容。")
             return

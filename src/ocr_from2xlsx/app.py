@@ -312,8 +312,10 @@ class ReviewApp(tk.Tk):
         _group("掃描")
         _btn("擷取並辨識", self._capture_and_recognize, "capture_recognize")
         _btn("連續拍照", self._start_continuous_capture, "start_continuous")
-        _btn("完成辨識", self._finish_continuous_capture, "complete_recognize")
-        _btn("復原上一張", self._undo_last_continuous_capture, "undo_last")
+        # Name says what it does: recognize the batch the continuous capture just collected —
+        # not a generic "recognise" (single-shot is 擷取並辨識; existing files are 匯入資料夾批次).
+        _btn("結束連拍並辨識", self._finish_continuous_capture, "complete_recognize")
+        _btn("連拍刪除上一張", self._undo_last_continuous_capture, "undo_last")
         _btn("取消連拍", self._cancel_continuous_capture, "cancel_continuous")
         _btn("重設空桌基準", self._reset_baseline, "reset_baseline")
         _btn("匯入資料夾批次", self._import_folder_batch, "import_folder_batch")

@@ -415,14 +415,17 @@ class ImageViewer:
         self.zoom = MIN_ZOOM
         self.origin = [0.0, 0.0]
         self._placeholder = ""
-        self._image: tk.PhotoImage | None = None
-        self._display_image: tk.PhotoImage | None = None
-        self._image_size = (0, 0)
+        self._image: tk.PhotoImage | None = None        # live camera frame (tk)
+        self._pil_image = None                          # static source image, full resolution (PIL)
+        self._fit_scale = 1.0                           # full-res px -> fit-base px (zoom == 1 fills the pane)
+        self._display_image = None                      # rendered ImageTk/PhotoImage; held so Tk does not GC it
+        self._image_size = (0, 0)                       # fit-base size; the zoom/pan math works in this space
         self._view_size = (1, 1)
         self._drag_anchor: tuple[int, int] | None = None
         self.canvas.bind("<MouseWheel>", self._on_wheel)
         self.canvas.bind("<ButtonPress-1>", self._on_drag_start)
         self.canvas.bind("<B1-Motion>", self._on_drag_move)
+        self.canvas.bind("<Configure>", self._on_configure)
 
     def set_zoom(self, zoom: float) -> None:
         from ocr_from2xlsx.image_viewer import clamp_zoom
@@ -443,11 +446,15 @@ class ImageViewer:
         ]
         self._redraw()
 
-    def show_image(self, image: "tk.PhotoImage") -> None:
+    def show_image(self, pil_image) -> None:
+        # #57: hold the FULL-RESOLUTION PIL image and render the visible window with a
+        # LANCZOS crop-resize in _redraw, so the fit view is crisp and zooming reveals real
+        # detail. The old path (tk.PhotoImage.subsample to fit + .zoom to magnify) was
+        # nearest-neighbour on an already-decimated image — blocky — and could not load JPG.
         self.mode = "static"
-        self._image = image
-        self._image_size = (image.width(), image.height())
-        self._refresh_view_size()
+        self._pil_image = pil_image
+        self._image = None
+        self._refresh_view_size()  # computes _fit_scale + _image_size from the pane + image
         self.pan_to(self.origin[0], self.origin[1])  # re-clamp + redraw at session zoom
 
     def show_frame(self, image: "tk.PhotoImage") -> None:
@@ -459,6 +466,7 @@ class ImageViewer:
     def show_placeholder(self, text: str) -> None:
         self.mode = "placeholder"
         self._image = None
+        self._pil_image = None
         self._display_image = None
         self._placeholder = text
         try:
@@ -476,7 +484,7 @@ class ImageViewer:
         clean record returns to so the operator isn't left zoomed into a prior field."""
         from ocr_from2xlsx.image_viewer import MIN_ZOOM
 
-        if self.mode != "static" or self._image is None:
+        if self.mode != "static" or self._pil_image is None:
             return
         self.zoom = MIN_ZOOM
         self._refresh_view_size()
@@ -485,7 +493,7 @@ class ImageViewer:
     def frame_region(self, band: tuple[float, float, float, float]) -> None:
         from ocr_from2xlsx.image_viewer import clamp_zoom
 
-        if self.mode != "static" or self._image is None:
+        if self.mode != "static" or self._pil_image is None:
             return
         image_w, image_h = self._image_size
         self._refresh_view_size()
@@ -507,11 +515,28 @@ class ImageViewer:
             self._view_size = (max(1, self.canvas.winfo_width()), max(1, self.canvas.winfo_height()))
         except tk.TclError:
             pass
+        # Recompute the fit-base size whenever the pane size is known, so zoom==1 fills the
+        # current pane and the pan/clamp math (which works in fit-base space) stays correct
+        # even after the operator drags the splitter (#57).
+        if self.mode == "static" and self._pil_image is not None:
+            image_w, image_h = self._pil_image.size
+            view_w, view_h = self._view_size
+            if image_w > 0 and image_h > 0:
+                self._fit_scale = min(view_w / image_w, view_h / image_h)
+                self._image_size = (
+                    max(1, round(image_w * self._fit_scale)),
+                    max(1, round(image_h * self._fit_scale)),
+                )
+
+    def _on_configure(self, _event: "tk.Event") -> None:
+        # Pane resized (splitter dragged): re-fit + redraw the static image so it tracks.
+        if self.mode == "static" and self._pil_image is not None:
+            self.pan_to(self.origin[0], self.origin[1])
 
     def _on_wheel(self, event: "tk.Event") -> str:
         from ocr_from2xlsx.image_viewer import anchored_origin, clamp_zoom
 
-        if self.mode != "static" or self._image is None:
+        if self.mode != "static" or self._pil_image is None:
             return "break"
         old = self.zoom
         new = clamp_zoom(old + (1.0 if event.delta > 0 else -1.0))
@@ -535,24 +560,51 @@ class ImageViewer:
         return "break"
 
     def _redraw(self) -> None:
-        if self._image is None:
-            return
         try:
-            self.canvas.delete("all")
             if self.mode == "live":
+                if self._image is None:
+                    return
+                self.canvas.delete("all")
                 self._display_image = self._image
                 self.canvas.create_image(0, 0, anchor="nw", image=self._image)
                 return
+            if self.mode != "static" or self._pil_image is None:
+                return
+            from PIL import Image, ImageTk
+
+            view_w, view_h = self._view_size
             factor = max(1, int(round(self.zoom)))
-            display = self._image if factor == 1 else self._image.zoom(factor, factor)
-            self._display_image = display  # hold a reference so Tk does not GC it
-            self.canvas.create_image(
-                int(-self.origin[0] * factor),
-                int(-self.origin[1] * factor),
-                anchor="nw",
-                image=display,
-            )
+            fit_scale = self._fit_scale or 0.0
+            if fit_scale <= 0:
+                return
+            ox, oy = self.origin  # fit-base-space top-left of the visible window
+            win_w = view_w / factor
+            win_h = view_h / factor
+            image_w, image_h = self._pil_image.size
+            # Visible window mapped from fit-base space to full-res source px (clamped to image).
+            sx0 = max(0.0, min(float(image_w), ox / fit_scale))
+            sy0 = max(0.0, min(float(image_h), oy / fit_scale))
+            sx1 = max(0.0, min(float(image_w), (ox + win_w) / fit_scale))
+            sy1 = max(0.0, min(float(image_h), (oy + win_h) / fit_scale))
+            if sx1 - sx0 < 1 or sy1 - sy0 < 1:
+                return
+            crop = self._pil_image.crop((int(sx0), int(sy0), round(sx1), round(sy1)))
+            # Render the visible crop at canvas resolution (display scale = fit_scale * factor):
+            # output is ~pane-sized at any zoom — bounded memory, LANCZOS instead of pixel-replication.
+            display_scale = fit_scale * factor
+            out_w = max(1, round(crop.width * display_scale))
+            out_h = max(1, round(crop.height * display_scale))
+            resampler = getattr(Image, "Resampling", Image).LANCZOS
+            display = crop.resize((out_w, out_h), resampler)
+            self._display_image = ImageTk.PhotoImage(display)  # hold a ref so Tk does not GC it
+            # The crop's top-left on the canvas: (its fit-space pos - origin) * factor.
+            draw_x = round((sx0 * fit_scale - ox) * factor)
+            draw_y = round((sy0 * fit_scale - oy) * factor)
+            self.canvas.delete("all")
+            self.canvas.create_image(draw_x, draw_y, anchor="nw", image=self._display_image)
         except tk.TclError:
+            pass
+        except Exception:
             pass
 
 
@@ -588,7 +640,7 @@ class ReviewApp(tk.Tk):
     records: object = ()
     written_indices: object = frozenset()
     current_index: int = -1
-    _toolbar_buttons: object | None = None
+    _controls: object | None = None  # set to a dict in _build_ui; default for headless getattr
     _autocapture_state_var: object | None = None
     _autocapture_banner: object | None = None
     _rotate_btn: object | None = None
@@ -678,71 +730,94 @@ class ReviewApp(tk.Tk):
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
     def _build_ui(self) -> None:
+        # State-machine controls: key -> list of "set enabled" callables. A key can drive both
+        # a toolbar button AND a menu entry; _update_toolbar_states toggles all of them (#56).
+        self._controls = {}
+
+        def _register(key, setter) -> None:
+            if key is not None:
+                self._controls.setdefault(key, []).append(setter)
+
+        def _menu_item(menu, label, command, key=None) -> None:
+            menu.add_command(label=label, command=command)
+            _register(
+                key,
+                lambda enabled, m=menu, lbl=label: m.entryconfig(
+                    lbl, state="normal" if enabled else "disabled"
+                ),
+            )
+
+        # --- Menu bar: 檔案 / 掃描 / 編輯 / 檢視 / 說明 — actions are categorised here so the
+        # toolbar can stay down to the five most-used buttons (#56).
+        menubar = tk.Menu(self, tearoff=0)
+
+        file_menu = tk.Menu(menubar, tearoff=0)
+        _menu_item(file_menu, "開新報表（選 XLSX 模板）", self._choose_template, "choose_template")
+        _menu_item(file_menu, "匯入 JSON", self._load_json, "load_json")
+        _menu_item(file_menu, "匯入資料夾批次", self._import_folder_batch, "import_folder_batch")
+        file_menu.add_separator()
+        file_menu.add_command(label="結束", command=self._on_close)
+        menubar.add_cascade(label="檔案(F)", menu=file_menu, underline=3)
+
+        scan_menu = tk.Menu(menubar, tearoff=0)
+        _menu_item(scan_menu, "選擇攝影機", self._choose_camera, "choose_camera")
+        _menu_item(scan_menu, "擷取並辨識", self._capture_and_recognize, "capture_recognize")
+        scan_menu.add_separator()
+        _menu_item(scan_menu, "連續拍照", self._start_continuous_capture, "start_continuous")
+        _menu_item(scan_menu, "結束連拍並辨識", self._finish_continuous_capture, "complete_recognize")
+        _menu_item(scan_menu, "連拍刪除上一張", self._undo_last_continuous_capture, "undo_last")
+        _menu_item(scan_menu, "取消連拍", self._cancel_continuous_capture, "cancel_continuous")
+        _menu_item(scan_menu, "重設空桌基準", self._reset_baseline, "reset_baseline")
+        menubar.add_cascade(label="掃描(S)", menu=scan_menu, underline=3)
+
+        edit_menu = tk.Menu(menubar, tearoff=0)
+        _menu_item(edit_menu, "上一筆", self._previous_record, "prev_record")
+        _menu_item(edit_menu, "下一筆", self._next_record, "next_record")
+        edit_menu.add_separator()
+        _menu_item(edit_menu, "確認並寫入", self._confirm_current, "confirm")
+        _menu_item(edit_menu, "強制寫入", self._force_write, "force")
+        menubar.add_cascade(label="編輯(E)", menu=edit_menu, underline=3)
+
+        view_menu = tk.Menu(menubar, tearoff=0)
+        view_menu.add_command(label="放大", command=self._zoom_in_static)
+        view_menu.add_command(label="縮小", command=self._zoom_out_static)
+        view_menu.add_command(label="符合視窗", command=self._reset_static_view)
+        view_menu.add_separator()
+        view_menu.add_command(label="旋轉", command=self._rotate_preview)
+        self._view_menu = view_menu
+        self._rotate_menu_index = view_menu.index("end")  # the 旋轉 entry; label shows the angle
+        menubar.add_cascade(label="檢視(V)", menu=view_menu, underline=3)
+
+        help_menu = tk.Menu(menubar, tearoff=0)
+        help_menu.add_command(label="快捷鍵", command=self._show_shortcut_help)
+        menubar.add_cascade(label="說明(H)", menu=help_menu, underline=3)
+
+        self.config(menu=menubar)
+        self._update_rotate_button()  # reflect carried-over rotation in the 檢視 menu label
+
+        # --- Slim toolbar: only the five most-used actions (#56) --------------------------
         toolbar = ttk.Frame(self)
         toolbar.pack(fill=tk.X, padx=8, pady=8)
 
-        # Toolbar grouped by workflow phase — 設定 → 掃描 → 校正 — with a small caption per
-        # group and vertical separators, so the operator can see where to start instead of
-        # facing one undifferentiated 17-button row. View controls are pushed to the right.
-        def _group(label: str) -> None:
-            ttk.Separator(toolbar, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=(6, 4))
-            ttk.Label(toolbar, text=label, foreground="#5f6368").pack(side=tk.LEFT, padx=(0, 4))
-
-        self._toolbar_buttons = {}
-
-        def _btn(text: str, command, key: str | None = None) -> None:
+        def _btn(text: str, command, key: str | None = None):
             button = ttk.Button(toolbar, text=text, command=command)
             button.pack(side=tk.LEFT, padx=4)
-            if key is not None:
-                self._toolbar_buttons[key] = button
+            _register(
+                key,
+                lambda enabled, b=button: b.configure(state="normal" if enabled else "disabled"),
+            )
+            return button
 
-        # 設定（先做）
-        ttk.Label(toolbar, text="設定", foreground="#5f6368").pack(side=tk.LEFT, padx=(0, 4))
-        _btn("選擇模板 XLSX", self._choose_template, "choose_template")
-        _btn("匯入 JSON", self._load_json, "load_json")
-        _btn("選擇攝影機", self._choose_camera, "choose_camera")
-        # 掃描
-        _group("掃描")
-        _btn("擷取並辨識", self._capture_and_recognize, "capture_recognize")
-        _btn("連續拍照", self._start_continuous_capture, "start_continuous")
-        # Name says what it does: recognize the batch the continuous capture just collected —
-        # not a generic "recognise" (single-shot is 擷取並辨識; existing files are 匯入資料夾批次).
-        _btn("結束連拍並辨識", self._finish_continuous_capture, "complete_recognize")
-        _btn("連拍刪除上一張", self._undo_last_continuous_capture, "undo_last")
-        _btn("取消連拍", self._cancel_continuous_capture, "cancel_continuous")
-        _btn("重設空桌基準", self._reset_baseline, "reset_baseline")
-        _btn("匯入資料夾批次", self._import_folder_batch, "import_folder_batch")
-        # 校正
-        _group("校正")
-        _btn("上一筆", self._previous_record, "prev_record")
-        _btn("下一筆", self._next_record, "next_record")
-        _btn("確認並寫入", self._confirm_current, "confirm")
-        _btn("強制寫入", self._force_write, "force")
-        # 預覽（靠右，與寫入/掃描動作分開）
-        ttk.Button(toolbar, text="縮小", command=lambda: self._zoom_preview(1 / 1.25)).pack(
-            side=tk.RIGHT, padx=4
-        )
-        ttk.Button(toolbar, text="放大", command=lambda: self._zoom_preview(1.25)).pack(
-            side=tk.RIGHT, padx=4
-        )
-        self._rotate_btn = ttk.Button(toolbar, command=self._rotate_preview)
-        self._rotate_btn.pack(side=tk.RIGHT, padx=4)
-        self._update_rotate_button()  # show the carried-over rotation at launch
-        # Discoverability (#42/#48): a persistent 快捷鍵 cheat-sheet button (right edge) plus
-        # hover tooltips that clarify 確認 vs 強制寫入, carried over from the correction-UX pass.
-        ttk.Button(toolbar, text="快捷鍵", command=self._show_shortcut_help).pack(
-            side=tk.RIGHT, padx=4
-        )
-        button_tooltips = {
-            "confirm": "Enter / Ctrl+Enter：驗證必填欄位後寫入；缺漏會被擋下",
-            "force": "F2 / Ctrl+Shift+Enter：跳過必填檢查強制寫入，可能寫入不完整資料",
-            "prev_record": "PgUp / Ctrl+←：上一筆",
-            "next_record": "PgDn / Ctrl+→：下一筆",
-        }
-        for key, hint in button_tooltips.items():
-            button = self._toolbar_buttons.get(key)
-            if button is not None:
-                _Tooltip(button, hint)
+        _btn("開新報表", self._choose_template, "choose_template")
+        _btn("匯入資料夾", self._import_folder_batch, "import_folder_batch")
+        ttk.Separator(toolbar, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=(8, 4))
+        prev_btn = _btn("上一筆", self._previous_record, "prev_record")
+        next_btn = _btn("下一筆", self._next_record, "next_record")
+        confirm_btn = _btn("確認並寫入", self._confirm_current, "confirm")
+        # Hover hints on the keyboard-driven actions (#48), since labels are now sparse.
+        _Tooltip(prev_btn, "PgUp / Ctrl+←：上一筆")
+        _Tooltip(next_btn, "PgDn / Ctrl+→：下一筆")
+        _Tooltip(confirm_btn, "Enter / Ctrl+Enter：驗證必填欄位後寫入；缺漏會被擋下")
 
         # Persistent continuous-capture state banner — separate from the one-shot footer so
         # rotate/zoom/retry messages can't clobber the operator's "which state am I in?" cue.
@@ -1993,28 +2068,23 @@ class ReviewApp(tk.Tk):
                 return
 
             image_path = self.loaded_json_path.parent / relative_path
-            if image_path.suffix.lower() != ".png" or not image_path.is_file():
+            if not image_path.is_file():
                 self._show_placeholder_preview()
                 return
 
-            image = tk.PhotoImage(file=str(image_path))
-            self.preview.canvas.update_idletasks()
-            target_width = self.preview.canvas.winfo_width()
-            target_height = self.preview.canvas.winfo_height()
-            if target_width <= 1:
-                target_width = 360
-            if target_height <= 1:
-                target_height = 640
+            # Load the full-resolution source via Pillow (any format incl. JPG) and let the
+            # viewer render it with a LANCZOS crop-resize (#57). The old tk.PhotoImage +
+            # subsample path was nearest-neighbour, only loaded PNG, and lost detail on zoom.
+            from PIL import Image
 
-            scale_x = max(1, (image.width() + target_width - 1) // target_width)
-            scale_y = max(1, (image.height() + target_height - 1) // target_height)
-            scale = max(scale_x, scale_y)
-            if scale > 1:
-                image = image.subsample(scale, scale)
+            pil_image = Image.open(image_path)
+            pil_image.load()
+            if pil_image.mode not in ("RGB", "L"):
+                pil_image = pil_image.convert("RGB")
 
             self._stop_camera()
-            self._preview_image = image
-            self.preview.show_image(image)  # static: drag-pan + wheel-zoom (integer steps)
+            self._preview_image = pil_image  # keep a reference alongside the viewer's
+            self.preview.show_image(pil_image)  # static: drag-pan + wheel-zoom (integer steps)
         except Exception:
             self._show_placeholder_preview()
 
@@ -2045,8 +2115,8 @@ class ReviewApp(tk.Tk):
         # Advertise the workflow by enabling only the buttons valid in the current state — so
         # the operator can't press 完成辨識/取消連拍 before 連續拍照, or 確認並寫入 with no
         # template/record, and doesn't have to learn the order by being scolded by dialogs.
-        btns = getattr(self, "_toolbar_buttons", None)
-        if not btns:
+        controls = getattr(self, "_controls", None)
+        if not controls:
             return
         active = bool(getattr(self, "_autocapture_active", False))
         has_stills = bool(getattr(self, "_autocapture_stills", None))
@@ -2057,10 +2127,9 @@ class ReviewApp(tk.Tk):
         valid_record = 0 <= idx < len(records)
 
         def _set(key: str, enabled: bool) -> None:
-            button = btns.get(key)
-            if button is not None:
+            for setter in controls.get(key, ()):
                 try:
-                    button.configure(state="normal" if enabled else "disabled")
+                    setter(enabled)
                 except Exception:
                     pass
 
@@ -2121,14 +2190,16 @@ class ReviewApp(tk.Tk):
             pass
 
     def _update_rotate_button(self) -> None:
-        # Reflect the current (session-persisted) rotation on the button so the carried-over
-        # state is visible at launch instead of only in a one-shot status line.
-        btn = getattr(self, "_rotate_btn", None)
-        if btn is None:
-            return
+        # Reflect the current (session-persisted) rotation in the 檢視 menu 旋轉 label so the
+        # carried-over state is visible at launch, not only in a one-shot status line (#56).
         angle = getattr(self, "_preview_rotation", 0)
+        text = "旋轉" if not angle else f"旋轉 {angle}°"
+        menu = getattr(self, "_view_menu", None)
+        index = getattr(self, "_rotate_menu_index", None)
+        if menu is None or index is None:
+            return
         try:
-            btn.configure(text="旋轉" if not angle else f"旋轉 {angle}°")
+            menu.entryconfig(index, label=text)
         except Exception:
             pass
 

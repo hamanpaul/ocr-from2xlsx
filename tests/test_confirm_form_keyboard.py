@@ -93,11 +93,17 @@ def test_set_zoom_reclamps_origin_so_zoom_out_has_no_edge_gap():
         pytest.skip(f"no display available for Tk: {exc}")
     root.withdraw()
     try:
+        from PIL import Image
+
         viewer = app_module.ImageViewer(root)
-        img = tk.PhotoImage(master=root, width=200, height=200)
-        viewer.canvas.configure(width=100, height=100)
-        viewer.canvas.update_idletasks()
-        viewer.show_image(img)
+        # Deterministic fit-base space (#57 renders from full-res PIL; zoom/pan math works in
+        # fit-base coords): a 200px image fitted into a 100px pane → fit-base size 100.
+        viewer._refresh_view_size = lambda: None
+        viewer.mode = "static"
+        viewer._pil_image = Image.new("RGB", (200, 200))
+        viewer._fit_scale = 0.5
+        viewer._image_size = (100, 100)
+        viewer._view_size = (100, 100)
         viewer.set_zoom(4)
         viewer.pan_to(1000, 1000)  # pan hard to the bottom-right; clamps to the max origin
         max_at_4 = list(viewer.origin)
@@ -105,7 +111,7 @@ def test_set_zoom_reclamps_origin_so_zoom_out_has_no_edge_gap():
         assert viewer.origin[0] <= max_at_4[0] and viewer.origin[1] <= max_at_4[1]
         # origin must stay within the larger window's valid range (no dark edge gap)
         from ocr_from2xlsx.image_viewer import clamp_origin
-        assert viewer.origin[0] == clamp_origin(viewer.origin[0], 200, viewer._view_size[0], 2)
+        assert viewer.origin[0] == clamp_origin(viewer.origin[0], 100, viewer._view_size[0], 2)
     finally:
         root.destroy()
 

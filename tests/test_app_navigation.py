@@ -217,9 +217,34 @@ def test_review_app_builds_confirm_form_and_prefills_record(tmp_path: Path) -> N
         assert collected["medical_record_no"] == expected_state["medical_record_no"]
         assert collected["gender"] == expected_state["gender"]
         assert collected["cancer"] == expected_state["cancer"]
-        assert {"上一筆", "下一筆", "確認並寫入", "強制寫入", "擷取並辨識"} <= set(
+        # Slim toolbar keeps only the five most-used actions; the rest moved to the menu bar (#56).
+        assert {"開新報表", "匯入資料夾", "上一筆", "下一筆", "確認並寫入"} <= set(
             _button_texts(app)
         )
+    finally:
+        app.destroy()
+
+
+def test_menu_bar_categories_and_state_machine_drives_menu_entries() -> None:
+    try:
+        app = ReviewApp()
+    except tk.TclError as exc:
+        pytest.skip(f"no display available for Tk: {exc}")
+    app.withdraw()
+    try:
+        menubar = app.nametowidget(app.cget("menu"))
+        labels = {menubar.entrycget(i, "label") for i in range(menubar.index("end") + 1)}
+        assert {"檔案(F)", "掃描(S)", "編輯(E)", "檢視(V)", "說明(H)"} <= labels
+
+        # The state machine (#56) must gate MENU entries, not just toolbar buttons: with no
+        # working file and no records, 強制寫入 and 上一筆 (both menu entries) are disabled.
+        app.session = None
+        app.records = []
+        app.current_index = -1
+        app._update_toolbar_states()
+        edit_menu = app.nametowidget(menubar.entrycget("編輯(E)", "menu"))
+        assert str(edit_menu.entrycget("強制寫入", "state")) == "disabled"
+        assert str(edit_menu.entrycget("上一筆", "state")) == "disabled"
     finally:
         app.destroy()
 

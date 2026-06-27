@@ -258,3 +258,80 @@ def test_accept_scan_overwrite_row_writes_to_that_row(tmp_path: Path) -> None:
         assert sheet.cell(row=r1, column=gender_col).value == GENDER_LABELS["male"]
     finally:
         wb.close()
+
+
+# --- Relaxed (human-confirmed) write: only a name is required, everything else optional ---
+# (#confirm-required-fields) -------------------------------------------------------------
+
+
+def test_relaxed_writes_record_with_blank_optional_fields(tmp_path: Path) -> None:
+    template = tmp_path / "template.xlsx"
+    working = tmp_path / "working.xlsx"
+    create_workbook_template(template)
+
+    session = ImportSession.start(template, working)
+    record = make_record()
+    # Strip everything the strict path would block on; keep only the name.
+    record.service_date = ""
+    record.identity = ""
+    record.gender = ""
+    result = session.accept_scan(record, human_confirmed=True, relaxed=True)
+    session.close()
+
+    assert result.status == "written"
+    assert result.row_number == 2
+    assert result.blockers == []
+    # The strict blockers are still recorded, just demoted to warnings.
+    assert "service_date.invalid" in result.warnings
+    wb = load_workbook(working)
+    try:
+        sheet = wb["個案總表"]
+        name_col = _column_for_header(sheet, BASIC_COLUMN_BY_FIELD["name"])
+        date_col = _column_for_header(sheet, BASIC_COLUMN_BY_FIELD["service_date"])
+        identity_col = _column_for_header(sheet, BASIC_COLUMN_BY_FIELD["identity"])
+        assert sheet.cell(row=2, column=name_col).value == "王小明"
+        assert sheet.cell(row=2, column=date_col).value in ("", None)
+        assert sheet.cell(row=2, column=identity_col).value in ("", None)
+    finally:
+        wb.close()
+
+
+def test_relaxed_blocks_empty_name(tmp_path: Path) -> None:
+    template = tmp_path / "template.xlsx"
+    working = tmp_path / "working.xlsx"
+    create_workbook_template(template)
+
+    session = ImportSession.start(template, working)
+    record = make_record()
+    record.name = "   "  # whitespace-only counts as empty
+    result = session.accept_scan(record, human_confirmed=True, relaxed=True)
+    session.close()
+
+    assert result.status == "blocked"
+    assert result.blockers == ["name.required"]
+    assert result.row_number is None
+    wb = load_workbook(working)
+    try:
+        sheet = wb["個案總表"]
+        name_col = _column_for_header(sheet, BASIC_COLUMN_BY_FIELD["name"])
+        assert sheet.cell(row=2, column=name_col).value is None
+    finally:
+        wb.close()
+
+
+def test_relaxed_force_writes_even_with_empty_name(tmp_path: Path) -> None:
+    template = tmp_path / "template.xlsx"
+    working = tmp_path / "working.xlsx"
+    create_workbook_template(template)
+
+    session = ImportSession.start(template, working)
+    record = make_record()
+    record.name = ""
+    record.service_date = ""
+    result = session.accept_scan(record, force=True, human_confirmed=True, relaxed=True)
+    session.close()
+
+    # 強制寫入 waives even the name requirement.
+    assert result.status == "written"
+    assert result.row_number == 2
+    assert result.blockers == []

@@ -75,6 +75,7 @@ def test_confirm_on_written_record_overwrites_its_row(monkeypatch):
     app.written_indices = {0}
     app._written_rows = {0: 5}
     app.editing = True
+    app.fields["name"].set("王小明")  # 確認並寫入 now requires a name; this harness skips _show_record
     monkeypatch.setattr("ocr_from2xlsx.app.messagebox.askyesno", lambda *a, **k: True)
     monkeypatch.setattr("ocr_from2xlsx.app.messagebox.showinfo", lambda *a, **k: None)
 

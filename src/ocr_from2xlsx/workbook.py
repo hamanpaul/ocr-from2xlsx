@@ -102,12 +102,20 @@ class WorkbookWriter:
             row = self._next_empty_row()
         else:
             self._clear_row(row)
-        self._set(row, BASIC_COLUMN_BY_FIELD["service_month"], record.service_month_label())
+        # Tolerate missing/optional values: the relaxed (human-confirmed) GUI write only
+        # requires a name, so a blank/invalid date or an unset identity/gender must land as
+        # an empty cell rather than crash. The strict import path blocks those upstream, so
+        # this only ever softens the relaxed path — valid values map identically.
+        try:
+            service_month = record.service_month_label()
+        except ValueError:
+            service_month = ""
+        self._set(row, BASIC_COLUMN_BY_FIELD["service_month"], service_month)
         self._set(row, BASIC_COLUMN_BY_FIELD["service_date"], record.service_date)
-        self._set(row, BASIC_COLUMN_BY_FIELD["identity"], IDENTITY_LABELS[record.identity])
+        self._set(row, BASIC_COLUMN_BY_FIELD["identity"], IDENTITY_LABELS.get(record.identity, ""))
         self._set(row, BASIC_COLUMN_BY_FIELD["name"], record.name)
         self._set(row, BASIC_COLUMN_BY_FIELD["medical_record_no"], record.medical_record_no)
-        self._set(row, BASIC_COLUMN_BY_FIELD["gender"], GENDER_LABELS[record.gender])
+        self._set(row, BASIC_COLUMN_BY_FIELD["gender"], GENDER_LABELS.get(record.gender, ""))
 
         if record.identity == "patient":
             fields = record.patient_fields

@@ -1383,25 +1383,42 @@ class ReviewApp(tk.Tk):
         )
 
     def _resolve_recognition_backend(self, roster_path, env_overrides):
-        # Shared by single-capture and batch import: default to the local vision
-        # backend when a bundled/running VLM is available; fall back to the plugin.
+        # Default to the PaddleOCR plugin: ~50x faster than the local VLM and it actually
+        # reads the structured fields (MRN / checkboxes / identity); the handwritten name is
+        # a human-confirm step either way. The vision VLM (qwen3-vl) is opt-in via
+        # OCR_BACKEND=vision — on CPU/AMD it is ~9 min/photo and weak on handwriting (#60/#61).
+        # OCR_BACKEND=plugin forces the plugin (surfacing an error if it is not installed).
+        from ocr_from2xlsx.ocr_plugin import PluginUnavailableError
         from ocr_from2xlsx.recognition.factory import vision_config_from_env
         from ocr_from2xlsx.recognition.vlm_server import ensure_server, vision_runtime_available
 
-        vlm_host = vision_config_from_env()[0]
         backend_choice = os.environ.get("OCR_BACKEND", "").strip().lower()
-        if backend_choice == "vision" or (
-            backend_choice != "plugin" and vision_runtime_available(vlm_host)
-        ):
+
+        def _vision():
             from ocr_from2xlsx.cli import _build_vision_backend
 
+            vlm_host = vision_config_from_env()[0]
             ensure_server(vlm_host)
             return _build_vision_backend(roster_path)
-        from ocr_from2xlsx.plugin_backend import PluginOcrBackend
 
-        if env_overrides is None:
-            return PluginOcrBackend.resolve()
-        return PluginOcrBackend.resolve(env_overrides=env_overrides)
+        def _plugin():
+            from ocr_from2xlsx.plugin_backend import PluginOcrBackend
+
+            if env_overrides is None:
+                return PluginOcrBackend.resolve()
+            return PluginOcrBackend.resolve(env_overrides=env_overrides)
+
+        if backend_choice == "vision":
+            return _vision()
+        try:
+            return _plugin()
+        except PluginUnavailableError:
+            if backend_choice == "plugin":
+                raise  # explicitly requested -> surface the install hint
+            # Default path: fall back to the bundled VLM only when the plugin isn't installed.
+            if vision_runtime_available(vision_config_from_env()[0]):
+                return _vision()
+            raise
 
     def _import_folder_batch(self) -> None:
         from ocr_from2xlsx.cli import _resolve_template

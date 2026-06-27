@@ -66,6 +66,11 @@
 - roster 無建議時顯示「（無建議名單）」而非空白清單。
 
 ### Changed
+- (#61) 預設辨識引擎改為 **PaddleOCR plugin**（地端、快）：實機對照地端 2B vision-VLM 約 534s/張且讀不出手寫
+  姓名/病歷號，PaddleOCR 約 10–14s/張（≈50×）且能讀出 MRN/性別/身分/勾選等結構化欄位（手寫姓名兩者都需人工
+  確認，校正 UI 已支援）。`app._resolve_recognition_backend` 預設改走 plugin（與 CLI 一致），VLM 改為 opt-in
+  `OCR_BACKEND=vision`；plugin 未安裝且非明確指定時自動 fallback 回 VLM。`build/package.py` 保留 `dist/plugins`
+  並在缺席時呼叫 `build_paddle_plugin.py` 一併打包。（Unlimited-OCR/大型 VLM 需 NVIDIA CUDA，本機為 AMD 故不適用。）
 - (#60) 影像前處理改為可選模式（環境變數 `OCR_VLM_PREPROCESS`）：`autocontrast`（**預設＝原行為**）／`clahe`／
   `binarize`／`none`，每個 section crop 套用。`tiling` 新增 `resolve_preprocess_mode`/`enhance_crop`。實機對照
   （`scan-capture-7`，2B 模型，各約 9 分鐘）顯示**各模式差異小且皆未讀出手寫姓名/病歷號**（name 讀到的是印刷標籤

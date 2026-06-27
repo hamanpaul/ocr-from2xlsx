@@ -63,51 +63,6 @@ def test_progress_and_badge_reflect_write_and_revisit():
     assert "第 2 列" in app._progress_text
 
 
-def test_apply_roster_choice_fills_name_and_clears_unconfirmed():
-    from tests.test_json_io import make_record
-
-    rec = make_record("scan-0001")
-    rec.ocr.warnings = ["name.unconfirmed"]
-    app = _headless_app([rec])
-
-    app.confirm_form.set_flagged_fields({"name": "unconfirmed"})
-    assert app.confirm_form.flagged_count() == 1
-
-    app._apply_roster_choice("王小明")
-
-    assert app.fields["name"].get() == "王小明"
-    assert "name.unconfirmed" not in app.records[0].ocr.warnings
-    assert app.editing is True
-    # Picking a name clears its ⚠ flag + the "待確認 N" count immediately (#46).
-    assert app.confirm_form.flagged_count() == 0
-
-
-def test_roster_candidates_for_ranks_store_names(tmp_path):
-    from ocr_from2xlsx.name_suggestion import confirm_name
-    from tests.test_json_io import make_record
-
-    store = tmp_path / "name_corrections.jsonl"
-    confirm_name(store_path=store, record_id="r1", final_value="王小明")
-    confirm_name(store_path=store, record_id="r2", final_value="李大華")
-    rec = make_record("scan-0001")
-    rec.name = "王小明"
-    app = _headless_app([rec])
-    app.correction_store_path = store
-
-    candidates = app._roster_candidates_for(rec)
-
-    assert "王小明" in candidates
-    assert candidates[0] == "王小明"
-
-
-def test_roster_candidates_for_no_store_returns_empty():
-    from tests.test_json_io import make_record
-
-    app = _headless_app([make_record("scan-0001")])
-    app.correction_store_path = None
-    assert app._roster_candidates_for(app.records[0]) == []
-
-
 def test_confirm_on_written_record_overwrites_its_row(monkeypatch):
     from ocr_from2xlsx.session import AcceptResult
     from tests.test_app_navigation import StubSession

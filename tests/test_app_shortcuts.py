@@ -99,71 +99,6 @@ def test_clean_record_does_not_steal_focus():
     assert getattr(app.confirm_form, "focused", None) is None
 
 
-class _FakeListbox:
-    def __init__(self, items, selection=()):
-        self.items = list(items)
-        self._sel = tuple(selection)
-        self.focused = False
-        self.activated = None
-
-    def size(self):
-        return len(self.items)
-
-    def curselection(self):
-        return self._sel
-
-    def index(self, _which):
-        return 0  # Tk defaults ACTIVE to index 0 even with no real selection
-
-    def get(self, i):
-        return self.items[i]
-
-    def focus_set(self):
-        self.focused = True
-
-    def activate(self, i):
-        self.activated = i
-
-    def selection_clear(self, *_a):
-        pass
-
-    def selection_set(self, i):
-        self._sel = (i,)
-
-
-def test_roster_commit_requires_real_selection(monkeypatch):
-    app = _headless_app()
-    record = make_record("scan-0001")
-    app.records = [record]
-    app.current_index = 0
-    applied = []
-    monkeypatch.setattr(app, "_apply_roster_choice", lambda name: applied.append(name))
-
-    # No selection (e.g. Tab-focused but never browsed): must NOT commit the top candidate.
-    app._roster_listbox = _FakeListbox(["王小明", "李大華"], selection=())
-    assert app._on_roster_commit() == "break"
-    assert applied == []
-
-    # A real selection commits exactly that row.
-    app._roster_listbox = _FakeListbox(["王小明", "李大華"], selection=(1,))
-    assert app._on_roster_commit() == "break"
-    assert applied == ["李大華"]
-
-
-def test_f8_focuses_roster_and_escape_returns_to_name(monkeypatch):
-    app = _headless_app()
-    app._roster_listbox = _FakeListbox(["王小明", "李大華"])
-
-    assert app._on_focus_roster_key() == "break"
-    assert app._roster_listbox.focused is True
-    assert app._roster_listbox.activated == 0
-
-    homed = []
-    monkeypatch.setattr(app, "_focus_name_field", lambda: homed.append(True))
-    assert app._on_roster_escape() == "break"
-    assert homed == [True]  # Esc bails to the name field (no commit)
-
-
 def test_clean_record_resets_image_to_overview():
     app = _headless_app()
     record = make_record("scan-0001")  # 0 flagged -> clean-record path
@@ -206,7 +141,6 @@ def test_review_app_binds_documented_shortcuts():
             "<Escape>",
             "<Control-Tab>",
             "<Control-Shift-Tab>",
-            "<F8>",
         ):
             assert app.bind(sequence), f"missing binding for {sequence}"
     finally:

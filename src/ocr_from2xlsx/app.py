@@ -613,7 +613,6 @@ class ReviewApp(tk.Tk):
         "攝影機或圖片預覽區\n"
         "請按『選擇攝影機』開始連續掃描，或用『匯入資料夾批次』/『匯入 JSON』載入既有資料。"
     )
-    _ROSTER_EMPTY_HINT = "（無建議名單）"
     _CAMERA_POLL_INTERVAL_MS = 33
     _CAMERA_RETRY_INTERVAL_MS = 100
     _CAMERA_FAILURE_LIMIT = 3
@@ -643,12 +642,8 @@ class ReviewApp(tk.Tk):
     _controls: object | None = None  # set to a dict in _build_ui; default for headless getattr
     _autocapture_state_var: object | None = None
     _autocapture_banner: object | None = None
-    _rotate_btn: object | None = None
-    # Name-correction aids (#46) + colored record badge (#45); class-level defaults so
-    # headless ReviewApp.__new__ instances (no Tk) resolve them via getattr without
-    # tripping the tk.Tk.__getattr__ recursion.
-    _name_crop_label: object | None = None
-    _roster_listbox: object | None = None
+    # Colored record badge (#45); class-level default so headless ReviewApp.__new__
+    # instances (no Tk) resolve it via getattr without tripping tk.Tk.__getattr__ recursion.
     _badge_label: object | None = None
 
     @staticmethod
@@ -872,24 +867,6 @@ class ReviewApp(tk.Tk):
         form.columnconfigure(0, weight=1)
         form.rowconfigure(1, weight=1)
 
-        # Name-correction aids (#46): a zoomed name crop + selectable roster candidates,
-        # pinned above the scrollable form (the most-corrected field gets the most help).
-        name_aids = ttk.LabelFrame(form, text="姓名校正")
-        name_aids.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 6))
-        name_aids.columnconfigure(1, weight=1)
-        self._name_crop_label = ttk.Label(name_aids, text="（無姓名裁圖）", anchor="center")
-        self._name_crop_label.grid(row=0, column=0, padx=6, pady=4, sticky="w")
-        self._roster_listbox = tk.Listbox(name_aids, height=4, exportselection=False)
-        self._roster_listbox.grid(row=0, column=1, padx=6, pady=4, sticky="ew")
-        # Browse vs. commit (#46): arrow keys / single clicks only move the highlight;
-        # Enter or double-click commits the candidate. Avoids overwriting the name field
-        # the instant focus lands on the list or an arrow is pressed.
-        self._roster_listbox.bind("<Return>", self._on_roster_commit)
-        self._roster_listbox.bind("<Double-Button-1>", self._on_roster_commit)
-        # Esc bails out of the list back to the name field (without committing), so focus is
-        # never trapped on the listbox where the next Enter would re-apply a candidate.
-        self._roster_listbox.bind("<Escape>", self._on_roster_escape)
-
         canvas = tk.Canvas(form, highlightthickness=0)
         canvas.grid(row=1, column=0, sticky="nsew")
         scrollbar = ttk.Scrollbar(form, orient="vertical", command=canvas.yview)
@@ -943,8 +920,7 @@ class ReviewApp(tk.Tk):
             "PgDn / PgUp（或 Ctrl+→ / Ctrl+←）　下一筆 / 上一筆\n"
             "Esc　取消本筆編輯\n"
             "Ctrl+Tab / Ctrl+Shift+Tab　跳下一個 / 上一個待確認欄位\n"
-            "數字鍵 1–N　選擇單選欄選項；空白鍵　切換多選欄\n"
-            "F8　跳到姓名候選清單（方向鍵選、Enter 套用）",
+            "數字鍵 1–N　選擇單選欄選項；空白鍵　切換多選欄",
         )
 
     def _bind_review_shortcuts(self) -> None:
@@ -965,8 +941,6 @@ class ReviewApp(tk.Tk):
         # NOTE: Ctrl+Shift+Tab may be intercepted by the OS tab-switcher on macOS/GNOME;
         # the app targets Windows, where it reaches Tk.
         self.bind("<Control-Shift-Tab>", self._on_prev_flagged_key)
-        # Jump into the name roster (#46) so candidates are reachable without the mouse.
-        self.bind("<F8>", self._on_focus_roster_key)
 
     def _on_confirm_key(self, _event: "tk.Event | None" = None) -> str:
         self._confirm_current()
@@ -998,8 +972,8 @@ class ReviewApp(tk.Tk):
 
     def _cancel_edit(self) -> None:
         # Esc discards in-form edits. Restore values in place rather than repainting the
-        # whole record (image re-frame, roster rebuild, focus jump): a one-field undo
-        # should not yank the operator out of their current context.
+        # whole record (image re-frame, focus jump): a one-field undo should not yank the
+        # operator out of their current context.
         if self.current_index < 0 or self.current_index >= len(self.records):
             self.editing = False
             return
@@ -1118,41 +1092,6 @@ class ReviewApp(tk.Tk):
             except Exception:
                 pass
 
-    def _roster_candidates_for(self, record: Record) -> list[str]:
-        # Confirmed-name roster (from the correction store) ranked against this record's
-        # current name, for the selectable suggestions beside the name field (#46).
-        from ocr_from2xlsx.correction_store import roster_from_store
-        from ocr_from2xlsx.review_workflow import rank_roster_candidates
-
-        store = self.correction_store_path
-        if store is None:
-            return []
-        try:
-            roster = roster_from_store(store)
-        except (OSError, ValueError):
-            return []
-        return rank_roster_candidates(record.name, roster)
-
-    def _apply_roster_choice(self, name: str) -> None:
-        # Fill the name field from a roster pick and clear the unconfirmed-name marker (#46).
-        chosen = (name or "").strip()
-        if not chosen or chosen == self._ROSTER_EMPTY_HINT:
-            return
-        self.fields["name"].set(chosen)
-        if 0 <= self.current_index < len(self.records):
-            record = self.records[self.current_index]
-            record.ocr.warnings = [w for w in record.ocr.warnings if w != NAME_UNCONFIRMED]
-            # Name no longer unconfirmed: refresh the ⚠/grey marks and the "待確認 N" count
-            # so they reflect the pick immediately (#46), mirroring _show_record.
-            self.confirm_form.set_flagged_fields(
-                flagged_fields(list(record.ocr.warnings), SERVICE_RECORD_V1_LAYOUT)
-            )
-            self._update_pending_count()
-        self.editing = True
-        # Return focus to the name field so the operator can keep typing / advance, instead
-        # of leaving focus trapped on the listbox where arrows would re-browse candidates.
-        self._focus_name_field()
-
     def _focus_name_field(self) -> None:
         # Route through ConfirmForm._focus so the active-label bold, _current_focus and the
         # source-image re-frame all track the name field, then place the caret at the end.
@@ -1169,87 +1108,6 @@ class ReviewApp(tk.Tk):
                 widget.icursor("end")
             except Exception:
                 pass
-
-    def _on_roster_commit(self, _event: "tk.Event | None" = None) -> str:
-        listbox = self._roster_listbox
-        if listbox is None:
-            return "break"
-        try:
-            selection = listbox.curselection()
-            if not selection:
-                # No real selection (e.g. Tab-focused but never browsed): do NOT commit the
-                # default-ACTIVE top candidate the operator never chose (#46 browse-vs-commit).
-                return "break"
-            self._apply_roster_choice(listbox.get(selection[0]))
-        except tk.TclError:
-            pass
-        return "break"  # stop Return from also firing the window-level 確認並寫入
-
-    def _on_roster_escape(self, _event: "tk.Event | None" = None) -> str:
-        # Bail out of the roster back to the name field WITHOUT committing a candidate, so the
-        # operator's next Enter confirms the record rather than re-applying a name (R1 trap).
-        self._focus_name_field()
-        return "break"
-
-    def _on_focus_roster_key(self, _event: "tk.Event | None" = None) -> str:
-        # F8 moves the keyboard into the roster so pure-keyboard operators can reach the
-        # candidates; arrows browse, Enter commits, Esc bails back to the name field (#46).
-        listbox = self._roster_listbox
-        if listbox is None:
-            return "break"
-        try:
-            if listbox.size() > 0:
-                listbox.focus_set()
-                listbox.activate(0)
-                listbox.selection_clear(0, tk.END)
-                listbox.selection_set(0)
-        except Exception:
-            pass
-        return "break"
-
-    def _update_name_aids(self, record: Record) -> None:
-        # Populate the roster suggestions and the zoomed name-crop preview (#46).
-        listbox = self._roster_listbox
-        if listbox is not None:
-            try:
-                listbox.delete(0, tk.END)
-                candidates = self._roster_candidates_for(record)
-                for candidate in candidates:
-                    listbox.insert(tk.END, candidate)
-                if not candidates:
-                    # Explicit hint instead of a blank box that looks broken; the commit
-                    # paths ignore this row so it can't be applied as a name.
-                    listbox.insert(tk.END, self._ROSTER_EMPTY_HINT)
-            except tk.TclError:
-                pass
-        self._show_name_crop(record)
-
-    def _show_name_crop(self, record: Record) -> None:
-        label = self._name_crop_label
-        if label is None:
-            return
-        try:
-            relative = record.ocr.name_crop
-            if not relative or self.loaded_json_path is None:
-                label.configure(image="", text="（無姓名裁圖）")
-                self._name_crop_image = None
-                return
-            crop_path = self.loaded_json_path.parent / relative
-            if crop_path.suffix.lower() != ".png" or not crop_path.is_file():
-                label.configure(image="", text="（無姓名裁圖）")
-                self._name_crop_image = None
-                return
-            image = tk.PhotoImage(file=str(crop_path))
-            if image.width() < 240:
-                image = image.zoom(2, 2)  # enlarge small crops so handwriting is legible
-            self._name_crop_image = image
-            label.configure(image=image, text="")
-        except Exception:
-            try:
-                label.configure(image="", text="（無姓名裁圖）")
-            except tk.TclError:
-                pass
-            self._name_crop_image = None
 
     @staticmethod
     def _bind_mousewheel_recursive(widget: tk.Misc, handler) -> None:
@@ -1668,7 +1526,7 @@ class ReviewApp(tk.Tk):
         if NAME_UNCONFIRMED in record.ocr.warnings and not record.name.strip():
             messagebox.showwarning(
                 "姓名未填",
-                "此筆姓名待確認且目前為空。請先填入姓名（或按 F8 從候選挑選）再「確認並寫入」；"
+                "此筆姓名待確認且目前為空。請先填入姓名再「確認並寫入」；"
                 "若確定要留空，請改用「強制寫入」。",
             )
             self._focus_name_field()
@@ -1792,7 +1650,6 @@ class ReviewApp(tk.Tk):
         self._update_pending_count()
         self._update_progress()
         self._update_badge()
-        self._update_name_aids(record)
         # Only grab focus + re-frame the scan when there is something to confirm. A clean
         # (0-flagged) record clears any stale active-field bold and resets the scan to a full
         # overview, so the operator can glance and hit Enter — instead of the caret being

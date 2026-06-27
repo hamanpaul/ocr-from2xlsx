@@ -119,7 +119,12 @@ request on stdin and returns `{ "contract_version": "ocr_plugin.v1", "record": {
 If no plugin is found (via `--ocr-plugin-dir`, `OCR_PLUGIN_DIR`, or the default
 `plugins/paddleocr` next to the executable), `prepare-records` exits with an error so you can fall
 back to `--ocr-backend fixture` or the review UI. The PaddleOCR plugin itself is built separately
-(see the design spec).
+(see "Building the PaddleOCR plugin" below).
+
+辨識引擎預設＝**PaddleOCR plugin**（地端、快、讀得出 MRN／勾選／身分等結構化欄位）。地端 Vision-LLM
+（qwen3-vl）改為 opt-in：設 `OCR_BACKEND=vision` 才使用（無 NVIDIA GPU 的機器約 9 分鐘/張且讀不出手寫，故不
+預設）。GUI app 與 CLI 一致；plugin 未安裝且非明確指定時自動 fallback 回 VLM。手寫姓名兩種引擎都需人工確認
+（校正 UI 已支援）。
 
 辨識前處理（opt-in，#59）：設定環境變數 `OCR_VLM_DEWARP=1`，本機 Vision-LLM 辨識前會先把表單透視校正攤平，
 讓版面欄位對齊歪斜/有邊距的拍攝；偵測不到可信表單時自動退回原圖。預設關閉，建議先以實機照片驗證準確率提升

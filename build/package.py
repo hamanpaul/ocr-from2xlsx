@@ -54,7 +54,9 @@ def _normalize_help_output(output: str) -> str:
 
 def main() -> int:
     try:
-        _clean_dir(DIST_DIR, keep={"vlm"})  # keep the portable model bundle if present
+        # Keep the portable VLM model bundle AND the PaddleOCR plugin (the default OCR
+        # engine) so re-packaging does not wipe them.
+        _clean_dir(DIST_DIR, keep={"vlm", "plugins"})
         _clean_dir(
             BUILD_DIR,
             keep={
@@ -75,6 +77,23 @@ def main() -> int:
         )
         if not EXE_PATH.is_file():
             raise FileNotFoundError(f"Expected executable missing: {EXE_PATH}")
+        # Ship the default OCR engine (PaddleOCR plugin) beside the exe. Build it if missing
+        # and the paddle venv is present; otherwise warn (the app falls back to the VLM).
+        plugin_dir = DIST_DIR / "plugins" / "paddleocr"
+        if not plugin_dir.is_dir():
+            if (ROOT / ".venv-paddle").is_dir():
+                print("building PaddleOCR plugin bundle (dist/plugins/paddleocr) ...")
+                subprocess.run(
+                    [sys.executable, str(BUILD_DIR / "build_paddle_plugin.py")],
+                    cwd=ROOT,
+                    check=True,
+                )
+            else:
+                print(
+                    "WARNING: dist/plugins/paddleocr missing and .venv-paddle not found — "
+                    "the packaged app will fall back to the (slow) VLM. Run "
+                    "build/build_paddle_plugin.py to ship PaddleOCR as the default engine."
+                )
         help_result = subprocess.run(
             [str(EXE_PATH), "--help"],
             capture_output=True,

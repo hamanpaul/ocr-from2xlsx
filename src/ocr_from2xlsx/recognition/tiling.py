@@ -19,17 +19,27 @@ def crop_sections(
     out_dir: str | os.PathLike[str],
     rotate: int = 0,
     enhance: bool = True,
+    correct_perspective: bool = False,
 ) -> dict[str, str]:
     """Crop each section band; return ``{section_key: crop_path}``.
 
     With ``enhance`` (default), each crop is converted to greyscale and
     auto-contrasted — Phase 0 showed this gives the small VLM cleaner, more
     consistently-structured output on checkbox sections.
+
+    With ``correct_perspective`` (#59), the form is detected and perspective-warped
+    flat *before* the normalized bands are cropped, so the crops line up with the real
+    fields on a skewed / margined photo. Falls back to the un-warped image when no
+    confident document quad is found, so it never regresses framing.
     """
     with Image.open(image_path) as source:
-        image = source.convert("RGB")
+        image = ImageOps.exif_transpose(source.convert("RGB"))  # honor camera orientation tag
     if rotate:
         image = image.rotate(-rotate, expand=True)  # PIL rotates CCW; negate for clockwise
+    if correct_perspective:
+        from ocr_from2xlsx.recognition.document_detect import deskew_pil
+
+        image = deskew_pil(image)
     width, height = image.size
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)

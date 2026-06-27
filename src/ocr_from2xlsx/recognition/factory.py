@@ -28,6 +28,13 @@ def vision_config_from_env() -> tuple[str, str, int]:
     return host, model, rotate
 
 
+def dewarp_from_env() -> bool:
+    """Opt-in (#59): perspective-correct the form before tiling when ``OCR_VLM_DEWARP`` is
+    truthy. Default off — enable after validating on real field photos, since a mis-detected
+    quad on a cluttered photo could warp worse than the safe no-op fallback."""
+    return (os.environ.get("OCR_VLM_DEWARP") or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def build_vision_ocr_backend(
     *,
     work_dir: str | os.PathLike[str],
@@ -36,11 +43,13 @@ def build_vision_ocr_backend(
     rotate: int = 0,
     roster: list[str] | None = None,
     layout: tuple[Section, ...] = SERVICE_RECORD_V1_LAYOUT,
+    correct_perspective: bool | None = None,
 ) -> VisionOcrBackend:
     work = Path(work_dir)
+    dewarp = dewarp_from_env() if correct_perspective is None else correct_perspective
 
     def tiler(image_path: str, sections: tuple[Section, ...]) -> dict[str, str]:
-        return crop_sections(image_path, sections, work, rotate=rotate)
+        return crop_sections(image_path, sections, work, rotate=rotate, correct_perspective=dewarp)
 
     return VisionOcrBackend(
         vlm_fn=make_ollama_vlm_fn(host, model),

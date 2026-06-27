@@ -34,6 +34,7 @@ class StubSession:
         force: bool = False,
         human_confirmed: bool = False,
         overwrite_row: int | None = None,
+        relaxed: bool = False,
     ) -> AcceptResult:
         self.calls.append((record.record_id, force, human_confirmed))
         self.overwrite_rows.append(overwrite_row)
@@ -236,15 +237,18 @@ def test_menu_bar_categories_and_state_machine_drives_menu_entries() -> None:
         labels = {menubar.entrycget(i, "label") for i in range(menubar.index("end") + 1)}
         assert {"檔案(F)", "掃描(S)", "編輯(E)", "檢視(V)", "說明(H)"} <= labels
 
-        # The state machine (#56) must gate MENU entries, not just toolbar buttons: with no
-        # working file and no records, 強制寫入 and 上一筆 (both menu entries) are disabled.
+        # The state machine (#56) gates MENU entries, not just toolbar buttons: with no records
+        # 上一筆 (a menu entry) is disabled. 確認並寫入 / 強制寫入 are deliberately NOT gated —
+        # they stay clickable so they can surface a clear "缺少工作檔"/"姓名未填" error instead
+        # of greying out silently (#confirm-required-fields).
         app.session = None
         app.records = []
         app.current_index = -1
         app._update_toolbar_states()
         edit_menu = app.nametowidget(menubar.entrycget("編輯(E)", "menu"))
-        assert str(edit_menu.entrycget("強制寫入", "state")) == "disabled"
         assert str(edit_menu.entrycget("上一筆", "state")) == "disabled"
+        assert str(edit_menu.entrycget("確認並寫入", "state")) == "normal"
+        assert str(edit_menu.entrycget("強制寫入", "state")) == "normal"
     finally:
         app.destroy()
 
@@ -1378,6 +1382,77 @@ def test_confirm_blocks_empty_unconfirmed_name(
     assert warned
 
 
+def test_confirm_current_no_session_surfaces_error(
+    app: ReviewApp, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The button is no longer greyed out with no workbook loaded; pressing it must SURFACE the
+    # reason instead of doing nothing (#confirm-required-fields).
+    app.session = None
+    app.records = [make_record("scan-0001")]
+    app.current_index = 0
+    errors: list = []
+    monkeypatch.setattr("ocr_from2xlsx.app.messagebox.showerror", lambda *a, **k: errors.append(a))
+
+    ReviewApp._confirm_current(app)
+
+    assert errors and "缺少工作檔" in str(errors[0])
+
+
+def test_confirm_current_blocks_empty_name_even_when_confirmed(
+    app: ReviewApp, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The name guard now applies to EVERY record, not only name.unconfirmed ones.
+    record = make_record("scan-0001")
+    app.records = [record]
+    app.current_index = 0
+    app.session = StubSession(
+        AcceptResult(record_id=record.record_id, status="written", row_number=2, blockers=[], warnings=[])
+    )
+    app._show_record(record)
+    app.fields["name"].set("   ")  # operator cleared the name
+    warned: list = []
+    monkeypatch.setattr("ocr_from2xlsx.app.messagebox.showwarning", lambda *a, **k: warned.append(a))
+
+    ReviewApp._confirm_current(app)
+
+    assert app.session.calls == []
+    assert app.written_indices == set()
+    assert warned
+
+
+def test_confirm_current_writes_despite_blank_optional_fields(
+    app: ReviewApp, tmp_path: Path
+) -> None:
+    # End-to-end: a name-only record (blank date / identity / gender) still writes (relaxed).
+    template = tmp_path / "template.xlsx"
+    working = tmp_path / "working.xlsx"
+    create_workbook_template(template)
+    session = ImportSession.start(template, working)
+    try:
+        record = make_record("scan-0001")
+        record.service_date = ""
+        record.identity = ""
+        record.gender = ""
+        app.records = [record, make_record("scan-0002")]
+        app.current_index = 0
+        app.session = session
+        app._show_record(record)
+        app.fields["name"].set("王小明")
+
+        ReviewApp._confirm_current(app)
+
+        assert app.written_indices == {0}
+        wb = load_workbook(working)
+        try:
+            sheet = wb["個案總表"]
+            name_col = _column_for_header(sheet, BASIC_COLUMN_BY_FIELD["name"])
+            assert sheet.cell(row=2, column=name_col).value == "王小明"
+        finally:
+            wb.close()
+    finally:
+        session.close()
+
+
 def test_force_write_failure_does_not_persist_unconfirmed_name(app: ReviewApp, tmp_path: Path) -> None:
     record = make_record("scan-0001")
     record.ocr.warnings = ["name.unconfirmed"]
@@ -1390,7 +1465,7 @@ def test_force_write_failure_does_not_persist_unconfirmed_name(app: ReviewApp, t
     class FailingSession:
         def accept_scan(
             self, record, force: bool = False, human_confirmed: bool = False,
-            overwrite_row: int | None = None,
+            overwrite_row: int | None = None, relaxed: bool = False,
         ) -> AcceptResult:
             raise OSError("disk full")
 

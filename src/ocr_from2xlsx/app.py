@@ -814,7 +814,7 @@ class ReviewApp(tk.Tk):
         # Hover hints on the keyboard-driven actions (#48), since labels are now sparse.
         _Tooltip(prev_btn, "PgUp / Ctrl+←：上一筆")
         _Tooltip(next_btn, "PgDn / Ctrl+→：下一筆")
-        _Tooltip(confirm_btn, "Enter / Ctrl+Enter：驗證必填欄位後寫入；缺漏會被擋下")
+        _Tooltip(confirm_btn, "Enter / Ctrl+Enter：寫入；只有缺 XLSX 或姓名會被擋下，其餘欄位皆 optional")
 
         # Persistent continuous-capture state banner — separate from the one-shot footer so
         # rotate/zoom/retry messages can't clobber the operator's "which state am I in?" cue.
@@ -1080,18 +1080,27 @@ class ReviewApp(tk.Tk):
         self._push_status("已還原本筆")
 
     def _frame_field_region(self, record_path: str) -> None:
-        # On field focus, frame the source-image viewer to that field's section band (#47).
-        from ocr_from2xlsx.image_viewer import field_region
+        # On field focus, frame the source-image viewer to that field's form row. field_region
+        # gives the band over the FLATTENED form (derived from the 服務紀錄表 sheet geometry);
+        # with the operator's 4-corner calibration we map it back onto the real (skewed) photo
+        # so the frame actually lands on the field (#review-field-align). No calibration → use
+        # the band as-is (no regression vs the prior behaviour).
+        from ocr_from2xlsx.image_viewer import field_region, map_band_to_raw
+        from ocr_from2xlsx.recognition.document_detect import load_calibration
 
         viewer = getattr(self, "preview", None)
         if viewer is None or getattr(viewer, "mode", None) != "static":
             return
         band = field_region(record_path)
-        if band is not None:
-            try:
-                viewer.frame_region(band)
-            except Exception:
-                pass
+        if band is None:
+            return
+        try:
+            calibration = load_calibration()
+            if calibration is not None:
+                band = map_band_to_raw(band, calibration)
+            viewer.frame_region(band)
+        except Exception:
+            pass
 
     def _scroll_form_widget_into_view(self, widget: "tk.Misc") -> None:
         canvas = getattr(self, "_form_canvas", None)
@@ -1624,21 +1633,25 @@ class ReviewApp(tk.Tk):
             return
         record = self.records[self.current_index]
         self._apply_form_to_record(record)
-        # Data-integrity guard (#46): 確認並寫入 sends human_confirmed=True, which clears the
-        # name.unconfirmed flag — so a reflexive confirm with the name still blank would write
-        # an empty name and silently mark it confirmed. Refuse it here; 強制寫入 stays the override.
-        if NAME_UNCONFIRMED in record.ocr.warnings and not record.name.strip():
+        # 確認並寫入 requires only a name (the workbook is implied by 開新報表); every other
+        # field is optional and written as-is (#confirm-required-fields). A blank name is the
+        # one thing refused here — 強制寫入 stays the override for an intentionally empty name.
+        # This also covers the #46 guard: human_confirmed clears name.unconfirmed, so a blank
+        # name must never slip through and be silently marked confirmed.
+        if not record.name.strip():
             messagebox.showwarning(
                 "姓名未填",
-                "此筆姓名待確認且目前為空。請先填入姓名再「確認並寫入」；"
-                "若確定要留空，請改用「強制寫入」。",
+                "請先填入姓名再「確認並寫入」；若確定要留空，請改用「強制寫入」。",
             )
             self._focus_name_field()
             return
-        human_confirmed = self._needs_name_confirmation(record)
+        # The confirm action IS a human confirmation, so accept_scan always gets
+        # human_confirmed=True (that is what clears the name.unconfirmed flag on write). The
+        # separate flag below only decides whether to PERSIST a name correction afterwards.
+        persist_confirmed_name = self._needs_name_confirmation(record)
         try:
             result = self.session.accept_scan(
-                record, human_confirmed=True, overwrite_row=overwrite_row
+                record, human_confirmed=True, overwrite_row=overwrite_row, relaxed=True
             )
         except (OSError, ValueError) as exc:
             messagebox.showerror("寫入失敗", str(exc))
@@ -1655,7 +1668,7 @@ class ReviewApp(tk.Tk):
             )
             return
         if result.status in {"forced", "written"}:
-            if human_confirmed:
+            if persist_confirmed_name:
                 self._persist_confirmed_name_after_write(record)
             self.written_indices.add(self.current_index)
             self._written_rows[self.current_index] = result.row_number
@@ -1702,10 +1715,12 @@ class ReviewApp(tk.Tk):
             return
         record = self.records[self.current_index]
         self._apply_form_to_record(record)
-        human_confirmed = self._needs_name_confirmation(record)
+        # 強制寫入 is also a human confirmation (accept_scan gets human_confirmed=True); this
+        # local flag only gates persisting a name correction after the write (see _confirm_current).
+        persist_confirmed_name = self._needs_name_confirmation(record)
         try:
             result = self.session.accept_scan(
-                record, force=True, human_confirmed=True, overwrite_row=overwrite_row
+                record, force=True, human_confirmed=True, overwrite_row=overwrite_row, relaxed=True
             )
         except (OSError, ValueError) as exc:
             messagebox.showerror("寫入失敗", str(exc))
@@ -1722,7 +1737,7 @@ class ReviewApp(tk.Tk):
             )
             return
         if result.status in {"forced", "written"}:
-            if human_confirmed:
+            if persist_confirmed_name:
                 self._persist_confirmed_name_after_write(record)
             self.written_indices.add(self.current_index)
             self._written_rows[self.current_index] = result.row_number
@@ -2081,11 +2096,7 @@ class ReviewApp(tk.Tk):
             return
         active = bool(getattr(self, "_autocapture_active", False))
         has_stills = bool(getattr(self, "_autocapture_stills", None))
-        has_session = getattr(self, "session", None) is not None
         records = getattr(self, "records", ()) or ()
-        written = getattr(self, "written_indices", frozenset()) or frozenset()
-        idx = getattr(self, "current_index", -1)
-        valid_record = 0 <= idx < len(records)
 
         def _set(key: str, enabled: bool) -> None:
             for setter in controls.get(key, ()):
@@ -2108,10 +2119,12 @@ class ReviewApp(tk.Tk):
             "load_json", "choose_template",
         ):
             _set(key, not active)
-        # Write buttons need a working file (template) AND a current, not-yet-written record.
-        write_ok = has_session and valid_record and idx not in written
-        _set("confirm", write_ok)
-        _set("force", write_ok)
+        # 確認並寫入 / 強制寫入 stay clickable (except mid-continuous-capture): pressing them
+        # SURFACES a clear error ("缺少工作檔" / "姓名未填") instead of greying out with no
+        # explanation — the silently-disabled button was what confused the operator
+        # (#confirm-required-fields). The methods themselves guard missing template/record.
+        _set("confirm", not active)
+        _set("force", not active)
         _set("prev_record", bool(records))
         _set("next_record", bool(records))
 

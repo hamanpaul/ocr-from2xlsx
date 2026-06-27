@@ -66,6 +66,11 @@
 - roster 無建議時顯示「（無建議名單）」而非空白清單。
 
 ### Changed
+- (#60) 影像前處理改為可選模式（環境變數 `OCR_VLM_PREPROCESS`）：`autocontrast`（**預設＝原行為**）／`clahe`／
+  `binarize`／`none`，每個 section crop 套用。`tiling` 新增 `resolve_preprocess_mode`/`enhance_crop`。實機對照
+  （`scan-capture-7`，2B 模型，各約 9 分鐘）顯示**各模式差異小且皆未讀出手寫姓名/病歷號**（name 讀到的是印刷標籤
+  「病人」、MRN 全空）；`binarize` 僅多抓到 gender＋癌別勾選。結論：前處理非瓶頸，**2B 模型才是**（見 #61）；
+  預設維持 `autocontrast`，其他模式保留供後續評估。
 - (#58) 移除「姓名校正」面板（放大姓名裁圖＋roster 建議名單＋F8 跳清單）：實際使用判斷多餘，左側 ImageViewer
   ＋滾輪縮放＋拖曳平移已足以核對手寫姓名。保留「姓名待確認且為空時擋下確認並寫入」的資料完整性守門；姓名仍是
   一般表單欄位。同步移除 `review_workflow.rank_roster_candidates`（僅此面板使用）。名單資料層（name_suggestion／

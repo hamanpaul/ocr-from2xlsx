@@ -763,6 +763,8 @@ class ReviewApp(tk.Tk):
         _menu_item(scan_menu, "連拍刪除上一張", self._undo_last_continuous_capture, "undo_last")
         _menu_item(scan_menu, "取消連拍", self._cancel_continuous_capture, "cancel_continuous")
         _menu_item(scan_menu, "重設空桌基準", self._reset_baseline, "reset_baseline")
+        scan_menu.add_separator()
+        scan_menu.add_command(label="校正透視（去除照片傾斜）…", command=self._calibrate_dewarp)
         menubar.add_cascade(label="掃描(S)", menu=scan_menu, underline=3)
 
         edit_menu = tk.Menu(menubar, tearoff=0)
@@ -922,6 +924,91 @@ class ReviewApp(tk.Tk):
             "Ctrl+Tab / Ctrl+Shift+Tab　跳下一個 / 上一個待確認欄位\n"
             "數字鍵 1–N　選擇單選欄選項；空白鍵　切換多選欄",
         )
+
+    def _calibrate_dewarp(self) -> None:
+        """Mark the form's 4 corners once on a representative capture (fixed-camera setup)
+        so the recognition dewarp can flatten every photo (#59). The auto-detector can't
+        find a light form on a light desk, so the operator marks the corners on the
+        high-res view where the faint paper edge is visible. Saves normalized corners to
+        the runtime calibration file; recognition uses it when OCR_VLM_DEWARP is enabled."""
+        from PIL import Image, ImageTk
+
+        from ocr_from2xlsx.recognition.document_detect import save_calibration
+
+        path = filedialog.askopenfilename(
+            title="選擇一張代表性的表單照片來校正透視",
+            filetypes=[("影像檔", "*.png *.jpg *.jpeg *.bmp"), ("所有檔案", "*.*")],
+        )
+        if not path:
+            return
+        try:
+            pil = Image.open(path)
+            pil.load()
+            pil = pil.convert("RGB")
+        except Exception as exc:
+            messagebox.showerror("校正透視", f"無法開啟影像：{exc}")
+            return
+
+        win = tk.Toplevel(self)
+        win.title("校正透視")
+        iw, ih = pil.size
+        scale = min(900 / iw, 700 / ih, 1.0)
+        disp_w, disp_h = max(1, int(iw * scale)), max(1, int(ih * scale))
+        photo = ImageTk.PhotoImage(pil.resize((disp_w, disp_h)))
+        labels = ["左上", "右上", "右下", "左下"]
+        info = tk.StringVar(value=f"依序點選表單四角 — 第 1 角：{labels[0]}")
+        ttk.Label(win, textvariable=info, anchor="w").pack(fill=tk.X, padx=8, pady=(8, 0))
+        canvas = tk.Canvas(win, width=disp_w, height=disp_h, highlightthickness=0)
+        canvas.pack(padx=8, pady=8)
+        canvas.create_image(0, 0, anchor="nw", image=photo)
+        canvas._photo = photo  # keep a reference so Tk does not GC it
+        points: list[tuple[float, float]] = []
+
+        def _redraw_base() -> None:
+            canvas.delete("all")
+            canvas.create_image(0, 0, anchor="nw", image=photo)
+
+        def _on_click(event: "tk.Event") -> None:
+            if len(points) >= 4:
+                return
+            ex = min(max(int(event.x), 0), disp_w)
+            ey = min(max(int(event.y), 0), disp_h)
+            points.append((ex / disp_w, ey / disp_h))
+            canvas.create_oval(ex - 5, ey - 5, ex + 5, ey + 5, outline="#ff2d2d", width=2)
+            canvas.create_text(ex + 8, ey - 8, text=str(len(points)), fill="#ff2d2d", anchor="w")
+            if len(points) < 4:
+                info.set(f"依序點選表單四角 — 第 {len(points) + 1} 角：{labels[len(points)]}")
+            else:
+                info.set("四角已標記，可按『儲存校正』；或『清除重點』重來。")
+                save_btn.configure(state="normal")
+
+        def _clear() -> None:
+            points.clear()
+            _redraw_base()
+            info.set(f"依序點選表單四角 — 第 1 角：{labels[0]}")
+            save_btn.configure(state="disabled")
+
+        def _save() -> None:
+            if len(points) != 4:
+                return
+            try:
+                saved = save_calibration(points)
+            except Exception as exc:
+                messagebox.showerror("校正透視", f"儲存失敗：{exc}")
+                return
+            messagebox.showinfo(
+                "校正透視",
+                f"已儲存校正至：\n{saved}\n\n之後辨識若設定 OCR_VLM_DEWARP=1，將以此四角把表單攤平。",
+            )
+            win.destroy()
+
+        canvas.bind("<Button-1>", _on_click)
+        buttons = ttk.Frame(win)
+        buttons.pack(fill=tk.X, padx=8, pady=(0, 8))
+        ttk.Button(buttons, text="清除重點", command=_clear).pack(side=tk.LEFT)
+        ttk.Button(buttons, text="取消", command=win.destroy).pack(side=tk.RIGHT, padx=(0, 6))
+        save_btn = ttk.Button(buttons, text="儲存校正", command=_save, state="disabled")
+        save_btn.pack(side=tk.RIGHT)
 
     def _bind_review_shortcuts(self) -> None:
         # Keyboard-first review (#42): window-level shortcuts fire over any focused

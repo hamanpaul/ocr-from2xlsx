@@ -121,9 +121,14 @@ If no plugin is found (via `--ocr-plugin-dir`, `OCR_PLUGIN_DIR`, or the default
 back to `--ocr-backend fixture` or the review UI. The PaddleOCR plugin itself is built separately
 (see the design spec).
 
-辨識前處理（opt-in，#59）：設定環境變數 `OCR_VLM_DEWARP=1`，本機 Vision-LLM 辨識前會先在照片中偵測表單
-四角並透視校正攤平，讓版面欄位對齊歪斜/有邊距的拍攝；偵測不到可信表單時自動退回原圖。預設關閉，建議先以
-實機照片驗證準確率提升後再開啟。
+辨識前處理（opt-in，#59）：設定環境變數 `OCR_VLM_DEWARP=1`，本機 Vision-LLM 辨識前會先把表單透視校正攤平，
+讓版面欄位對齊歪斜/有邊距的拍攝；偵測不到可信表單時自動退回原圖。預設關閉，建議先以實機照片驗證準確率提升
+後再開啟。
+
+固定相機建議用**校正透視**：淺色表單在淺色桌面時自動偵測抓不到頁面邊界，改用一次性人工標記——掃描選單
+「校正透視（去除照片傾斜）…」→ 載入一張代表性照片 → 依序點四角（左上→右上→右下→左下）→ 存成
+`~/.ocr_from2xlsx/dewarp_calibration.json`。之後開啟 `OCR_VLM_DEWARP` 時會以此固定四角攤平每張照片（相機
+移動後重新校正即可）。
 
 ### Building the PaddleOCR plugin
 

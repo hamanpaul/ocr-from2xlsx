@@ -37,9 +37,10 @@ def crop_sections(
     if rotate:
         image = image.rotate(-rotate, expand=True)  # PIL rotates CCW; negate for clockwise
     if correct_perspective:
-        from ocr_from2xlsx.recognition.document_detect import deskew_pil
+        from ocr_from2xlsx.recognition.document_detect import deskew_pil, load_calibration
 
-        image = deskew_pil(image)
+        # Prefer the operator's fixed-camera corner calibration; auto-detect otherwise.
+        image = deskew_pil(image, calibration=load_calibration())
     width, height = image.size
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)

@@ -15,7 +15,44 @@ not require OpenCV at collection time.
 """
 from __future__ import annotations
 
+import json
 import os
+from pathlib import Path
+
+
+def calibration_path() -> Path:
+    """Where the fixed-camera dewarp calibration lives (mirrors ReviewApp._runtime_base_dir)."""
+    home = os.environ.get("OCR_FROM2XLSX_HOME")
+    base = Path(home) if home else Path.home() / ".ocr_from2xlsx"
+    return base / "dewarp_calibration.json"
+
+
+def load_calibration():
+    """Return the operator-marked form corners as normalized [[tlx,tly],[trx,try],[brx,bry],
+    [blx,bly]] in 0..1 image coordinates, or ``None`` when no/invalid calibration exists."""
+    try:
+        data = json.loads(calibration_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    corners = data.get("corners_norm") if isinstance(data, dict) else None
+    if not (isinstance(corners, list) and len(corners) == 4):
+        return None
+    try:
+        out = [[float(pt[0]), float(pt[1])] for pt in corners]
+    except (TypeError, ValueError, IndexError):
+        return None
+    if all(0.0 <= x <= 1.0 and 0.0 <= y <= 1.0 for x, y in out):
+        return out
+    return None
+
+
+def save_calibration(corners_norm, path: "Path | None" = None) -> Path:
+    """Persist 4 normalized form corners (any order; stored as given). Returns the path."""
+    target = path or calibration_path()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    payload = {"corners_norm": [[float(x), float(y)] for x, y in corners_norm]}
+    target.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return target
 
 
 def _env_float(name: str, default: float) -> float:
@@ -132,10 +169,11 @@ def find_document_quad(image):
     return best
 
 
-def warp_document(image, quad):
+def warp_document(image, quad, enforce_aspect: bool = True):
     """Perspective-warp ``quad`` to a flat full-frame image. Output size = the quad's
     max edge lengths (no resolution thrown away). Returns ``None`` when the result is
-    too small or not plausibly A4-portrait (so the caller falls back to the input)."""
+    too small, or (for auto-detect) not plausibly A4-portrait. ``enforce_aspect=False``
+    trusts operator-marked calibration corners and skips the aspect gate."""
     import cv2
     import numpy as np
 
@@ -145,8 +183,7 @@ def warp_document(image, quad):
     out_h = int(round(max(np.linalg.norm(bl - tl), np.linalg.norm(br - tr))))
     if out_w < _MIN_OUT_PX or out_h < _MIN_OUT_PX:
         return None
-    ratio = out_w / out_h
-    if not (_ASPECT_MIN <= ratio <= _ASPECT_MAX):
+    if enforce_aspect and not (_ASPECT_MIN <= (out_w / out_h) <= _ASPECT_MAX):
         return None  # landscape / near-square -> would transpose the portrait bands
     dst = np.array(
         [[0, 0], [out_w - 1, 0], [out_w - 1, out_h - 1], [0, out_h - 1]], dtype="float32"
@@ -165,11 +202,15 @@ def _is_full_frame(quad, width: int, height: int, tol: float = 0.02) -> bool:
     return float(np.linalg.norm(q - frame, axis=1).max()) <= tol * max(width, height)
 
 
-def deskew_pil(pil_image):
-    """PIL in -> PIL out: detect the page quad and warp it flat. Returns the input
-    UNCHANGED when no confident page quad is found, when the page already fills the
-    frame, or on any cv2/Pillow error — so callers can apply it unconditionally and it
-    never regresses the no-correction path."""
+def deskew_pil(pil_image, calibration=None):
+    """PIL in -> PIL out, flattened to the form.
+
+    With ``calibration`` (normalized 4 corners from a fixed-camera setup) the form is
+    warped using those operator-marked corners — no auto-detection, no aspect gate —
+    which is the robust path when the page boundary is too low-contrast to auto-detect.
+    Without calibration it auto-detects the page quad. Returns the input UNCHANGED when
+    nothing confident is found, the page already fills the frame, or on any error — so
+    callers can apply it unconditionally and it never regresses the no-correction path."""
     try:
         import cv2
         import numpy as np
@@ -179,6 +220,13 @@ def deskew_pil(pil_image):
         height, width = full.shape[:2]
         if height < 80 or width < 80:
             return pil_image
+
+        if calibration is not None:
+            quad = order_quad(
+                np.array([[c[0] * width, c[1] * height] for c in calibration], dtype="float32")
+            )
+            warped = warp_document(full, quad, enforce_aspect=False)
+            return Image.fromarray(warped[:, :, ::-1]) if warped is not None else pil_image
 
         # Detect on a downscaled copy (contours are scale-robust); warp at full res.
         scale = min(1.0, _DETECT_LONG_EDGE / float(max(height, width)))

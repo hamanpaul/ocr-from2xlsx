@@ -157,3 +157,58 @@ def test_is_full_frame_guard():
 
     assert _is_full_frame([[0, 0], [800, 0], [800, 1000], [0, 1000]], 800, 1000) is True
     assert _is_full_frame([[120, 95], [650, 150], [600, 890], [95, 845]], 800, 1000) is False
+
+
+# --- fixed-camera corner calibration (#59 follow-up) -------------------------------------
+
+def test_calibration_round_trip(tmp_path, monkeypatch):
+    from ocr_from2xlsx.recognition import document_detect as dd
+
+    monkeypatch.setenv("OCR_FROM2XLSX_HOME", str(tmp_path))
+    assert dd.load_calibration() is None  # nothing saved yet
+    corners = [[0.12, 0.10], [0.88, 0.15], [0.85, 0.95], [0.10, 0.90]]
+    saved = dd.save_calibration(corners)
+    assert saved.exists()
+    assert dd.load_calibration() == corners
+
+
+def test_load_calibration_rejects_invalid(tmp_path, monkeypatch):
+    from ocr_from2xlsx.recognition import document_detect as dd
+
+    monkeypatch.setenv("OCR_FROM2XLSX_HOME", str(tmp_path))
+    p = dd.calibration_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text('{"corners_norm": [[0.1,0.2],[1.5,0.2],[0.9,0.9],[0.1,0.9]]}', encoding="utf-8")
+    assert dd.load_calibration() is None  # out-of-range coordinate
+    p.write_text("not valid json", encoding="utf-8")
+    assert dd.load_calibration() is None
+    p.write_text('{"corners_norm": [[0.1,0.2],[0.9,0.2]]}', encoding="utf-8")
+    assert dd.load_calibration() is None  # wrong number of corners
+
+
+def test_warp_enforce_aspect_false_allows_landscape():
+    img = np.zeros((400, 800, 3), np.uint8)
+    landscape = [[0, 0], [800, 0], [800, 400], [0, 400]]
+    assert warp_document(img, landscape) is None  # default gate rejects landscape
+    assert warp_document(img, landscape, enforce_aspect=False) is not None  # calibration trusts it
+
+
+def test_deskew_with_calibration_warps_using_marked_corners():
+    # The form was placed on the scene via this dst quad (see _scene_with_skewed_form);
+    # supplying those corners as calibration must flatten it WITHOUT auto-detection.
+    scene = _scene_with_skewed_form()
+    pil = Image.fromarray(scene[:, :, ::-1])
+    cw, ch = 800, 1000
+    dst = [[130, 95], [650, 150], [600, 890], [95, 845]]
+    calib = [[x / cw, y / ch] for x, y in dst]
+    out = deskew_pil(pil, calibration=calib)
+    assert out is not pil  # warped via calibration
+
+    gray = cv2.cvtColor(np.asarray(out)[:, :, ::-1], cv2.COLOR_BGR2GRAY)
+    rh, rw = gray.shape[:2]
+    y0, y1, x0, x1 = int(0.05 * rh), int(0.95 * rh), int(0.05 * rw), int(0.95 * rw)
+    ys, xs = np.where(gray[y0:y1, x0:x1] < 60)
+    assert len(xs) > 0
+    cx = (xs.mean() + x0) / rw
+    cy = (ys.mean() + y0) / rh
+    assert abs(cx - 0.5) < 0.08 and abs(cy - 0.2) < 0.08  # marker recovered to its position

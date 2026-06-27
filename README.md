@@ -121,6 +121,10 @@ If no plugin is found (via `--ocr-plugin-dir`, `OCR_PLUGIN_DIR`, or the default
 back to `--ocr-backend fixture` or the review UI. The PaddleOCR plugin itself is built separately
 (see the design spec).
 
+辨識前處理（opt-in，#59）：設定環境變數 `OCR_VLM_DEWARP=1`，本機 Vision-LLM 辨識前會先在照片中偵測表單
+四角並透視校正攤平，讓版面欄位對齊歪斜/有邊距的拍攝；偵測不到可信表單時自動退回原圖。預設關閉，建議先以
+實機照片驗證準確率提升後再開啟。
+
 ### Building the PaddleOCR plugin
 
 The PaddleOCR plugin is built separately into a portable offline folder:

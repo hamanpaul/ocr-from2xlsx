@@ -1580,10 +1580,13 @@ def test_previous_record_recovers_from_end_of_record_sentinel(
     assert infos
 
 
-def test_choose_template_clears_written_indices(
-    app: ReviewApp, monkeypatch: pytest.MonkeyPatch
+def test_choose_template_single_dialog_defaults_output_and_clears_indices(
+    app: ReviewApp, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    # 開新報表 is now ONE selection (the source report). The working file defaults under the
+    # output root — no second "輸出資料夾" prompt (#single-folder-prompt).
     app.written_indices = {0, 1}
+    app.output_root = tmp_path  # default 'output' overridden for test isolation
     closed: list[bool] = []
 
     class ExistingSession:
@@ -1591,15 +1594,16 @@ def test_choose_template_clears_written_indices(
             closed.append(True)
 
     app.session = ExistingSession()
-    template_path = "C:\\templates\\base.xlsx"
-    output_dir = "C:\\output"
+    template_path = str(tmp_path / "base.xlsx")
     start_calls: list[tuple[str, Path]] = []
+    askdir_calls: list[object] = []
 
     monkeypatch.setattr(
         "ocr_from2xlsx.app.filedialog.askopenfilename", lambda **kwargs: template_path
     )
     monkeypatch.setattr(
-        "ocr_from2xlsx.app.filedialog.askdirectory", lambda **kwargs: output_dir
+        "ocr_from2xlsx.app.filedialog.askdirectory",
+        lambda **kwargs: askdir_calls.append(kwargs) or "",
     )
 
     class NewSession:
@@ -1615,5 +1619,32 @@ def test_choose_template_clears_written_indices(
     app._choose_template()
 
     assert closed == [True]
-    assert start_calls == [(template_path, Path(output_dir) / "匯入中.xlsx")]
+    assert askdir_calls == []  # no second folder prompt
+    assert start_calls == [(template_path, tmp_path / "匯入中.xlsx")]
     assert app.written_indices == set()
+
+
+def test_import_folder_batch_single_dialog_defaults_output(
+    app: ReviewApp, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # 匯入資料夾 is now ONE selection (the photo/PDF source). Output defaults under the output
+    # root — no second "輸出資料夾" prompt (#single-folder-prompt).
+    app.output_root = tmp_path
+    askdir_calls: list[object] = []
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        "ocr_from2xlsx.app.filedialog.askdirectory",
+        lambda **kwargs: (askdir_calls.append(kwargs) or str(tmp_path / "photos")),
+    )
+    monkeypatch.setattr(
+        "ocr_from2xlsx.scan.next_output_artifact_path",
+        lambda out_dir, name: (captured.__setitem__("out", out_dir) or (Path(out_dir) / name)),
+    )
+    monkeypatch.setattr(app, "_run_recognition_async", lambda *a, **k: captured.__setitem__("ran", True))
+
+    app._import_folder_batch()
+
+    assert len(askdir_calls) == 1  # only the source-folder prompt, not in+out
+    assert Path(captured["out"]) == tmp_path
+    assert captured.get("ran") is True

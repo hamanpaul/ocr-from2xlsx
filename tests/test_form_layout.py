@@ -940,3 +940,41 @@ def test_every_record_path_is_legal():
                 f"unexpected path shape (expected Record.field, patient_fields.field, "
                 f"services.field, or services.consultation.category)"
             )
+
+
+def test_option_grid_positions_mirrors_the_form_columns() -> None:
+    # #review-option-grid: options render at their real form cell positions, not a 4-col wrap.
+    from ocr_from2xlsx.form_layout import option_grid_positions
+
+    layout = service_record_layout()
+
+    # 5-wide referral rows (B–F): 5 columns, 2 rows.
+    internal = layout.field_by_key("internal_referrals")
+    positions, ncols = option_grid_positions(internal.options)
+    assert ncols == 5
+    assert positions[:6] == [(0, 0), (0, 1), (0, 2), (0, 3), (0, 4), (1, 0)]
+
+    # Consultation rows put the sub-label in B and options in C–F: 4 columns.
+    symptom = layout.field_by_key("consultation.symptom_side_effect")
+    _pos, sym_ncols = option_grid_positions(symptom.options)
+    assert sym_ncols == 4
+
+    # Gender stacks vertically in a single column (B25/B26/B27).
+    gender = layout.field_by_key("gender")
+    gpos, gncols = option_grid_positions(gender.options)
+    assert gncols == 1
+    assert gpos == [(0, 0), (1, 0), (2, 0)]
+
+    # 5×5 癌別 grid.
+    cancer = layout.field_by_key("cancer")
+    _cpos, cncols = option_grid_positions(cancer.options)
+    assert cncols == 5
+
+
+def test_option_grid_positions_falls_back_to_4col_without_cells() -> None:
+    from ocr_from2xlsx.form_layout import Option, option_grid_positions
+
+    opts = tuple(Option(label=f"o{i}", code=f"c{i}", cell="") for i in range(6))
+    positions, ncols = option_grid_positions(opts)
+    assert ncols == 4
+    assert positions == [(0, 0), (0, 1), (0, 2), (0, 3), (1, 0), (1, 1)]

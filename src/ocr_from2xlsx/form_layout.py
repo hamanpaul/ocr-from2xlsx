@@ -8,6 +8,7 @@ form templates and their metadata.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Iterator, Literal
@@ -192,6 +193,38 @@ class FormLayout:
 def _opts(*triples: tuple[str, str, str]) -> tuple[Option, ...]:
     """Helper to build option tuples from (label, code, cell) triples."""
     return tuple(Option(label=label, code=code, cell=cell) for label, code, cell in triples)
+
+
+_CELL_RE = re.compile(r"^([A-Za-z]+)(\d+)$")
+
+
+def _cell_to_rc(cell: str) -> tuple[int, int] | None:
+    """Parse an Excel-style cell ref ("C6") into (row, 0-based col); None if unparseable."""
+    match = _CELL_RE.match(cell or "")
+    if not match:
+        return None
+    letters, row = match.group(1).upper(), int(match.group(2))
+    col = 0
+    for ch in letters:
+        col = col * 26 + (ord(ch) - ord("A") + 1)
+    return (row, col - 1)
+
+
+def option_grid_positions(options: Sequence[Option]) -> tuple[list[tuple[int, int]], int]:
+    """Map a field's options to (grid_row, grid_col) cells mirroring the real form, derived from
+    each ``Option.cell`` — returns the positions plus the column count. So 5-wide referral/cancer
+    rows render 5-across like the paper form and gender stacks vertically in one column, instead
+    of a fixed 4-column wrap that didn't line up with the form (#review-option-grid). Falls back
+    to a 4-col wrap when any cell is missing/unparseable."""
+    rcs = [_cell_to_rc(opt.cell) for opt in options]
+    if not rcs or any(rc is None for rc in rcs):
+        positions = [(i // 4, i % 4) for i in range(len(options))]
+        return positions, (min(4, len(options)) or 1)
+    base_row = min(r for r, _ in rcs)
+    base_col = min(c for _, c in rcs)
+    positions = [(r - base_row, c - base_col) for r, c in rcs]
+    ncols = max((c for _, c in positions), default=0) + 1
+    return positions, ncols
 
 
 def service_record_layout() -> FormLayout:

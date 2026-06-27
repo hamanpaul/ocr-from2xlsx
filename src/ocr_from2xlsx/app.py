@@ -24,7 +24,7 @@ from ocr_from2xlsx.review_nav import (
 )
 from ocr_from2xlsx.correction_store import default_correction_store_path
 from ocr_from2xlsx.domain import Record
-from ocr_from2xlsx.form_layout import FormLayout, service_record_layout
+from ocr_from2xlsx.form_layout import FormLayout, option_grid_positions, service_record_layout
 from ocr_from2xlsx.name_suggestion import NAME_UNCONFIRMED, confirm_name
 from ocr_from2xlsx.session import ImportSession
 
@@ -155,9 +155,10 @@ class ConfirmForm:
                     # selected one clears the field — replacing the clear button.
                     var = tk.StringVar(value="")
                     option_vars: dict[str, tk.BooleanVar] = {}
+                    option_positions, option_ncols = option_grid_positions(field.options)
                     options = ttk.Frame(group)
                     options.grid(row=field_row, column=1, sticky="w", pady=3)
-                    for _col in range(4):  # even, aligned option columns for ragged grids
+                    for _col in range(option_ncols):  # mirror the form's real column layout
                         options.columnconfigure(_col, uniform="opt", minsize=120)
 
                     def _select(code: str, _var=var, _opts=option_vars) -> None:
@@ -179,8 +180,8 @@ class ConfirmForm:
                             command=lambda code=option.code: _select(code),
                         )
                         checkbox.grid(
-                            row=option_index // 4,
-                            column=option_index % 4,
+                            row=option_positions[option_index][0],
+                            column=option_positions[option_index][1],
                             sticky="w",
                             padx=(0, 8),
                             pady=2,
@@ -212,9 +213,10 @@ class ConfirmForm:
                         self._focus_widgets[field.record_path] = option_checkboxes[0]
                         self._nav_order.append(field.record_path)
                 elif field.kind == "multi_choice":
+                    option_positions, option_ncols = option_grid_positions(field.options)
                     options = ttk.Frame(group)
                     options.grid(row=field_row, column=1, sticky="w", pady=3)
-                    for _col in range(4):  # even, aligned option columns for ragged grids
+                    for _col in range(option_ncols):  # mirror the form's real column layout
                         options.columnconfigure(_col, uniform="opt", minsize=120)
                     code_vars: dict[str, tk.BooleanVar] = {}
                     first_checkbox = None
@@ -227,8 +229,8 @@ class ConfirmForm:
                             command=self._notify_change,
                         )
                         checkbox.grid(
-                            row=option_index // 4,
-                            column=option_index % 4,
+                            row=option_positions[option_index][0],
+                            column=option_positions[option_index][1],
                             sticky="w",
                             padx=(0, 8),
                             pady=2,
@@ -1211,14 +1213,22 @@ class ReviewApp(tk.Tk):
         for child in widget.winfo_children():
             ReviewApp._bind_mousewheel_recursive(child, handler)
 
+    def _resolve_output_dir(self) -> Path:
+        """Default output location for working files / recognition artifacts — the user's
+        '預設是output' (#single-folder-prompt). Overridable via ``self.output_root`` (tests)."""
+        return Path(getattr(self, "output_root", None) or "output")
+
     def _choose_template(self) -> None:
-        template = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx")])
+        # One selection only: pick the source report (XLSX template). The working file defaults
+        # to output/匯入中.xlsx — no second "輸出資料夾" prompt (#single-folder-prompt).
+        template = filedialog.askopenfilename(
+            title="開新報表：選擇來源報表 (XLSX)", filetypes=[("Excel files", "*.xlsx")]
+        )
         if not template:
             return
-        output_dir = filedialog.askdirectory(title="選擇輸出資料夾")
-        if not output_dir:
-            return
-        working = Path(output_dir) / "匯入中.xlsx"
+        output_dir = self._resolve_output_dir()
+        output_dir.mkdir(parents=True, exist_ok=True)
+        working = output_dir / "匯入中.xlsx"
         try:
             if self.session:
                 self.session.close()
@@ -1435,13 +1445,12 @@ class ReviewApp(tk.Tk):
         from ocr_from2xlsx.plugin_backend import scan_doc_preprocess_env_overrides
         from ocr_from2xlsx.scan import next_output_artifact_path, prepare_records_from_folder
 
-        input_dir = filedialog.askdirectory(title="選擇含圖片/PDF 的資料夾")
+        # One selection only: pick the photo/PDF source folder. Recognition output defaults to
+        # output/ — no second "輸出資料夾" prompt (#single-folder-prompt).
+        input_dir = filedialog.askdirectory(title="匯入資料夾：選擇含圖片/PDF 的來源資料夾")
         if not input_dir:
             return
-        selected_out = filedialog.askdirectory(title="選擇辨識輸出資料夾")
-        if not selected_out:
-            return
-        output_dir = Path(selected_out)
+        output_dir = self._resolve_output_dir()
         output_dir.mkdir(parents=True, exist_ok=True)
         json_path = next_output_artifact_path(output_dir, "batch-prepared.json")
 

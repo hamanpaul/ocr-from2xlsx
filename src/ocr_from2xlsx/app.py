@@ -1645,7 +1645,10 @@ class ReviewApp(tk.Tk):
             )
             self._focus_name_field()
             return
-        human_confirmed = self._needs_name_confirmation(record)
+        # The confirm action IS a human confirmation, so accept_scan always gets
+        # human_confirmed=True (that is what clears the name.unconfirmed flag on write). The
+        # separate flag below only decides whether to PERSIST a name correction afterwards.
+        persist_confirmed_name = self._needs_name_confirmation(record)
         try:
             result = self.session.accept_scan(
                 record, human_confirmed=True, overwrite_row=overwrite_row, relaxed=True
@@ -1665,7 +1668,7 @@ class ReviewApp(tk.Tk):
             )
             return
         if result.status in {"forced", "written"}:
-            if human_confirmed:
+            if persist_confirmed_name:
                 self._persist_confirmed_name_after_write(record)
             self.written_indices.add(self.current_index)
             self._written_rows[self.current_index] = result.row_number
@@ -1712,7 +1715,9 @@ class ReviewApp(tk.Tk):
             return
         record = self.records[self.current_index]
         self._apply_form_to_record(record)
-        human_confirmed = self._needs_name_confirmation(record)
+        # 強制寫入 is also a human confirmation (accept_scan gets human_confirmed=True); this
+        # local flag only gates persisting a name correction after the write (see _confirm_current).
+        persist_confirmed_name = self._needs_name_confirmation(record)
         try:
             result = self.session.accept_scan(
                 record, force=True, human_confirmed=True, overwrite_row=overwrite_row, relaxed=True
@@ -1732,7 +1737,7 @@ class ReviewApp(tk.Tk):
             )
             return
         if result.status in {"forced", "written"}:
-            if human_confirmed:
+            if persist_confirmed_name:
                 self._persist_confirmed_name_after_write(record)
             self.written_indices.add(self.current_index)
             self._written_rows[self.current_index] = result.row_number

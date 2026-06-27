@@ -75,13 +75,15 @@ def field_region(record_path: str) -> tuple[float, float, float, float] | None:
 
 
 def _order_quad(corners: list) -> list:
-    """Order 4 (x, y) corners as TL, TR, BR, BL (mirrors document_detect.order_quad), so a
-    calibration saved in any click order still maps consistently."""
+    """Order 4 (x, y) corners as TL, TR, BR, BL with the same tie-robust top-two/bottom-two
+    split as ``document_detect.order_quad`` (pure-Python, no numpy): sort by y, take the top
+    two and bottom two, then order each pair by x. The x+y / x−y trick is deliberately
+    avoided — it collapses corners on axis-aligned and ~45° quads, which would frame the
+    wrong region for some calibrations."""
     pts = [(float(x), float(y)) for x, y in corners]
-    by_sum = sorted(pts, key=lambda p: p[0] + p[1])
-    tl, br = by_sum[0], by_sum[-1]
-    by_diff = sorted(pts, key=lambda p: p[0] - p[1])
-    bl, tr = by_diff[0], by_diff[-1]
+    by_y = sorted(pts, key=lambda p: p[1])
+    tl, tr = sorted(by_y[:2], key=lambda p: p[0])
+    bl, br = sorted(by_y[2:], key=lambda p: p[0])
     return [tl, tr, br, bl]
 
 

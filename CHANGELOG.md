@@ -18,11 +18,6 @@
   `image._data()` 回傳該快取，save 不再讀已關閉的 archive；**且因為快取的是 bytes（不是會被首次 save 消耗/關閉
   的單一 BytesIO 串流），同一 session 連續寫多筆（多次 save）也不會損毀**。logo 完整保留。
 
-### Added
-- `build/verify_roundtrip.py`：可稽核的端到端寫入自我查核。自產 golden JSON（含曾出包的刁鑽案例）→ 走真
-  `ConfirmForm` 讀入/寫出 → `ImportSession` 寫真模板 XLSX → 讀回逐欄比對 JSON（欄位/label 正確、無 code 外洩、
-  檔案有效、圖片保留）。亦以 `test_end_to_end_roundtrip_self_check` 納入測試套件（無 Tk 顯示時自動略過）。
-  交付任何動到 表單/record/寫入 的變更前先跑它，讓查核可重現、不再仰賴人工逐筆檢查。
 - 試用回饋：服務項目寫入 XLSX 全面逐欄修正（#service-write-mapping）。原本 `_write_services` 只認 6 個
   服務 code 的中文標籤（`LABEL_BY_CODE`），其餘 code（如 `fatigue_strength`）會把**英文 code 原樣**寫入、
   且因沒有編號而被塞到該類**第一個空欄**——例如 4.疲憊與體力 應寫在「諮詢-症狀與副作用照護4」(AE)，卻變成
@@ -107,6 +102,15 @@
   避免把空姓名寫入並悄悄清掉待確認旗標。
 - (#47) 來源圖 `set_zoom` 縮小時重新夾住 origin，修正從已平移位置縮小後右/下邊緣露出底色的問題。
 - roster 無建議時顯示「（無建議名單）」而非空白清單。
+
+### Added
+- 手動建單：新增「新增空白紀錄」（工具列按鈕＋編輯選單，#manual-blank-record）。`開新報表` 選模板後按
+  「新增空白」即可建立一張空白紀錄（`record_id` 自動編號 `manual-NNNN`）直接填寫、按「確認並寫入」存檔，
+  **不需匯入 JSON 或掃描**；可連續新增多筆。先前紀錄只能從 匯入JSON/掃描 來，沒有純手動輸入的路徑。
+- `build/verify_roundtrip.py`：可稽核的端到端寫入自我查核。自產 golden JSON（含曾出包的刁鑽案例）→ 走真
+  `ConfirmForm` 讀入/寫出 → `ImportSession` 寫真模板 XLSX → 讀回逐欄比對 JSON（欄位/label 正確、無 code 外洩、
+  檔案有效、圖片保留）。亦以 `test_end_to_end_roundtrip_self_check` 納入測試套件（無 Tk 顯示時自動略過）。
+  交付任何動到 表單/record/寫入 的變更前先跑它，讓查核可重現、不再仰賴人工逐筆檢查。
 
 ### Changed
 - (#61) 預設辨識引擎改為 **PaddleOCR plugin**（地端、快）：實機對照地端 2B vision-VLM 約 534s/張且讀不出手寫

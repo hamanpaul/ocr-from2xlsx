@@ -1682,3 +1682,51 @@ def test_end_to_end_roundtrip_self_check() -> None:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     assert module.main() == 0
+
+
+def test_add_blank_record_appends_and_shows_for_manual_entry(app: ReviewApp) -> None:
+    # #manual-blank-record: 新增空白 builds a blank record on demand (no JSON/scan needed) and
+    # shows it for filling. Auto-numbered manual-NNNN ids; works even before 開新報表.
+    app.records = []
+    app.current_index = -1
+    app.session = None
+
+    ReviewApp._add_blank_record(app)
+    assert len(app.records) == 1
+    rec = app.records[0]
+    assert rec.record_id == "manual-0001"
+    assert (rec.name, rec.identity, rec.service_date, rec.gender) == ("", "", "", "")
+    assert app.current_index == 0
+    assert app.fields["record_id"].get() == "manual-0001"
+
+    ReviewApp._add_blank_record(app)
+    assert app.records[1].record_id == "manual-0002"
+    assert app.current_index == 1
+
+
+def test_add_blank_record_then_confirm_writes_manually(app: ReviewApp, tmp_path: Path) -> None:
+    # End-to-end manual entry: 開新報表 (session) -> 新增空白 -> fill name -> 確認並寫入 -> XLSX,
+    # with no JSON load anywhere.
+    template = tmp_path / "template.xlsx"
+    working = tmp_path / "working.xlsx"
+    create_workbook_template(template)
+    session = ImportSession.start(template, working)
+    try:
+        app.session = session
+        app.records = []
+        app.current_index = -1
+
+        ReviewApp._add_blank_record(app)
+        app.fields["name"].set("王小明")
+        ReviewApp._confirm_current(app)
+
+        assert app.written_indices == {0}
+        wb = load_workbook(working)
+        try:
+            sheet = wb["個案總表"]
+            name_col = _column_for_header(sheet, BASIC_COLUMN_BY_FIELD["name"])
+            assert sheet.cell(row=2, column=name_col).value == "王小明"
+        finally:
+            wb.close()
+    finally:
+        session.close()

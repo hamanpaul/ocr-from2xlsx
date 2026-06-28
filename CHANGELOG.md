@@ -104,9 +104,10 @@
 - roster 無建議時顯示「（無建議名單）」而非空白清單。
 
 ### Added
-- 手動建單：新增「新增空白紀錄」（工具列按鈕＋編輯選單，#manual-blank-record）。`開新報表` 選模板後按
-  「新增空白」即可建立一張空白紀錄（`record_id` 自動編號 `manual-NNNN`）直接填寫、按「確認並寫入」存檔，
-  **不需匯入 JSON 或掃描**；可連續新增多筆。先前紀錄只能從 匯入JSON/掃描 來，沒有純手動輸入的路徑。
+- 手動建單（#manual-blank-record）：`開新報表` 選模板後**自動就給一張空白紀錄**可直接填寫、按「確認並寫入」
+  存檔——**不需匯入 JSON 或掃描，也不必先按任何按鈕**（修正試用時「開新報表後仍要求載入 JSON」的問題）。另加
+  「新增空白」（工具列按鈕＋編輯選單）可隨時再建下一筆；`record_id` 自動編號 `manual-NNNN`。先前紀錄只能從
+  匯入JSON/掃描 來、沒有純手動輸入的路徑。後續若 匯入 JSON/掃描 會自然取代這些手動空白紀錄。
 - `build/verify_roundtrip.py`：可稽核的端到端寫入自我查核。自產 golden JSON（含曾出包的刁鑽案例）→ 走真
   `ConfirmForm` 讀入/寫出 → `ImportSession` 寫真模板 XLSX → 讀回逐欄比對 JSON（欄位/label 正確、無 code 外洩、
   檔案有效、圖片保留）。亦以 `test_end_to_end_roundtrip_self_check` 納入測試套件（無 Tk 顯示時自動略過）。

@@ -613,7 +613,7 @@ class ImageViewer:
 class ReviewApp(tk.Tk):
     _PREVIEW_PLACEHOLDER = (
         "攝影機或圖片預覽區\n"
-        "手動建單：『開新報表』選模板後按『新增空白』填寫並寫入。\n"
+        "手動建單：『開新報表』選模板後即可直接填寫、按『確認並寫入』存檔（要多筆按『新增空白』）。\n"
         "或：『選擇攝影機』連續掃描／『匯入資料夾批次』／『匯入 JSON』載入既有資料。"
     )
     _CAMERA_POLL_INTERVAL_MS = 33
@@ -1271,6 +1271,11 @@ class ReviewApp(tk.Tk):
         # batch's "已寫入 X / 列號" or a stale badge (#45).
         self._update_progress()
         self._update_badge()
+        # Manual-entry default: with no records loaded, start the operator on a blank record so
+        # 開新報表 → 直接填單 → 確認並寫入 just works, no extra click and no JSON/scan
+        # (#manual-blank-record). A later 匯入 JSON / 掃描 simply replaces this blank.
+        if not self.records:
+            self._add_blank_record()
 
     def _load_json(self) -> None:
         path = filedialog.askopenfilename(filetypes=[("JSON files", "*.json")])

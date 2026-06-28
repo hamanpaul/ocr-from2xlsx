@@ -1730,3 +1730,29 @@ def test_add_blank_record_then_confirm_writes_manually(app: ReviewApp, tmp_path:
             wb.close()
     finally:
         session.close()
+
+
+def test_choose_template_auto_creates_blank_record_for_manual_entry(
+    app: ReviewApp, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # #manual-blank-record: 開新報表 with no records loaded starts the operator on a blank record,
+    # so they can fill and write immediately — no extra click, no JSON/scan.
+    app.output_root = tmp_path
+    app.records = []
+    app.current_index = -1
+    monkeypatch.setattr(
+        "ocr_from2xlsx.app.filedialog.askopenfilename", lambda **k: str(tmp_path / "t.xlsx")
+    )
+
+    class _Sess:
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr("ocr_from2xlsx.app.ImportSession.start", lambda *a, **k: _Sess())
+
+    app._choose_template()
+
+    assert len(app.records) == 1
+    assert app.records[0].record_id == "manual-0001"
+    assert app.current_index == 0
+    assert app.fields["record_id"].get() == "manual-0001"

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 import shutil
 from datetime import date, datetime
 from pathlib import Path
@@ -21,24 +20,59 @@ from ocr_from2xlsx.constants import (
     WORKBOOK_SHEET,
 )
 from ocr_from2xlsx.domain import Record
+from ocr_from2xlsx.form_layout import service_record_layout
 
-LABEL_BY_CODE = {
-    "screening_prevention": "1.癌症篩檢與預防",
-    "disease_treatment_knowledge": "2.疾病及治療知識",
-    "wig_hat": "1.假髮/頭巾/毛帽用品",
-    "social_welfare": "3.社福資源",
-    "care_information": "9.照護資訊",
-    "received_service_help": "4.獲得服務協助",
+# Column-header prefix for each service group in 個案總表. The per-option NUMBER (its 1-based
+# position in the curated form layout) is the column suffix — e.g. symptom option 4
+# (fatigue_strength / 4.疲憊與體力) → 諮詢-症狀與副作用照護4. Built from form_layout so the
+# written value (the real "N.中文" label) and the target column always match the form
+# (#service-write-mapping; previously a 6-entry LABEL_BY_CODE wrote raw English codes to the
+# wrong column for every other service option).
+_SERVICE_PREFIX_BY_PATH = {
+    "services.consultation.health_medical": "諮詢-健康與醫療系統",
+    "services.consultation.symptom_side_effect": "諮詢-症狀與副作用照護",
+    "services.consultation.nutrition_diet": "諮詢-營養與飲食",
+    "services.consultation.psychosocial_emotion": "諮詢-社會心理情緒",
+    "services.consultation.financial_social": "諮詢-經濟與社會資源",
+    "services.consultation.care_support": "諮詢-照顧與支持",
+    "services.supplies": "提供實體用品及設備",
+    "services.internal_referrals": "轉介或連結院內資源",
+    "services.external_referrals": "轉介或連結院外資源",
+    "services.referral_outcomes": "轉介或連結資源成果",
 }
 
-SUMMARY_BY_HEADER_PREFIX_AND_LABEL = {
-    ("諮詢-健康與醫療系統", "1.癌症篩檢與預防"): "health_medical:screening_prevention",
-    ("諮詢-健康與醫療系統", "2.疾病及治療知識"): "health_medical:disease_treatment_knowledge",
-    ("提供實體用品及設備", "1.假髮/頭巾/毛帽用品"): "supplies:wig_hat",
-    ("轉介或連結院內資源", "3.社福資源"): "internal:social_welfare",
-    ("轉介或連結院外資源", "9.照護資訊"): "external:care_information",
-    ("轉介或連結資源成果", "4.獲得服務協助"): "outcomes:received_service_help",
-}
+
+def _build_service_index() -> "dict[str, tuple[str, dict[str, tuple[int, str]]]]":
+    """record_path → (column prefix, {code: (number, label)}) from the curated form layout."""
+    layout = service_record_layout()
+    index: dict[str, tuple[str, dict[str, tuple[int, str]]]] = {}
+    for field in layout.iter_fields():
+        prefix = _SERVICE_PREFIX_BY_PATH.get(field.record_path or "")
+        if prefix is None:
+            continue
+        index[field.record_path] = (
+            prefix,
+            {opt.code: (i, opt.label) for i, opt in enumerate(field.options, start=1)},
+        )
+    return index
+
+
+_SERVICE_INDEX = _build_service_index()
+
+
+def _build_service_label_to_code() -> "dict[tuple[str, str], str]":
+    """Reverse of _SERVICE_INDEX: (column prefix, written label) → option code, so a re-opened
+    workbook turns each written service label back into its canonical code. This keeps the
+    duplicate-detection summary identical to ``Services.summary()`` for EVERY option, not just
+    a hand-picked few (#service-write-mapping)."""
+    rev: dict[tuple[str, str], str] = {}
+    for prefix, by_code in _SERVICE_INDEX.values():
+        for code, (_number, label) in by_code.items():
+            rev[(prefix, label)] = code
+    return rev
+
+
+_SERVICE_LABEL_TO_CODE = _build_service_label_to_code()
 
 SUMMARY_PREFIX_BY_HEADER_PREFIX = {
     "諮詢-健康與醫療系統": "health_medical",
@@ -53,7 +87,6 @@ SUMMARY_PREFIX_BY_HEADER_PREFIX = {
     "轉介或連結資源成果": "outcomes",
 }
 
-_SERVICE_NUMBER_PATTERN = re.compile(r"^(?P<number>\d+)\.")
 MAX_CONSECUTIVE_EMPTY_DUPLICATE_ROWS = 25
 
 
@@ -79,10 +112,33 @@ class WorkbookWriter:
             self.workbook = load_workbook(self.working_path, keep_vba=True)
         else:
             self.workbook = load_workbook(self.working_path)
+        self._materialize_embedded_images()
         if WORKBOOK_SHEET not in self.workbook.sheetnames:
             raise ValueError(f"Missing sheet: {WORKBOOK_SHEET}")
         self.sheet = self.workbook[WORKBOOK_SHEET]
         self.header_map = self._build_header_map(self.sheet)
+
+    def _materialize_embedded_images(self) -> None:
+        """Cache every embedded image's encoded bytes right after load and make ``_data()``
+        return them on every save, so saving never re-reads the image lazily from the source
+        archive. openpyxl's lazy re-read intermittently raised ``ValueError: I/O operation on
+        closed file`` mid-save (GC-closed zip) and left a CORRUPT workbook — fatal for the
+        official template, which carries a logo on every sheet (#xlsx-image-save).
+
+        We cache the *bytes* (not a BytesIO): a single stream gets consumed/closed by the first
+        save, so the SECOND write to the same workbook would fail — exactly what a multi-record
+        import session does. Returning cached bytes survives unlimited saves. Best-effort: any
+        per-image failure leaves that image untouched."""
+        for worksheet in self.workbook.worksheets:
+            for image in list(getattr(worksheet, "_images", [])):
+                try:
+                    data = image._data()  # encode now, while the archive is still readable
+                except Exception:
+                    continue
+                try:
+                    image._data = lambda _cached=data: _cached
+                except Exception:
+                    pass
 
     @classmethod
     def create_from_template(cls, template_path: Path | str, working_path: Path | str) -> "WorkbookWriter":
@@ -189,34 +245,36 @@ class WorkbookWriter:
 
     def _write_services(self, row: int, record: Record) -> None:
         for category, codes in record.services.consultation.items():
-            prefix = _consultation_prefix(category)
-            for code in codes:
-                label = LABEL_BY_CODE.get(code, code)
-                header = self._service_header(row, prefix, label, code)
-                self._set(row, header, label)
-        for code in record.services.supplies:
-            label = LABEL_BY_CODE.get(code, code)
-            header = self._service_header(row, "提供實體用品及設備", label, code)
-            self._set(row, header, label)
-        for code in record.services.internal_referrals:
-            label = LABEL_BY_CODE.get(code, code)
-            header = self._service_header(row, "轉介或連結院內資源", label, code)
-            self._set(row, header, label)
-        for code in record.services.external_referrals:
-            label = LABEL_BY_CODE.get(code, code)
-            header = self._service_header(row, "轉介或連結院外資源", label, code)
-            self._set(row, header, label)
-        for code in record.services.referral_outcomes:
-            label = LABEL_BY_CODE.get(code, code)
-            header = self._service_header(row, "轉介或連結資源成果", label, code)
+            self._write_service_group(row, f"services.consultation.{category}", codes)
+        self._write_service_group(row, "services.supplies", record.services.supplies)
+        self._write_service_group(row, "services.internal_referrals", record.services.internal_referrals)
+        self._write_service_group(row, "services.external_referrals", record.services.external_referrals)
+        self._write_service_group(row, "services.referral_outcomes", record.services.referral_outcomes)
+
+    def _write_service_group(self, row: int, record_path: str, codes) -> None:
+        """Write each selected code to its OWN numbered column (prefix+number) with the real
+        form label. The number is the option's position in the form layout, which equals the
+        個案總表 column number — so fatigue_strength lands in 諮詢-症狀與副作用照護4 as
+        "4.疲憊與體力", never the raw English code in the first free column
+        (#service-write-mapping)."""
+        entry = _SERVICE_INDEX.get(record_path)
+        if entry is None:
+            return
+        prefix, by_code = entry
+        for code in codes:
+            num_label = by_code.get(code)
+            if num_label is None:
+                # Unknown code (data drift): keep the old safety net so nothing is dropped.
+                header = self._first_empty_service_header(row, prefix, code)
+                self._set(row, header, code)
+                continue
+            number, label = num_label
+            header = f"{prefix}{number}"
+            if header not in self.header_map:
+                header = self._first_empty_service_header(row, prefix, code)
             self._set(row, header, label)
 
-    def _service_header(self, row: int, prefix: str, label: str, code: str) -> str:
-        match = _SERVICE_NUMBER_PATTERN.match(label)
-        if match:
-            candidate = f"{prefix}{match.group('number')}"
-            if candidate in self.header_map and self._service_cell_empty(row, candidate):
-                return candidate
+    def _first_empty_service_header(self, row: int, prefix: str, code: str) -> str:
         candidates = [header for header in self.header_map if header.startswith(prefix)]
         if not candidates:
             raise ValueError(f"Missing workbook service columns for {prefix}")
@@ -236,17 +294,12 @@ class WorkbookWriter:
             if value in (None, ""):
                 continue
             value_str = str(value)
-            summary_part = None
-            for (prefix, label), candidate in SUMMARY_BY_HEADER_PREFIX_AND_LABEL.items():
-                if header.startswith(prefix) and value_str == label:
-                    summary_part = candidate
-                    break
-            if summary_part:
-                parts.append(summary_part)
-                continue
             for prefix, summary_prefix in SUMMARY_PREFIX_BY_HEADER_PREFIX.items():
                 if header.startswith(prefix):
-                    parts.append(f"{summary_prefix}:{value_str}")
+                    # Reverse the written label back to its code so the summary is code-based
+                    # and matches Services.summary(); fall back to the raw value on data drift.
+                    code = _SERVICE_LABEL_TO_CODE.get((prefix, value_str), value_str)
+                    parts.append(f"{summary_prefix}:{code}")
                     break
         return "|".join(sorted(parts))
 
@@ -287,14 +340,3 @@ class WorkbookWriter:
         column = self.header_map.get(header)
         if column:
             self.sheet.cell(row=row, column=column, value=value)
-
-
-def _consultation_prefix(category: str) -> str:
-    return {
-        "health_medical": "諮詢-健康與醫療系統",
-        "symptom_side_effect": "諮詢-症狀與副作用照護",
-        "nutrition_diet": "諮詢-營養與飲食",
-        "psychosocial_emotion": "諮詢-社會心理情緒",
-        "financial_social": "諮詢-經濟與社會資源",
-        "care_support": "諮詢-照顧與支持",
-    }[category]

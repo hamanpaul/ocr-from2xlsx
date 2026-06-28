@@ -255,7 +255,10 @@ def test_writer_raises_when_service_prefix_missing(tmp_path: Path) -> None:
     writer.close()
 
 
-def test_writer_routes_unmapped_service_to_sparse_column(tmp_path: Path) -> None:
+def test_writer_falls_back_to_sparse_column_when_numbered_column_absent(tmp_path: Path) -> None:
+    # psychology is internal-referral option 5; its column 轉介或連結院內資源5 is absent from the
+    # minimal template, so it falls back to the first free 轉介或連結院內資源* column — but the
+    # written value is the real label (5.心理相關), never the raw code (#service-write-mapping).
     template = tmp_path / "template.xlsx"
     working = tmp_path / "working.xlsx"
     create_workbook_template(template)
@@ -270,9 +273,11 @@ def test_writer_routes_unmapped_service_to_sparse_column(tmp_path: Path) -> None
     wb = load_workbook(working)
     ws = wb["個案總表"]
     internal_col = _column_for_header(ws, "轉介或連結院內資源3")
-    assert ws.cell(row=2, column=internal_col).value == "psychology"
+    assert ws.cell(row=2, column=internal_col).value == "5.心理相關"
     wb.close()
 
+    # Duplicate detection still round-trips: the written label reverses to the same code, so the
+    # re-opened workbook's summary matches Services.summary().
     reopened = WorkbookWriter(working)
     assert record.duplicate_key() in reopened.existing_duplicate_keys()
     reopened.close()
@@ -544,3 +549,115 @@ def test_overwrite_clears_stale_service_cells(tmp_path: Path) -> None:
         assert "1.癌症篩檢與預防" not in values
     finally:
         wb.close()
+
+
+def test_every_service_option_writes_correct_label_to_its_numbered_column(tmp_path: Path) -> None:
+    """#service-write-mapping: every selected service option must land in its OWN numbered
+    column (prefix+number) with the real form label — never the raw English code in the first
+    free column (the prior bug, e.g. fatigue_strength → 諮詢-症狀與副作用照護1 = 'fatigue_strength')."""
+    from ocr_from2xlsx.domain import Services
+    from ocr_from2xlsx.form_layout import service_record_layout
+    from tests.fixtures import create_full_workbook_template
+
+    layout = service_record_layout()
+    group_prefix = {  # record_path -> 個案總表 column prefix
+        "services.consultation.health_medical": "諮詢-健康與醫療系統",
+        "services.consultation.symptom_side_effect": "諮詢-症狀與副作用照護",
+        "services.consultation.nutrition_diet": "諮詢-營養與飲食",
+        "services.consultation.psychosocial_emotion": "諮詢-社會心理情緒",
+        "services.consultation.financial_social": "諮詢-經濟與社會資源",
+        "services.consultation.care_support": "諮詢-照顧與支持",
+        "services.supplies": "提供實體用品及設備",
+        "services.internal_referrals": "轉介或連結院內資源",
+        "services.external_referrals": "轉介或連結院外資源",
+        "services.referral_outcomes": "轉介或連結資源成果",
+    }
+    fields = {p: layout.field_by_key(p[len("services."):]) for p in group_prefix}
+
+    # Select EVERY option in every service field.
+    record = make_record()
+    record.services = Services(
+        consultation={
+            p.rsplit(".", 1)[-1]: [o.code for o in f.options]
+            for p, f in fields.items()
+            if p.startswith("services.consultation.")
+        },
+        supplies=[o.code for o in fields["services.supplies"].options],
+        internal_referrals=[o.code for o in fields["services.internal_referrals"].options],
+        external_referrals=[o.code for o in fields["services.external_referrals"].options],
+        referral_outcomes=[o.code for o in fields["services.referral_outcomes"].options],
+    )
+
+    template = tmp_path / "t.xlsx"
+    working = tmp_path / "w.xlsx"
+    create_full_workbook_template(template)
+    writer = WorkbookWriter.create_from_template(template, working)
+    writer.write_record(record)
+    writer.save()
+    writer.close()
+
+    wb = load_workbook(working)
+    try:
+        sheet = wb["個案總表"]
+        all_codes: set[str] = set()
+        for path, prefix in group_prefix.items():
+            for i, opt in enumerate(fields[path].options, start=1):
+                all_codes.add(opt.code)
+                col = _column_for_header(sheet, f"{prefix}{i}")
+                assert sheet.cell(row=2, column=col).value == opt.label, (
+                    f"{path}#{i} ({opt.code}) -> {prefix}{i} should be {opt.label!r}, "
+                    f"got {sheet.cell(row=2, column=col).value!r}"
+                )
+        # The exact case from the bug report: fatigue_strength -> AE / 諮詢-症狀與副作用照護4.
+        ae = _column_for_header(sheet, "諮詢-症狀與副作用照護4")
+        assert sheet.cell(row=2, column=ae).value == "4.疲憊與體力"
+        # No raw English code leaked into any cell.
+        for col in range(1, sheet.max_column + 1):
+            val = sheet.cell(row=2, column=col).value
+            assert val not in all_codes, f"raw code {val!r} leaked into column {col}"
+    finally:
+        wb.close()
+
+
+def test_writer_materializes_images_so_save_survives_closed_archive(tmp_path: Path) -> None:
+    """#xlsx-image-save: templates with embedded images (the official form's logo on every
+    sheet) must save reliably. openpyxl re-reads images lazily from the source zip, which GC
+    may have closed by save time -> intermittent 'I/O operation on closed file' + a CORRUPT
+    file. The writer materializes images to memory on load so save never touches the archive."""
+    from openpyxl.drawing.image import Image as XLImage
+    from PIL import Image as PILImage
+
+    template = tmp_path / "template.xlsx"
+    create_workbook_template(template)
+    logo = tmp_path / "logo.png"
+    PILImage.new("RGB", (8, 8), "red").save(logo)
+    wb = load_workbook(template)
+    wb["個案總表"].add_image(XLImage(str(logo)), "Z1")
+    wb.save(template)
+    wb.close()
+
+    working = tmp_path / "working.xlsx"
+    writer = WorkbookWriter.create_from_template(template, working)
+    images = [im for sh in writer.workbook.worksheets for im in getattr(sh, "_images", [])]
+    assert images, "fixture should carry an embedded image"
+    # _data() now returns cached bytes (not a one-shot stream), so repeated saves are reliable.
+    assert all(isinstance(im._data(), (bytes, bytearray)) for im in images)
+
+    import gc
+
+    # Two records = two saves on one workbook (what a multi-record import session does). A
+    # single cached BytesIO would be consumed/closed by the first save and corrupt the second;
+    # cached bytes survive. gc.collect() reproduces the closed-archive condition.
+    gc.collect()
+    writer.write_record(make_record("scan-0001"))
+    writer.save()
+    gc.collect()
+    writer.write_record(make_record("scan-0002"))
+    writer.save()
+    writer.close()
+
+    reopened = load_workbook(working)  # raises if the file is corrupt
+    try:
+        assert sum(len(getattr(sh, "_images", [])) for sh in reopened.worksheets) == 1
+    finally:
+        reopened.close()

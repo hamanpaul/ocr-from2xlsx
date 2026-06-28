@@ -7,6 +7,11 @@
 
 ## [Unreleased]
 
+### Added
+- README 加入**示範影片** `example/ocr-from2xlsx_example.mp4`。
+- **首個 release v0.1.0**：可執行版打包（`ocr-from2xlsx.exe` + `plugins/`（PaddleOCR）+ `example/`），
+  作為 GitHub Release asset 提供下載（不進 git；1.3GB plugin 屬建置產物）。`VERSION` 同步為 0.1.0。
+
 ### Changed
 - 新空白頁的游標改**定位在「服務日期」**（最上欄），不再往下跳到「姓名」（#focus-service-date）。開啟報表與
   每次確認並寫入帶出新頁時都從最上欄開始，符合由上而下的填寫動線。

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import shutil
+from copy import copy
 from datetime import date, datetime
 from pathlib import Path
 
@@ -153,11 +154,15 @@ class WorkbookWriter:
         shutil.copy2(template_path, working_path)
         return cls(working_path)
 
+    #: Header is row 1, so the first data row — the one the official template fully styles — is row 2.
+    _FIRST_DATA_ROW = 2
+
     def write_record(self, record: Record, row: int | None = None) -> int:
         if row is None:
             row = self._next_empty_row()
         else:
             self._clear_row(row)
+        self._inherit_first_data_row_style(row)
         # Tolerate missing/optional values: the relaxed (human-confirmed) GUI write only
         # requires a name, so a blank/invalid date or an unset identity/gender must land as
         # an empty cell rather than crash. The strict import path blocks those upstream, so
@@ -324,6 +329,20 @@ class WorkbookWriter:
             if self.sheet.cell(row=row, column=name_col).value in (None, ""):
                 return row
         return self.sheet.max_row + 1
+
+    def _inherit_first_data_row_style(self, row: int) -> None:
+        """Copy the first data row's per-column cell style onto ``row``.
+
+        The official template only fully styles its first data row (row 2 — fills, borders, fonts);
+        rows below carry only a sparse fill. Appending a record (2nd+ import) therefore landed on a
+        barely-styled row and rendered with broken 底色 (#appended-row-style). Cells reference shared
+        styles, so copying ``_style`` (style only — never the value) replicates the template's
+        data-row look for every written row. No-op when writing the reference row itself."""
+        if row <= self._FIRST_DATA_ROW:
+            return
+        for column in range(1, self.sheet.max_column + 1):
+            reference = self.sheet.cell(row=self._FIRST_DATA_ROW, column=column)
+            self.sheet.cell(row=row, column=column)._style = copy(reference._style)
 
     def _clear_row(self, row: int) -> None:
         # Blank every mapped column in the row so a re-write (overwrite) leaves no

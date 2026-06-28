@@ -23,7 +23,7 @@ from ocr_from2xlsx.review_nav import (
     prev_flagged_key,
 )
 from ocr_from2xlsx.correction_store import default_correction_store_path
-from ocr_from2xlsx.domain import OcrInfo, Record, ReviewInfo
+from ocr_from2xlsx.domain import OcrInfo, Record, ReviewInfo, normalize_service_date
 from ocr_from2xlsx.form_layout import FormLayout, option_grid_positions, service_record_layout
 from ocr_from2xlsx.name_suggestion import NAME_UNCONFIRMED, confirm_name
 from ocr_from2xlsx.session import ImportSession
@@ -617,7 +617,7 @@ class ImageViewer:
 class ReviewApp(tk.Tk):
     _PREVIEW_PLACEHOLDER = (
         "攝影機或圖片預覽區\n"
-        "手動建單：『開新報表』選模板後即可直接填寫、按『確認並寫入』存檔（要多筆按『新增空白』）。\n"
+        "手動建單：『開啟報表』選模板後即可直接填寫、按『確認並寫入』存檔（要多筆按『新增頁面』）。\n"
         "或：『選擇攝影機』連續掃描／『匯入資料夾批次』／『匯入 JSON』載入既有資料。"
     )
     _CAMERA_POLL_INTERVAL_MS = 33
@@ -754,7 +754,7 @@ class ReviewApp(tk.Tk):
         menubar = tk.Menu(self, tearoff=0)
 
         file_menu = tk.Menu(menubar, tearoff=0)
-        _menu_item(file_menu, "開新報表（選 XLSX 模板）", self._choose_template, "choose_template")
+        _menu_item(file_menu, "開啟報表（選 XLSX 模板）", self._choose_template, "choose_template")
         _menu_item(file_menu, "匯入 JSON", self._load_json, "load_json")
         _menu_item(file_menu, "匯入資料夾批次", self._import_folder_batch, "import_folder_batch")
         file_menu.add_separator()
@@ -777,7 +777,7 @@ class ReviewApp(tk.Tk):
         menubar.add_cascade(label="掃描(S)", menu=scan_menu, underline=3)
 
         edit_menu = tk.Menu(menubar, tearoff=0)
-        _menu_item(edit_menu, "新增空白紀錄", self._add_blank_record, "add_blank")
+        _menu_item(edit_menu, "新增頁面", self._add_blank_record, "add_blank")
         edit_menu.add_separator()
         _menu_item(edit_menu, "上一筆", self._previous_record, "prev_record")
         _menu_item(edit_menu, "下一筆", self._next_record, "next_record")
@@ -816,15 +816,16 @@ class ReviewApp(tk.Tk):
             )
             return button
 
-        _btn("開新報表", self._choose_template, "choose_template")
+        _btn("開啟報表", self._choose_template, "choose_template")
         _btn("匯入資料夾", self._import_folder_batch, "import_folder_batch")
-        add_blank_btn = _btn("新增空白", self._add_blank_record, "add_blank")
         ttk.Separator(toolbar, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=(8, 4))
         prev_btn = _btn("上一筆", self._previous_record, "prev_record")
         next_btn = _btn("下一筆", self._next_record, "next_record")
         confirm_btn = _btn("確認並寫入", self._confirm_current, "confirm")
+        ttk.Separator(toolbar, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=(8, 4))
+        add_blank_btn = _btn("新增頁面", self._add_blank_record, "add_blank")
         # Hover hints on the keyboard-driven actions (#48), since labels are now sparse.
-        _Tooltip(add_blank_btn, "手動建立一張空白紀錄填寫（免匯入 JSON/掃描）")
+        _Tooltip(add_blank_btn, "手動建立一張空白頁面填寫（免匯入 JSON/掃描）")
         _Tooltip(prev_btn, "PgUp / Ctrl+←：上一筆")
         _Tooltip(next_btn, "PgDn / Ctrl+→：下一筆")
         _Tooltip(confirm_btn, "Enter / Ctrl+Enter：寫入；只有缺 XLSX 或姓名會被擋下，其餘欄位皆 optional")
@@ -1252,7 +1253,7 @@ class ReviewApp(tk.Tk):
         # One selection only: pick the source report (XLSX template). The working file defaults
         # to output/匯入中.xlsx — no second "輸出資料夾" prompt (#single-folder-prompt).
         template = filedialog.askopenfilename(
-            title="開新報表：選擇來源報表 (XLSX)", filetypes=[("Excel files", "*.xlsx")]
+            title="開啟報表：選擇來源報表 (XLSX)", filetypes=[("Excel files", "*.xlsx")]
         )
         if not template:
             return
@@ -1276,7 +1277,7 @@ class ReviewApp(tk.Tk):
         self._update_progress()
         self._update_badge()
         # Manual-entry default: with no records loaded, start the operator on a blank record so
-        # 開新報表 → 直接填單 → 確認並寫入 just works, no extra click and no JSON/scan
+        # 開啟報表 → 直接填單 → 確認並寫入 just works, no extra click and no JSON/scan
         # (#manual-blank-record). A later 匯入 JSON / 掃描 simply replaces this blank.
         if not self.records:
             self._add_blank_record()
@@ -1316,9 +1317,9 @@ class ReviewApp(tk.Tk):
         return f"manual-{n:04d}"
 
     def _add_blank_record(self) -> None:
-        """Append a fresh blank record and show it for manual entry — so 開新報表 → 新增 → 填單 →
+        """Append a fresh blank record and show it for manual entry — so 開啟報表 → 新增 → 填單 →
         確認並寫入 works without importing JSON or scanning (#manual-blank-record). Needs no JSON;
-        writing still needs a workbook (開新報表), surfaced by 確認並寫入's own guard."""
+        writing still needs a workbook (開啟報表), surfaced by 確認並寫入's own guard."""
         record = Record(
             record_id=self._next_manual_record_id(),
             service_date="",
@@ -1335,8 +1336,8 @@ class ReviewApp(tk.Tk):
         self._show_record(record)
         self._focus_name_field()
         self._push_status(
-            f"已新增空白紀錄 {record.record_id}，請填寫後按「確認並寫入」"
-            + ("" if self.session else "（記得先用「開新報表」選模板才能寫入）")
+            f"已新增頁面 {record.record_id}，請填寫後按「確認並寫入」"
+            + ("" if self.session else "（記得先用「開啟報表」選模板才能寫入）")
         )
         self._update_toolbar_states()
 
@@ -1709,7 +1710,7 @@ class ReviewApp(tk.Tk):
             return
         record = self.records[self.current_index]
         self._apply_form_to_record(record)
-        # 確認並寫入 requires only a name (the workbook is implied by 開新報表); every other
+        # 確認並寫入 requires only a name (the workbook is implied by 開啟報表); every other
         # field is optional and written as-is (#confirm-required-fields). A blank name is the
         # one thing refused here — 強制寫入 stays the override for an intentionally empty name.
         # This also covers the #46 guard: human_confirmed clears name.unconfirmed, so a blank
@@ -1753,7 +1754,19 @@ class ReviewApp(tk.Tk):
             working = getattr(getattr(self.session, "writer", None), "working_path", "")
             self._push_status(f"已寫入工作檔 {working} 第 {result.row_number} 列")
             if overwrite_row is None:
-                self._next_record()
+                # Pure manual entry (no JSON/scan source, and this is a manual-NNNN page): after
+                # writing the last page, open a fresh blank so the operator can fill the NEXT sheet
+                # immediately. Otherwise _next_record runs the index past the end and the following
+                # 確認並寫入 hits the records-empty guard and wrongly demands 「請先載入 JSON 資料。」
+                # (#manual-continue). Batch/scan records keep the end-of-list sentinel behaviour.
+                last_record = self.current_index + 1 >= len(self.records)
+                manual_session = (
+                    self.loaded_json_path is None and record.record_id.startswith("manual-")
+                )
+                if last_record and manual_session:
+                    self._add_blank_record()
+                else:
+                    self._next_record()
             else:
                 # Overwrite stays on the corrected record (no advance) so the operator
                 # can verify the fix in place.
@@ -1865,6 +1878,10 @@ class ReviewApp(tk.Tk):
     def _apply_form_to_record(self, record: Record) -> None:
         record.record_id = self.fields["record_id"].get()
         apply_form_state(self.layout, record, self.confirm_form.collect())
+        # The 服務年/月/日 field is free text; operators type slash Gregorian (2026/06/16) or ROC
+        # (115/6/28). Normalize to ISO so service_month_label can derive 服務月份 on write — the scan
+        # path already normalizes via parse_roc_date, the manual path used to skip it (#manual-date-month).
+        record.service_date = normalize_service_date(record.service_date)
         record.review.edited_by_user = True
 
     def _needs_name_confirmation(self, record: Record) -> bool:

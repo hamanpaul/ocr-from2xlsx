@@ -661,3 +661,49 @@ def test_writer_materializes_images_so_save_survives_closed_archive(tmp_path: Pa
         assert sum(len(getattr(sh, "_images", [])) for sh in reopened.worksheets) == 1
     finally:
         reopened.close()
+
+
+def test_appended_row_inherits_first_data_row_style(tmp_path: Path) -> None:
+    # The official template only fully styles the FIRST data row (row 2): appended rows carry a
+    # sparse fill, so 2nd+ imported records render with broken 底色. write_record must copy row 2's
+    # per-column style onto each appended row so every record matches the template (#appended-row-style).
+    from openpyxl.styles import PatternFill
+
+    template = tmp_path / "template.xlsx"
+    working = tmp_path / "working.xlsx"
+    create_workbook_template(template)
+
+    styled_cols = range(1, 9)
+    wb = load_workbook(template)
+    ws = wb["個案總表"]
+    for col in styled_cols:
+        ws.cell(row=2, column=col).fill = PatternFill("solid", fgColor="C6E0B4")
+    # row 3 intentionally left unstyled — mirrors the real template's sparse 2nd data row.
+    wb.save(template)
+    wb.close()
+
+    first = make_record("r1")
+    first.name = "王小明"
+    second = make_record("r2")
+    second.name = "李大華"
+    writer = WorkbookWriter.create_from_template(template, working)
+    try:
+        row1 = writer.write_record(first)
+        row2 = writer.write_record(second)
+        assert (row1, row2) == (2, 3)
+        writer.save()
+    finally:
+        writer.close()
+
+    wb = load_workbook(working)
+    try:
+        ws = wb["個案總表"]
+        for col in styled_cols:
+            ref = ws.cell(row=2, column=col).fill
+            got = ws.cell(row=3, column=col).fill
+            assert got.patternType == "solid", f"col {col}: row3 patternType={got.patternType}"
+            assert got.fgColor.rgb == ref.fgColor.rgb, (
+                f"col {col}: row3 fg {got.fgColor.rgb} != row2 {ref.fgColor.rgb}"
+            )
+    finally:
+        wb.close()

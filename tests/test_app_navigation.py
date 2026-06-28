@@ -218,10 +218,13 @@ def test_review_app_builds_confirm_form_and_prefills_record(tmp_path: Path) -> N
         assert collected["medical_record_no"] == expected_state["medical_record_no"]
         assert collected["gender"] == expected_state["gender"]
         assert collected["cancer"] == expected_state["cancer"]
-        # Slim toolbar keeps only the five most-used actions; the rest moved to the menu bar (#56).
-        assert {"開新報表", "匯入資料夾", "上一筆", "下一筆", "確認並寫入"} <= set(
-            _button_texts(app)
+        # Slim toolbar keeps only the most-used actions; the rest moved to the menu bar (#56).
+        toolbar_texts = _button_texts(app)
+        assert {"開啟報表", "匯入資料夾", "上一筆", "下一筆", "確認並寫入", "新增頁面"} <= set(
+            toolbar_texts
         )
+        # #gui-toolbar-relabel: 新增頁面 sits AFTER 確認並寫入 (write a page, then add the next).
+        assert toolbar_texts.index("新增頁面") > toolbar_texts.index("確認並寫入")
     finally:
         app.destroy()
 
@@ -1583,7 +1586,7 @@ def test_previous_record_recovers_from_end_of_record_sentinel(
 def test_choose_template_single_dialog_defaults_output_and_clears_indices(
     app: ReviewApp, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    # 開新報表 is now ONE selection (the source report). The working file defaults under the
+    # 開啟報表 is now ONE selection (the source report). The working file defaults under the
     # output root — no second "輸出資料夾" prompt (#single-folder-prompt).
     app.written_indices = {0, 1}
     app.output_root = tmp_path  # default 'output' overridden for test isolation
@@ -1685,8 +1688,8 @@ def test_end_to_end_roundtrip_self_check() -> None:
 
 
 def test_add_blank_record_appends_and_shows_for_manual_entry(app: ReviewApp) -> None:
-    # #manual-blank-record: 新增空白 builds a blank record on demand (no JSON/scan needed) and
-    # shows it for filling. Auto-numbered manual-NNNN ids; works even before 開新報表.
+    # #manual-blank-record: 新增頁面 builds a blank record on demand (no JSON/scan needed) and
+    # shows it for filling. Auto-numbered manual-NNNN ids; works even before 開啟報表.
     app.records = []
     app.current_index = -1
     app.session = None
@@ -1705,7 +1708,7 @@ def test_add_blank_record_appends_and_shows_for_manual_entry(app: ReviewApp) -> 
 
 
 def test_add_blank_record_then_confirm_writes_manually(app: ReviewApp, tmp_path: Path) -> None:
-    # End-to-end manual entry: 開新報表 (session) -> 新增空白 -> fill name -> 確認並寫入 -> XLSX,
+    # End-to-end manual entry: 開啟報表 (session) -> 新增頁面 -> fill name -> 確認並寫入 -> XLSX,
     # with no JSON load anywhere.
     template = tmp_path / "template.xlsx"
     working = tmp_path / "working.xlsx"
@@ -1735,7 +1738,7 @@ def test_add_blank_record_then_confirm_writes_manually(app: ReviewApp, tmp_path:
 def test_choose_template_auto_creates_blank_record_for_manual_entry(
     app: ReviewApp, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    # #manual-blank-record: 開新報表 with no records loaded starts the operator on a blank record,
+    # #manual-blank-record: 開啟報表 with no records loaded starts the operator on a blank record,
     # so they can fill and write immediately — no extra click, no JSON/scan.
     app.output_root = tmp_path
     app.records = []
@@ -1756,3 +1759,109 @@ def test_choose_template_auto_creates_blank_record_for_manual_entry(
     assert app.records[0].record_id == "manual-0001"
     assert app.current_index == 0
     assert app.fields["record_id"].get() == "manual-0001"
+
+
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        ("2026/06/16", "2026-06-16"),  # slash Gregorian — what operators actually type
+        ("2026-06-16", "2026-06-16"),  # already ISO — unchanged
+        ("2026.6.16", "2026-06-16"),   # dotted, single-digit month/day
+        ("115/6/28", "2026-06-28"),    # ROC (民國) year < 1911 → +1911
+        ("", ""),                       # empty stays empty (no date → no month)
+        ("not a date", "not a date"),  # unparseable kept as-is (don't lose input)
+    ],
+)
+def test_normalize_service_date_handles_slash_and_roc(raw: str, expected: str) -> None:
+    # #manual-date-month: the manual form date field is free text titled 服務年/月/日; operators type
+    # slash Gregorian (2026/06/16) or ROC (115/6/28). Normalize to ISO so service_month_label works.
+    from ocr_from2xlsx.domain import normalize_service_date
+
+    assert normalize_service_date(raw) == expected
+
+
+def test_manual_slash_date_writes_service_month(app: ReviewApp, tmp_path: Path) -> None:
+    # #manual-date-month regression: 開啟報表 -> 填 2026/06/16 -> 確認並寫入 must write 服務月份=6月
+    # (it was blank). Real template + read-back: service_month_label needs ISO, so the manual path
+    # must normalize the typed slash date (the scan path already does via parse_roc_date).
+    template = tmp_path / "template.xlsx"
+    working = tmp_path / "working.xlsx"
+    create_workbook_template(template)
+    session = ImportSession.start(template, working)
+    try:
+        app.session = session
+        app.records = []
+        app.current_index = -1
+        app.loaded_json_path = None
+
+        ReviewApp._add_blank_record(app)
+        app.fields["name"].set("王小明")
+        app.fields["service_date"].set("2026/06/16")
+        ReviewApp._confirm_current(app)
+
+        wb = load_workbook(working)
+        try:
+            sheet = wb["個案總表"]
+            month_col = _column_for_header(sheet, BASIC_COLUMN_BY_FIELD["service_month"])
+            date_col = _column_for_header(sheet, BASIC_COLUMN_BY_FIELD["service_date"])
+            assert sheet.cell(row=2, column=month_col).value == "6月"
+            assert sheet.cell(row=2, column=date_col).value == "2026-06-16"
+        finally:
+            wb.close()
+    finally:
+        session.close()
+
+
+def test_confirm_manual_mode_presents_fresh_blank_for_next_sheet(
+    app: ReviewApp, tmp_path: Path
+) -> None:
+    # #manual-continue regression: after 開啟報表 -> 填單 -> 確認並寫入, manual mode must leave the
+    # operator on a fresh blank page so the NEXT sheet just works. Previously _next_record ran the
+    # index out of bounds and the following 確認並寫入 wrongly errored 「請先載入 JSON 資料。」.
+    template = tmp_path / "template.xlsx"
+    working = tmp_path / "working.xlsx"
+    create_workbook_template(template)
+    session = ImportSession.start(template, working)
+    try:
+        app.session = session
+        app.records = []
+        app.current_index = -1
+        app.loaded_json_path = None  # manual mode (no JSON/scan)
+
+        ReviewApp._add_blank_record(app)  # the auto blank from 開啟報表
+        app.fields["name"].set("王小明")
+        ReviewApp._confirm_current(app)
+
+        assert app.written_indices == {0}
+        # A fresh blank page is active and in-bounds → next 確認並寫入 won't hit the JSON guard.
+        assert len(app.records) == 2
+        assert app.current_index == 1
+        assert 0 <= app.current_index < len(app.records)
+        assert app.records[1].name == ""
+        assert app.records[1].record_id.startswith("manual-")
+    finally:
+        session.close()
+
+
+def test_confirm_json_mode_does_not_auto_add_blank_at_end(
+    app: ReviewApp, tmp_path: Path
+) -> None:
+    # Guard for the Bug 1 fix: auto-blank-on-confirm is manual-mode ONLY. With a JSON/scan source
+    # loaded, confirming the LAST record must NOT append a stray blank — it stays "no more records".
+    template = tmp_path / "template.xlsx"
+    working = tmp_path / "working.xlsx"
+    create_workbook_template(template)
+    session = ImportSession.start(template, working)
+    try:
+        app.session = session
+        app.records = [make_record("r1")]
+        app.current_index = 0
+        app.loaded_json_path = tmp_path / "batch.json"  # JSON/scan mode
+        app.fields["name"].set("王小明")
+        ReviewApp._confirm_current(app)
+
+        assert app.written_indices == {0}
+        assert len(app.records) == 1  # no stray blank appended
+        assert app.current_index >= len(app.records)  # past end = "no more records"
+    finally:
+        session.close()

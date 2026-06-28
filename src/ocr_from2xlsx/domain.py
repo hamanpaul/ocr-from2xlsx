@@ -1,10 +1,38 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Any
 
 from ocr_from2xlsx.constants import SCHEMA_VERSION
+
+
+def normalize_service_date(text: str) -> str:
+    """Normalize a human-entered service date to ISO ``YYYY-MM-DD``.
+
+    The manual form's 服務年/月/日 field is free text: operators type slash Gregorian
+    (``2026/06/16``), dotted (``2026.6.16``), or ROC/民國 (``115/6/28`` — year < 1911, so +1911).
+    ``service_month_label`` only parses strict ISO, so normalize here, mirroring the scan path's
+    ``parse_roc_date``. Empty stays empty; anything unparseable is returned unchanged so the
+    operator's input is never silently dropped.
+    """
+    raw = (text or "").strip()
+    if not raw:
+        return ""
+    parts = [p for p in re.split(r"\D+", raw) if p]
+    if len(parts) < 3:
+        return raw
+    try:
+        year, month, day = int(parts[0]), int(parts[1]), int(parts[2])
+    except ValueError:
+        return raw
+    if year < 1911:  # ROC (民國) calendar → Gregorian
+        year += 1911
+    try:
+        return date(year, month, day).isoformat()
+    except ValueError:
+        return raw
 
 
 def _require_dict(value: Any, field_name: str) -> dict[str, Any]:

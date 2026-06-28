@@ -624,7 +624,6 @@ def test_writer_materializes_images_so_save_survives_closed_archive(tmp_path: Pa
     sheet) must save reliably. openpyxl re-reads images lazily from the source zip, which GC
     may have closed by save time -> intermittent 'I/O operation on closed file' + a CORRUPT
     file. The writer materializes images to memory on load so save never touches the archive."""
-    from io import BytesIO
     from openpyxl.drawing.image import Image as XLImage
     from PIL import Image as PILImage
 
@@ -641,16 +640,23 @@ def test_writer_materializes_images_so_save_survives_closed_archive(tmp_path: Pa
     writer = WorkbookWriter.create_from_template(template, working)
     images = [im for sh in writer.workbook.worksheets for im in getattr(sh, "_images", [])]
     assert images, "fixture should carry an embedded image"
-    assert all(isinstance(im.ref, BytesIO) for im in images), "images must be materialized to memory"
+    # _data() now returns cached bytes (not a one-shot stream), so repeated saves are reliable.
+    assert all(isinstance(im._data(), (bytes, bytearray)) for im in images)
 
     import gc
 
-    gc.collect()  # the condition that intermittently broke the lazy archive re-read
-    writer.write_record(make_record())
+    # Two records = two saves on one workbook (what a multi-record import session does). A
+    # single cached BytesIO would be consumed/closed by the first save and corrupt the second;
+    # cached bytes survive. gc.collect() reproduces the closed-archive condition.
+    gc.collect()
+    writer.write_record(make_record("scan-0001"))
+    writer.save()
+    gc.collect()
+    writer.write_record(make_record("scan-0002"))
     writer.save()
     writer.close()
 
-    reopened = load_workbook(working)
+    reopened = load_workbook(working)  # raises if the file is corrupt
     try:
         assert sum(len(getattr(sh, "_images", [])) for sh in reopened.worksheets) == 1
     finally:

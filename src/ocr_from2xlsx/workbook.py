@@ -119,21 +119,24 @@ class WorkbookWriter:
         self.header_map = self._build_header_map(self.sheet)
 
     def _materialize_embedded_images(self) -> None:
-        """Read every embedded image into memory right after load, so ``save()`` does not
-        re-read it lazily from the (by then GC-closed) source archive. That lazy re-read
-        intermittently raised ``ValueError: I/O operation on closed file`` mid-save and left a
-        CORRUPT workbook — fatal for the official template, which carries a logo on every sheet
-        (#xlsx-image-save). Best-effort: any per-image failure leaves that image untouched."""
-        from io import BytesIO
+        """Cache every embedded image's encoded bytes right after load and make ``_data()``
+        return them on every save, so saving never re-reads the image lazily from the source
+        archive. openpyxl's lazy re-read intermittently raised ``ValueError: I/O operation on
+        closed file`` mid-save (GC-closed zip) and left a CORRUPT workbook — fatal for the
+        official template, which carries a logo on every sheet (#xlsx-image-save).
 
+        We cache the *bytes* (not a BytesIO): a single stream gets consumed/closed by the first
+        save, so the SECOND write to the same workbook would fail — exactly what a multi-record
+        import session does. Returning cached bytes survives unlimited saves. Best-effort: any
+        per-image failure leaves that image untouched."""
         for worksheet in self.workbook.worksheets:
             for image in list(getattr(worksheet, "_images", [])):
                 try:
-                    data = image._data()
+                    data = image._data()  # encode now, while the archive is still readable
                 except Exception:
                     continue
                 try:
-                    image.ref = BytesIO(data)
+                    image._data = lambda _cached=data: _cached
                 except Exception:
                     pass
 

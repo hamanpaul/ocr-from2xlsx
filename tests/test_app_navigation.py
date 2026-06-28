@@ -1669,3 +1669,16 @@ def test_resolve_output_dir_override_dev_and_frozen(
     monkeypatch.setattr(app_module.sys, "executable", str(tmp_path / "bin" / "ocr.exe"), raising=False)
     frozen = app._resolve_output_dir()
     assert frozen.name == "output" and frozen.parent.name == "bin"
+
+
+def test_end_to_end_roundtrip_self_check() -> None:
+    """Run the auditable GUI round-trip self-check (build/verify_roundtrip.py) as a suite gate:
+    golden JSON -> ConfirmForm load/write -> XLSX -> assert it matches. main() returns 0 on
+    success (and SKIPs to 0 when no Tk display is available, e.g. headless CI)."""
+    import importlib.util
+
+    script = Path(__file__).resolve().parents[1] / "build" / "verify_roundtrip.py"
+    spec = importlib.util.spec_from_file_location("verify_roundtrip", script)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert module.main() == 0

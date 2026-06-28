@@ -12,8 +12,15 @@
   一張圖（服務紀錄表 logo＋各月分頁，共 14 張）；openpyxl 載入（非 read-only）後圖片資料是**延遲**從來源 zip
   讀取的，該 zip 會被 GC 關閉，於是 `workbook.save()` 在寫圖階段拋 `ValueError: I/O operation on closed file`
   並**寫到一半留下損毀的 xlsx**（連 `[Content_Types].xml` 都缺）。此為非確定性（GC 時機），實際害使用者「確認
-  並寫入」失敗、看不到正確結果。修法：`WorkbookWriter` 載入後立即把每張圖讀進記憶體（`BytesIO`），save 不再
-  依賴已關閉的 archive；logo 完整保留。實測強制 GC 下 12/12 成功。
+  並寫入」失敗、看不到正確結果。修法：`WorkbookWriter` 載入後立即把每張圖的**編碼位元組快取**並覆寫
+  `image._data()` 回傳該快取，save 不再讀已關閉的 archive；**且因為快取的是 bytes（不是會被首次 save 消耗/關閉
+  的單一 BytesIO 串流），同一 session 連續寫多筆（多次 save）也不會損毀**。logo 完整保留。
+
+### Added
+- `build/verify_roundtrip.py`：可稽核的端到端寫入自我查核。自產 golden JSON（含曾出包的刁鑽案例）→ 走真
+  `ConfirmForm` 讀入/寫出 → `ImportSession` 寫真模板 XLSX → 讀回逐欄比對 JSON（欄位/label 正確、無 code 外洩、
+  檔案有效、圖片保留）。亦以 `test_end_to_end_roundtrip_self_check` 納入測試套件（無 Tk 顯示時自動略過）。
+  交付任何動到 表單/record/寫入 的變更前先跑它，讓查核可重現、不再仰賴人工逐筆檢查。
 - 試用回饋：服務項目寫入 XLSX 全面逐欄修正（#service-write-mapping）。原本 `_write_services` 只認 6 個
   服務 code 的中文標籤（`LABEL_BY_CODE`），其餘 code（如 `fatigue_strength`）會把**英文 code 原樣**寫入、
   且因沒有編號而被塞到該類**第一個空欄**——例如 4.疲憊與體力 應寫在「諮詢-症狀與副作用照護4」(AE)，卻變成

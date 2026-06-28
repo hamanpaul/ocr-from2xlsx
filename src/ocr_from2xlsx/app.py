@@ -23,7 +23,7 @@ from ocr_from2xlsx.review_nav import (
     prev_flagged_key,
 )
 from ocr_from2xlsx.correction_store import default_correction_store_path
-from ocr_from2xlsx.domain import Record
+from ocr_from2xlsx.domain import OcrInfo, Record, ReviewInfo
 from ocr_from2xlsx.form_layout import FormLayout, option_grid_positions, service_record_layout
 from ocr_from2xlsx.name_suggestion import NAME_UNCONFIRMED, confirm_name
 from ocr_from2xlsx.session import ImportSession
@@ -177,7 +177,11 @@ class ConfirmForm:
                             options,
                             text=option.label,
                             variable=bvar,
-                            command=lambda code=option.code: _select(code),
+                            # Bind THIS field's _select via a default arg: as a free variable it
+                            # late-binds to the LAST single-choice field's _select, so every
+                            # single-choice click set the wrong field and the clicked field's
+                            # value never wrote (#single-choice-select-binding).
+                            command=lambda code=option.code, _sel=_select: _sel(code),
                         )
                         checkbox.grid(
                             row=option_positions[option_index][0],
@@ -613,7 +617,8 @@ class ImageViewer:
 class ReviewApp(tk.Tk):
     _PREVIEW_PLACEHOLDER = (
         "攝影機或圖片預覽區\n"
-        "請按『選擇攝影機』開始連續掃描，或用『匯入資料夾批次』/『匯入 JSON』載入既有資料。"
+        "手動建單：『開新報表』選模板後即可直接填寫、按『確認並寫入』存檔（要多筆按『新增空白』）。\n"
+        "或：『選擇攝影機』連續掃描／『匯入資料夾批次』／『匯入 JSON』載入既有資料。"
     )
     _CAMERA_POLL_INTERVAL_MS = 33
     _CAMERA_RETRY_INTERVAL_MS = 100
@@ -772,6 +777,8 @@ class ReviewApp(tk.Tk):
         menubar.add_cascade(label="掃描(S)", menu=scan_menu, underline=3)
 
         edit_menu = tk.Menu(menubar, tearoff=0)
+        _menu_item(edit_menu, "新增空白紀錄", self._add_blank_record, "add_blank")
+        edit_menu.add_separator()
         _menu_item(edit_menu, "上一筆", self._previous_record, "prev_record")
         _menu_item(edit_menu, "下一筆", self._next_record, "next_record")
         edit_menu.add_separator()
@@ -811,11 +818,13 @@ class ReviewApp(tk.Tk):
 
         _btn("開新報表", self._choose_template, "choose_template")
         _btn("匯入資料夾", self._import_folder_batch, "import_folder_batch")
+        add_blank_btn = _btn("新增空白", self._add_blank_record, "add_blank")
         ttk.Separator(toolbar, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=(8, 4))
         prev_btn = _btn("上一筆", self._previous_record, "prev_record")
         next_btn = _btn("下一筆", self._next_record, "next_record")
         confirm_btn = _btn("確認並寫入", self._confirm_current, "confirm")
         # Hover hints on the keyboard-driven actions (#48), since labels are now sparse.
+        _Tooltip(add_blank_btn, "手動建立一張空白紀錄填寫（免匯入 JSON/掃描）")
         _Tooltip(prev_btn, "PgUp / Ctrl+←：上一筆")
         _Tooltip(next_btn, "PgDn / Ctrl+→：下一筆")
         _Tooltip(confirm_btn, "Enter / Ctrl+Enter：寫入；只有缺 XLSX 或姓名會被擋下，其餘欄位皆 optional")
@@ -1266,6 +1275,11 @@ class ReviewApp(tk.Tk):
         # batch's "已寫入 X / 列號" or a stale badge (#45).
         self._update_progress()
         self._update_badge()
+        # Manual-entry default: with no records loaded, start the operator on a blank record so
+        # 開新報表 → 直接填單 → 確認並寫入 just works, no extra click and no JSON/scan
+        # (#manual-blank-record). A later 匯入 JSON / 掃描 simply replaces this blank.
+        if not self.records:
+            self._add_blank_record()
 
     def _load_json(self) -> None:
         path = filedialog.askopenfilename(filetypes=[("JSON files", "*.json")])
@@ -1292,6 +1306,38 @@ class ReviewApp(tk.Tk):
             self._show_placeholder_preview()
             self._update_progress()  # show the 尚未載入資料 baseline, not a blank corner (#45)
             self._update_badge()     # and blank the badge (no stale chip from a prior batch)
+        self._update_toolbar_states()
+
+    def _next_manual_record_id(self) -> str:
+        existing = {record.record_id for record in self.records}
+        n = 1
+        while f"manual-{n:04d}" in existing:
+            n += 1
+        return f"manual-{n:04d}"
+
+    def _add_blank_record(self) -> None:
+        """Append a fresh blank record and show it for manual entry — so 開新報表 → 新增 → 填單 →
+        確認並寫入 works without importing JSON or scanning (#manual-blank-record). Needs no JSON;
+        writing still needs a workbook (開新報表), surfaced by 確認並寫入's own guard."""
+        record = Record(
+            record_id=self._next_manual_record_id(),
+            service_date="",
+            identity="",
+            name="",
+            medical_record_no="",
+            gender="",
+            ocr=OcrInfo(backend="manual", raw_text="", warnings=[]),
+            review=ReviewInfo(status="pending", edited_by_user=True),
+        )
+        self.records = list(self.records) + [record]
+        self.current_index = len(self.records) - 1
+        self.editing = False
+        self._show_record(record)
+        self._focus_name_field()
+        self._push_status(
+            f"已新增空白紀錄 {record.record_id}，請填寫後按「確認並寫入」"
+            + ("" if self.session else "（記得先用「開新報表」選模板才能寫入）")
+        )
         self._update_toolbar_states()
 
     def _has_live_camera_preview(self) -> bool:
@@ -2146,7 +2192,7 @@ class ReviewApp(tk.Tk):
         # stray click can't hijack or abandon it.
         for key in (
             "capture_recognize", "import_folder_batch", "choose_camera",
-            "load_json", "choose_template",
+            "load_json", "choose_template", "add_blank",
         ):
             _set(key, not active)
         # 確認並寫入 / 強制寫入 stay clickable (except mid-continuous-capture): pressing them

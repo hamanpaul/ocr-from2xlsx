@@ -8,6 +8,16 @@
 ## [Unreleased]
 
 ### Fixed
+- `build/package.py` 打包時不再清掉 `dist/output/`：該資料夾是執行期輸出（`匯入中.xlsx` 等），原本每次打包會
+  被一併刪除（資料遺失），且若操作員正開著輸出檔測試，刪鎖定檔會拋 `WinError 32` 並讓打包**中途失敗、連 exe
+  都被刪掉**。比照 `vlm`/`plugins` 加入保留清單（#build-keep-output）。
+- 校對表單**單選欄（身分/性別/國籍/年齡/管道/疾病狀態/來源/一年內新診斷）滑鼠點選沒有生效**
+  （#single-choice-select-binding）。checkbox 的 `command` lambda 把 `_select` 當自由變數參照，迴圈跑完後
+  late-bind 到**最後一個單選欄**的 `_select`——於是任何單選欄的滑鼠點擊都設到錯的欄位，被點的欄位值永遠是空、
+  不會寫入 XLSX（連帶：身分沒設成「病人」→ 寫入時略過所有「病人才填」欄＝國籍/年齡/管道/疾病/來源/癌別/新診斷
+  全空）。鍵盤數字選擇因走 default-arg 早綁定的 `_digit_select` 不受影響，所以只有滑鼠點擊壞、且既有單元測試
+  （直接設變數）測不到。改用 default 參數早綁定 `_select`；新增**真的 invoke checkbox** 的回歸測試。影響手動建單
+  與校正既有紀錄兩者。
 - `build/package.py` 不再於打包時刪掉 `build/verify_roundtrip.py`：`_clean_dir(BUILD_DIR, keep=…)` 會清掉
   保留清單外的 build 檔，新加的查核腳本漏列其中而被一併刪除；已加入保留清單。
 - 試用回饋：寫入含內嵌圖片的官方模板不再間歇性崩潰／產生損毀檔（#xlsx-image-save）。官方模板每個分頁都帶
@@ -18,11 +28,6 @@
   `image._data()` 回傳該快取，save 不再讀已關閉的 archive；**且因為快取的是 bytes（不是會被首次 save 消耗/關閉
   的單一 BytesIO 串流），同一 session 連續寫多筆（多次 save）也不會損毀**。logo 完整保留。
 
-### Added
-- `build/verify_roundtrip.py`：可稽核的端到端寫入自我查核。自產 golden JSON（含曾出包的刁鑽案例）→ 走真
-  `ConfirmForm` 讀入/寫出 → `ImportSession` 寫真模板 XLSX → 讀回逐欄比對 JSON（欄位/label 正確、無 code 外洩、
-  檔案有效、圖片保留）。亦以 `test_end_to_end_roundtrip_self_check` 納入測試套件（無 Tk 顯示時自動略過）。
-  交付任何動到 表單/record/寫入 的變更前先跑它，讓查核可重現、不再仰賴人工逐筆檢查。
 - 試用回饋：服務項目寫入 XLSX 全面逐欄修正（#service-write-mapping）。原本 `_write_services` 只認 6 個
   服務 code 的中文標籤（`LABEL_BY_CODE`），其餘 code（如 `fatigue_strength`）會把**英文 code 原樣**寫入、
   且因沒有編號而被塞到該類**第一個空欄**——例如 4.疲憊與體力 應寫在「諮詢-症狀與副作用照護4」(AE)，卻變成
@@ -107,6 +112,16 @@
   避免把空姓名寫入並悄悄清掉待確認旗標。
 - (#47) 來源圖 `set_zoom` 縮小時重新夾住 origin，修正從已平移位置縮小後右/下邊緣露出底色的問題。
 - roster 無建議時顯示「（無建議名單）」而非空白清單。
+
+### Added
+- 手動建單（#manual-blank-record）：`開新報表` 選模板後**自動就給一張空白紀錄**可直接填寫、按「確認並寫入」
+  存檔——**不需匯入 JSON 或掃描，也不必先按任何按鈕**（修正試用時「開新報表後仍要求載入 JSON」的問題）。另加
+  「新增空白」（工具列按鈕＋編輯選單）可隨時再建下一筆；`record_id` 自動編號 `manual-NNNN`。先前紀錄只能從
+  匯入JSON/掃描 來、沒有純手動輸入的路徑。後續若 匯入 JSON/掃描 會自然取代這些手動空白紀錄。
+- `build/verify_roundtrip.py`：可稽核的端到端寫入自我查核。自產 golden JSON（含曾出包的刁鑽案例）→ 走真
+  `ConfirmForm` 讀入/寫出 → `ImportSession` 寫真模板 XLSX → 讀回逐欄比對 JSON（欄位/label 正確、無 code 外洩、
+  檔案有效、圖片保留）。亦以 `test_end_to_end_roundtrip_self_check` 納入測試套件（無 Tk 顯示時自動略過）。
+  交付任何動到 表單/record/寫入 的變更前先跑它，讓查核可重現、不再仰賴人工逐筆檢查。
 
 ### Changed
 - (#61) 預設辨識引擎改為 **PaddleOCR plugin**（地端、快）：實機對照地端 2B vision-VLM 約 534s/張且讀不出手寫

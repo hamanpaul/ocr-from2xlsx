@@ -177,7 +177,11 @@ class ConfirmForm:
                             options,
                             text=option.label,
                             variable=bvar,
-                            command=lambda code=option.code: _select(code),
+                            # Bind THIS field's _select via a default arg: as a free variable it
+                            # late-binds to the LAST single-choice field's _select, so every
+                            # single-choice click set the wrong field and the clicked field's
+                            # value never wrote (#single-choice-select-binding).
+                            command=lambda code=option.code, _sel=_select: _sel(code),
                         )
                         checkbox.grid(
                             row=option_positions[option_index][0],

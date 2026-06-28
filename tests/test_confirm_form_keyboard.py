@@ -210,3 +210,42 @@ def test_flagged_count_excludes_non_navigable_keys():
         assert form.flagged_count() == len(form.flagged_keys()) == 1
     finally:
         root.destroy()
+
+
+def _click_checkbox(root, label):
+    from tkinter import ttk
+
+    stack = [root]
+    while stack:
+        widget = stack.pop()
+        for child in widget.winfo_children():
+            if isinstance(child, ttk.Checkbutton) and child.cget("text") == label:
+                child.invoke()
+                return True
+            stack.append(child)
+    return False
+
+
+def test_single_choice_click_sets_its_own_field_not_the_last():
+    # #single-choice-select-binding: each single-choice checkbox's command must set ITS OWN
+    # field's value. The command lambda used `_select` as a free variable, which late-bound to
+    # the LAST single-choice field — so a real mouse click set the wrong field and the clicked
+    # field's value never made it into collect()/the XLSX. Drive real checkbox clicks here
+    # (unit tests that set the StringVar directly missed this).
+    root, form = _form()
+    try:
+        assert _click_checkbox(root, "病人"), "identity 病人 checkbox not found"
+        assert _click_checkbox(root, "女性"), "gender 女性 checkbox not found"
+        assert _click_checkbox(root, "1.門診"), "source 1.門診 checkbox not found"
+        state = form.collect()
+        assert state["identity"] == "patient"
+        assert state["gender"] == "female"
+        assert state["source"] == "outpatient"
+        # clicking again clears that field (toggle), without touching the others
+        assert _click_checkbox(root, "病人")
+        state2 = form.collect()
+        assert state2["identity"] == ""
+        assert state2["gender"] == "female"
+        assert state2["source"] == "outpatient"
+    finally:
+        root.destroy()

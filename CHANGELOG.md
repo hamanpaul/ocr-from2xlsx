@@ -8,6 +8,13 @@
 ## [Unreleased]
 
 ### Fixed
+- 校對表單**單選欄（身分/性別/國籍/年齡/管道/疾病狀態/來源/一年內新診斷）滑鼠點選沒有生效**
+  （#single-choice-select-binding）。checkbox 的 `command` lambda 把 `_select` 當自由變數參照，迴圈跑完後
+  late-bind 到**最後一個單選欄**的 `_select`——於是任何單選欄的滑鼠點擊都設到錯的欄位，被點的欄位值永遠是空、
+  不會寫入 XLSX（連帶：身分沒設成「病人」→ 寫入時略過所有「病人才填」欄＝國籍/年齡/管道/疾病/來源/癌別/新診斷
+  全空）。鍵盤數字選擇因走 default-arg 早綁定的 `_digit_select` 不受影響，所以只有滑鼠點擊壞、且既有單元測試
+  （直接設變數）測不到。改用 default 參數早綁定 `_select`；新增**真的 invoke checkbox** 的回歸測試。影響手動建單
+  與校正既有紀錄兩者。
 - `build/package.py` 不再於打包時刪掉 `build/verify_roundtrip.py`：`_clean_dir(BUILD_DIR, keep=…)` 會清掉
   保留清單外的 build 檔，新加的查核腳本漏列其中而被一併刪除；已加入保留清單。
 - 試用回饋：寫入含內嵌圖片的官方模板不再間歇性崩潰／產生損毀檔（#xlsx-image-save）。官方模板每個分頁都帶

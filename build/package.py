@@ -54,9 +54,11 @@ def _normalize_help_output(output: str) -> str:
 
 def main() -> int:
     try:
-        # Keep the portable VLM model bundle AND the PaddleOCR plugin (the default OCR
-        # engine) so re-packaging does not wipe them.
-        _clean_dir(DIST_DIR, keep={"vlm", "plugins"})
+        # Keep the portable VLM model bundle, the PaddleOCR plugin (the default OCR engine), AND
+        # the runtime output/ folder so re-packaging neither wipes them nor fails when the
+        # operator has an output file (output/匯入中.xlsx) open while testing — deleting a
+        # locked file raised WinError 32 and aborted the build half-cleaned (#build-keep-output).
+        _clean_dir(DIST_DIR, keep={"vlm", "plugins", "output"})
         _clean_dir(
             BUILD_DIR,
             keep={

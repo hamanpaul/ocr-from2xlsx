@@ -8,6 +8,9 @@
 ## [Unreleased]
 
 ### Fixed
+- `build/package.py` 打包時不再清掉 `dist/output/`：該資料夾是執行期輸出（`匯入中.xlsx` 等），原本每次打包會
+  被一併刪除（資料遺失），且若操作員正開著輸出檔測試，刪鎖定檔會拋 `WinError 32` 並讓打包**中途失敗、連 exe
+  都被刪掉**。比照 `vlm`/`plugins` 加入保留清單（#build-keep-output）。
 - 校對表單**單選欄（身分/性別/國籍/年齡/管道/疾病狀態/來源/一年內新診斷）滑鼠點選沒有生效**
   （#single-choice-select-binding）。checkbox 的 `command` lambda 把 `_select` 當自由變數參照，迴圈跑完後
   late-bind 到**最後一個單選欄**的 `_select`——於是任何單選欄的滑鼠點擊都設到錯的欄位，被點的欄位值永遠是空、

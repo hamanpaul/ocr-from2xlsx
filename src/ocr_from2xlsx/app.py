@@ -617,7 +617,7 @@ class ImageViewer:
 class ReviewApp(tk.Tk):
     _PREVIEW_PLACEHOLDER = (
         "攝影機或圖片預覽區\n"
-        "手動建單：『開啟報表』選模板後即可直接填寫、按『確認並寫入』存檔（要多筆按『新增頁面』）。\n"
+        "手動建單：『開啟報表』選模板後即可直接填寫、按『確認並寫入』存檔，會自動帶出下一張空白頁繼續填。\n"
         "或：『選擇攝影機』連續掃描／『匯入資料夾批次』／『匯入 JSON』載入既有資料。"
     )
     _CAMERA_POLL_INTERVAL_MS = 33
@@ -693,7 +693,8 @@ class ReviewApp(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
         self.title("OCR from Service Record to XLSX")
-        self.geometry("1200x720")
+        self.geometry("1200x720")  # fallback size if the window manager can't maximize
+        self._maximize_window()
         self.layout = service_record_layout()
         self.records: list[Record] = []
         self.current_index = -1
@@ -730,6 +731,26 @@ class ReviewApp(tk.Tk):
         self._build_ui()
         self._update_toolbar_states()  # initial: disable buttons whose prerequisites are unmet
         self.protocol("WM_DELETE_WINDOW", self._on_close)
+
+    def _maximize_window(self) -> None:
+        # Open maximized so the wide 個案總表 form + scan preview use the whole screen instead of
+        # the small 1200x720 default (#startup-maximized). 'zoomed' is the Windows/Tk way; fall back
+        # to the Linux '-zoomed' attribute, then a screen-sized geometry — a missing WM feature must
+        # never crash startup.
+        try:
+            self.state("zoomed")
+            return
+        except Exception:
+            pass
+        try:
+            self.attributes("-zoomed", True)
+            return
+        except Exception:
+            pass
+        try:
+            self.geometry(f"{self.winfo_screenwidth()}x{self.winfo_screenheight()}+0+0")
+        except Exception:
+            pass
 
     def _build_ui(self) -> None:
         # State-machine controls: key -> list of "set enabled" callables. A key can drive both
@@ -822,10 +843,10 @@ class ReviewApp(tk.Tk):
         prev_btn = _btn("上一筆", self._previous_record, "prev_record")
         next_btn = _btn("下一筆", self._next_record, "next_record")
         confirm_btn = _btn("確認並寫入", self._confirm_current, "confirm")
-        ttk.Separator(toolbar, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=(8, 4))
-        add_blank_btn = _btn("新增頁面", self._add_blank_record, "add_blank")
+        # 新增頁面 is no longer a toolbar button: the flow auto-opens a fresh page on 開啟報表 and
+        # after each 確認並寫入, so manual page-adding is redundant. It stays in the 編輯 menu as a
+        # fallback (#remove-add-page-button).
         # Hover hints on the keyboard-driven actions (#48), since labels are now sparse.
-        _Tooltip(add_blank_btn, "手動建立一張空白頁面填寫（免匯入 JSON/掃描）")
         _Tooltip(prev_btn, "PgUp / Ctrl+←：上一筆")
         _Tooltip(next_btn, "PgDn / Ctrl+→：下一筆")
         _Tooltip(confirm_btn, "Enter / Ctrl+Enter：寫入；只有缺 XLSX 或姓名會被擋下，其餘欄位皆 optional")
@@ -1202,22 +1223,25 @@ class ReviewApp(tk.Tk):
             except Exception:
                 pass
 
-    def _focus_name_field(self) -> None:
+    def _focus_field(self, record_path: str) -> None:
         # Route through ConfirmForm._focus so the active-label bold, _current_focus and the
-        # source-image re-frame all track the name field, then place the caret at the end.
+        # source-image re-frame all track the field, then place the caret at the end.
         focus = getattr(self.confirm_form, "_focus", None)
         if not callable(focus):
             return
         try:
-            focus("name")
+            focus(record_path)
         except Exception:
             return
-        widget = getattr(self.confirm_form, "_focus_widgets", {}).get("name")
+        widget = getattr(self.confirm_form, "_focus_widgets", {}).get(record_path)
         if widget is not None:
             try:
                 widget.icursor("end")
             except Exception:
                 pass
+
+    def _focus_name_field(self) -> None:
+        self._focus_field("name")
 
     @staticmethod
     def _bind_mousewheel_recursive(widget: tk.Misc, handler) -> None:
@@ -1334,7 +1358,9 @@ class ReviewApp(tk.Tk):
         self.current_index = len(self.records) - 1
         self.editing = False
         self._show_record(record)
-        self._focus_name_field()
+        # Land on 服務日期 (the top field) for natural top-down entry, so writing a record and
+        # getting the next blank page never yanks the caret/view down to 姓名 (#focus-service-date).
+        self._focus_field("service_date")
         self._push_status(
             f"已新增頁面 {record.record_id}，請填寫後按「確認並寫入」"
             + ("" if self.session else "（記得先用「開啟報表」選模板才能寫入）")

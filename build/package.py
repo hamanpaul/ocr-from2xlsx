@@ -61,6 +61,7 @@ def main() -> int:
             BUILD_DIR,
             keep={
                 "package.py",
+                "verify_roundtrip.py",
                 "ocr-from2xlsx.spec",
                 "build_paddle_plugin.py",
                 "build_vlm_runtime.py",

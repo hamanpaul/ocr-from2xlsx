@@ -8,6 +8,8 @@
 ## [Unreleased]
 
 ### Fixed
+- `build/package.py` 不再於打包時刪掉 `build/verify_roundtrip.py`：`_clean_dir(BUILD_DIR, keep=…)` 會清掉
+  保留清單外的 build 檔，新加的查核腳本漏列其中而被一併刪除；已加入保留清單。
 - 試用回饋：寫入含內嵌圖片的官方模板不再間歇性崩潰／產生損毀檔（#xlsx-image-save）。官方模板每個分頁都帶
   一張圖（服務紀錄表 logo＋各月分頁，共 14 張）；openpyxl 載入（非 read-only）後圖片資料是**延遲**從來源 zip
   讀取的，該 zip 會被 GC 關閉，於是 `workbook.save()` 在寫圖階段拋 `ValueError: I/O operation on closed file`

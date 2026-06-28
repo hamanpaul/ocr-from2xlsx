@@ -2,6 +2,18 @@
 
 > Portable Windows prototype for turning cancer resource center service-record OCR results into the existing monthly-report XLSX workbook.
 
+## 示範影片（Demo）
+
+App 操作示範影片：
+
+▶️ [`example/ocr-from2xlsx_example.mp4`](example/ocr-from2xlsx_example.mp4)
+
+<video src="https://github.com/hamanpaul/ocr-from2xlsx/raw/main/example/ocr-from2xlsx_example.mp4" controls width="800">
+  您的瀏覽器無法內嵌播放，請點上方連結觀看 <code>example/ocr-from2xlsx_example.mp4</code>。
+</video>
+
+> 完整可執行版（exe + plugins + example）請見 [Releases](https://github.com/hamanpaul/ocr-from2xlsx/releases)。
+
 ## Install
 
 Development install:

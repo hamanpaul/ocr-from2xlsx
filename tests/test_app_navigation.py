@@ -220,11 +220,10 @@ def test_review_app_builds_confirm_form_and_prefills_record(tmp_path: Path) -> N
         assert collected["cancer"] == expected_state["cancer"]
         # Slim toolbar keeps only the most-used actions; the rest moved to the menu bar (#56).
         toolbar_texts = _button_texts(app)
-        assert {"開啟報表", "匯入資料夾", "上一筆", "下一筆", "確認並寫入", "新增頁面"} <= set(
-            toolbar_texts
-        )
-        # #gui-toolbar-relabel: 新增頁面 sits AFTER 確認並寫入 (write a page, then add the next).
-        assert toolbar_texts.index("新增頁面") > toolbar_texts.index("確認並寫入")
+        assert {"開啟報表", "匯入資料夾", "上一筆", "下一筆", "確認並寫入"} <= set(toolbar_texts)
+        # #remove-add-page-button: the manual 新增頁面 button is gone from the toolbar — the flow
+        # auto-opens a fresh page on 開啟報表 and after 確認並寫入. It stays in the 編輯 menu only.
+        assert "新增頁面" not in toolbar_texts
     finally:
         app.destroy()
 
@@ -1865,3 +1864,35 @@ def test_confirm_json_mode_does_not_auto_add_blank_at_end(
         assert app.current_index >= len(app.records)  # past end = "no more records"
     finally:
         session.close()
+
+
+def test_blank_page_focuses_service_date_not_name() -> None:
+    # #focus-service-date: a fresh blank page (開啟報表 / after 確認並寫入) must put the caret on
+    # 服務日期 (the top field) for natural top-down entry — not jump down to 姓名. Uses a real
+    # ReviewApp because the headless FakeConfirmForm has no _focus to exercise.
+    try:
+        app = ReviewApp()
+    except tk.TclError as exc:
+        pytest.skip(f"no display available for Tk: {exc}")
+    app.withdraw()
+    try:
+        app.records = []
+        app.current_index = -1
+        app._add_blank_record()
+        assert app.confirm_form._current_focus == "service_date"
+    finally:
+        app.destroy()
+
+
+def test_window_starts_maximized() -> None:
+    # #startup-maximized: the app should open maximized so the wide 個案總表 form/preview use the
+    # whole screen, instead of the small 1200x720 default.
+    try:
+        app = ReviewApp()
+    except tk.TclError as exc:
+        pytest.skip(f"no display available for Tk: {exc}")
+    try:
+        app.update_idletasks()
+        assert app.state() == "zoomed"
+    finally:
+        app.destroy()

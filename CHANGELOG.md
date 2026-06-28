@@ -8,6 +8,12 @@
 ## [Unreleased]
 
 ### Fixed
+- 試用回饋：寫入含內嵌圖片的官方模板不再間歇性崩潰／產生損毀檔（#xlsx-image-save）。官方模板每個分頁都帶
+  一張圖（服務紀錄表 logo＋各月分頁，共 14 張）；openpyxl 載入（非 read-only）後圖片資料是**延遲**從來源 zip
+  讀取的，該 zip 會被 GC 關閉，於是 `workbook.save()` 在寫圖階段拋 `ValueError: I/O operation on closed file`
+  並**寫到一半留下損毀的 xlsx**（連 `[Content_Types].xml` 都缺）。此為非確定性（GC 時機），實際害使用者「確認
+  並寫入」失敗、看不到正確結果。修法：`WorkbookWriter` 載入後立即把每張圖讀進記憶體（`BytesIO`），save 不再
+  依賴已關閉的 archive；logo 完整保留。實測強制 GC 下 12/12 成功。
 - 試用回饋：服務項目寫入 XLSX 全面逐欄修正（#service-write-mapping）。原本 `_write_services` 只認 6 個
   服務 code 的中文標籤（`LABEL_BY_CODE`），其餘 code（如 `fatigue_strength`）會把**英文 code 原樣**寫入、
   且因沒有編號而被塞到該類**第一個空欄**——例如 4.疲憊與體力 應寫在「諮詢-症狀與副作用照護4」(AE)，卻變成
@@ -17,7 +23,9 @@
   對所有選項都一致。新增窮舉測試（選滿所有服務選項、逐欄驗證）。
 - 試用回饋：「開新報表」「匯入資料夾」不再各問兩次資料夾（#single-folder-prompt）。開新報表＝只選來源報表
   (XLSX)，工作檔預設寫到 `output/匯入中.xlsx`；匯入資料夾＝只選照片/PDF 來源資料夾，辨識輸出預設 `output/`。
-  輸出根目錄可由 `output_root` 覆寫（測試隔離用）。
+  輸出位置改為**固定可預測**：packaged exe 取 exe 所在資料夾的 `output/`、dev 取 cwd 的 `output/`（原本相對
+  cwd 會讓 exe 把檔寫到 `dist/output/` 而非預期位置）；開新報表後狀態列顯示**完整絕對路徑**，並在「檔案」選單加
+  「開啟輸出資料夾」。輸出根可由 `output_root` 覆寫（測試隔離用）。
 - 試用回饋：校對表單選項格線比照原服務表排列（#review-option-grid）。原本所有欄位的選項都用固定 4 欄換行，
   與表單對不齊（例如轉介院內/院外、管道、癌別在原表是一行 5 欄 B–F；性別在 B 欄直排）。改為依每個選項的
   `Option.cell` 還原其在表單的列/欄位置：諮詢類 4 欄、轉介/管道/疾病/癌別 5 欄、性別/國籍/年齡直排——與紙本

@@ -617,3 +617,41 @@ def test_every_service_option_writes_correct_label_to_its_numbered_column(tmp_pa
             assert val not in all_codes, f"raw code {val!r} leaked into column {col}"
     finally:
         wb.close()
+
+
+def test_writer_materializes_images_so_save_survives_closed_archive(tmp_path: Path) -> None:
+    """#xlsx-image-save: templates with embedded images (the official form's logo on every
+    sheet) must save reliably. openpyxl re-reads images lazily from the source zip, which GC
+    may have closed by save time -> intermittent 'I/O operation on closed file' + a CORRUPT
+    file. The writer materializes images to memory on load so save never touches the archive."""
+    from io import BytesIO
+    from openpyxl.drawing.image import Image as XLImage
+    from PIL import Image as PILImage
+
+    template = tmp_path / "template.xlsx"
+    create_workbook_template(template)
+    logo = tmp_path / "logo.png"
+    PILImage.new("RGB", (8, 8), "red").save(logo)
+    wb = load_workbook(template)
+    wb["個案總表"].add_image(XLImage(str(logo)), "Z1")
+    wb.save(template)
+    wb.close()
+
+    working = tmp_path / "working.xlsx"
+    writer = WorkbookWriter.create_from_template(template, working)
+    images = [im for sh in writer.workbook.worksheets for im in getattr(sh, "_images", [])]
+    assert images, "fixture should carry an embedded image"
+    assert all(isinstance(im.ref, BytesIO) for im in images), "images must be materialized to memory"
+
+    import gc
+
+    gc.collect()  # the condition that intermittently broke the lazy archive re-read
+    writer.write_record(make_record())
+    writer.save()
+    writer.close()
+
+    reopened = load_workbook(working)
+    try:
+        assert sum(len(getattr(sh, "_images", [])) for sh in reopened.worksheets) == 1
+    finally:
+        reopened.close()

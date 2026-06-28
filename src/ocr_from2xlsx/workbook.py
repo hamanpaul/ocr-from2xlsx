@@ -112,10 +112,30 @@ class WorkbookWriter:
             self.workbook = load_workbook(self.working_path, keep_vba=True)
         else:
             self.workbook = load_workbook(self.working_path)
+        self._materialize_embedded_images()
         if WORKBOOK_SHEET not in self.workbook.sheetnames:
             raise ValueError(f"Missing sheet: {WORKBOOK_SHEET}")
         self.sheet = self.workbook[WORKBOOK_SHEET]
         self.header_map = self._build_header_map(self.sheet)
+
+    def _materialize_embedded_images(self) -> None:
+        """Read every embedded image into memory right after load, so ``save()`` does not
+        re-read it lazily from the (by then GC-closed) source archive. That lazy re-read
+        intermittently raised ``ValueError: I/O operation on closed file`` mid-save and left a
+        CORRUPT workbook — fatal for the official template, which carries a logo on every sheet
+        (#xlsx-image-save). Best-effort: any per-image failure leaves that image untouched."""
+        from io import BytesIO
+
+        for worksheet in self.workbook.worksheets:
+            for image in list(getattr(worksheet, "_images", [])):
+                try:
+                    data = image._data()
+                except Exception:
+                    continue
+                try:
+                    image.ref = BytesIO(data)
+                except Exception:
+                    pass
 
     @classmethod
     def create_from_template(cls, template_path: Path | str, working_path: Path | str) -> "WorkbookWriter":

@@ -1648,3 +1648,24 @@ def test_import_folder_batch_single_dialog_defaults_output(
     assert len(askdir_calls) == 1  # only the source-folder prompt, not in+out
     assert Path(captured["out"]) == tmp_path
     assert captured.get("ran") is True
+
+
+def test_resolve_output_dir_override_dev_and_frozen(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # #single-folder-prompt: output is fixed + predictable (exe dir when frozen, cwd in dev),
+    # never a surprise cwd. output_root overrides for tests.
+    app = ReviewApp.__new__(ReviewApp)
+
+    app.output_root = tmp_path / "custom"
+    assert app._resolve_output_dir() == tmp_path / "custom"
+
+    app.output_root = None
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(app_module.sys, "frozen", False, raising=False)
+    assert app._resolve_output_dir() == Path.cwd() / "output"
+
+    monkeypatch.setattr(app_module.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(app_module.sys, "executable", str(tmp_path / "bin" / "ocr.exe"), raising=False)
+    frozen = app._resolve_output_dir()
+    assert frozen.name == "output" and frozen.parent.name == "bin"

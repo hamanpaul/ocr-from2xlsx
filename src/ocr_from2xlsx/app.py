@@ -753,6 +753,8 @@ class ReviewApp(tk.Tk):
         _menu_item(file_menu, "匯入 JSON", self._load_json, "load_json")
         _menu_item(file_menu, "匯入資料夾批次", self._import_folder_batch, "import_folder_batch")
         file_menu.add_separator()
+        file_menu.add_command(label="開啟輸出資料夾", command=self._open_output_dir)
+        file_menu.add_separator()
         file_menu.add_command(label="結束", command=self._on_close)
         menubar.add_cascade(label="檔案(F)", menu=file_menu, underline=3)
 
@@ -1214,9 +1216,28 @@ class ReviewApp(tk.Tk):
             ReviewApp._bind_mousewheel_recursive(child, handler)
 
     def _resolve_output_dir(self) -> Path:
-        """Default output location for working files / recognition artifacts — the user's
-        '預設是output' (#single-folder-prompt). Overridable via ``self.output_root`` (tests)."""
-        return Path(getattr(self, "output_root", None) or "output")
+        """Default output location for working files / recognition artifacts: ``output/`` next
+        to the executable when frozen (packaged exe), or the cwd in dev. Fixed + predictable so
+        it never lands in a surprise cwd like dist/ (#single-folder-prompt). Overridable via
+        ``self.output_root`` (tests). The resolved absolute path is shown in the status bar."""
+        override = getattr(self, "output_root", None)
+        if override:
+            return Path(override)
+        if getattr(sys, "frozen", False):
+            base = Path(sys.executable).resolve().parent
+        else:
+            base = Path.cwd()
+        return base / "output"
+
+    def _open_output_dir(self) -> None:
+        """Open the resolved output folder in the file manager (so the operator can find the
+        working file / artifacts), with a path fallback when it can't be launched."""
+        out = self._resolve_output_dir()
+        try:
+            out.mkdir(parents=True, exist_ok=True)
+            os.startfile(str(out))  # Windows Explorer; noqa: best-effort
+        except Exception as exc:
+            messagebox.showinfo("輸出資料夾", f"輸出資料夾：{out.resolve()}\n（無法自動開啟：{exc}）")
 
     def _choose_template(self) -> None:
         # One selection only: pick the source report (XLSX template). The working file defaults
@@ -1239,7 +1260,7 @@ class ReviewApp(tk.Tk):
         self.written_indices = set()
         self._written_rows = {}
         self._blocked_indices = set()
-        self._push_status(f"工作檔: {working}")
+        self._push_status(f"工作檔：{working.resolve()}（寫入後可由 檔案 → 開啟輸出資料夾 查看）")
         self._update_toolbar_states()  # template ready → write buttons can enable
         # New working file → reset the persistent corner so it does not show the old
         # batch's "已寫入 X / 列號" or a stale badge (#45).

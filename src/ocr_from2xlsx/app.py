@@ -773,6 +773,37 @@ class ReviewApp(tk.Tk):
             except Exception:
                 pass
 
+    _SASH_FRACTION = 0.42  # left (image) pane share of body width; < 0.5 → wider right form pane
+
+    @staticmethod
+    def _default_sash_x(width: int, fraction: float) -> int:
+        return int(max(0, width) * fraction)
+
+    def _place_initial_sash(self, event=None) -> None:
+        # Set the default divider once, when the paned window first has a real width. A width of 1
+        # means it isn't laid out yet — wait for the next <Configure>. Unbind after a successful
+        # placement so the operator's own dragging is not overridden on later resizes.
+        body = self.__dict__.get("_body")
+        if body is None:
+            return
+        try:
+            width = body.winfo_width()
+        except Exception:
+            return
+        if width <= 1:
+            return
+        try:
+            body.sashpos(0, self._default_sash_x(width, self._SASH_FRACTION))
+        except Exception:
+            pass
+        bind_id = self.__dict__.get("_sash_bind_id")
+        if bind_id is not None:
+            try:
+                body.unbind("<Configure>", bind_id)
+            except Exception:
+                pass
+            self._sash_bind_id = None
+
     def _maximize_window(self) -> None:
         # Open maximized so the wide 個案總表 form + scan preview use the whole screen instead of
         # the small 1200x720 default (#startup-maximized). 'zoomed' is the Windows/Tk way; fall back
@@ -979,15 +1010,21 @@ class ReviewApp(tk.Tk):
         ttk.Separator(footer, orient=tk.VERTICAL).pack(side=tk.RIGHT, fill=tk.Y, padx=4)
 
         # Two maximized panes: webcam/source preview on the left, the review form on the right.
+        # The form (right) gets the larger share — its labelled fields need the width or the text
+        # gets clipped — so the default divider sits left of centre and resizing favours the form.
         body = ttk.PanedWindow(self, orient=tk.HORIZONTAL)
         body.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=8, pady=8)
+        self._body = body
 
         self.preview = ImageViewer(body)
         self._show_placeholder_preview()
-        body.add(self.preview.canvas, weight=1)
+        body.add(self.preview.canvas, weight=42)
 
         form = ttk.Frame(body)
-        body.add(form, weight=1)
+        body.add(form, weight=58)
+        # Place the initial sash once the window has a real width (after maximize/map); a bare
+        # weight split alone leaves the divider near centre, clipping the form on first paint.
+        self._sash_bind_id = body.bind("<Configure>", self._place_initial_sash)
         form.columnconfigure(0, weight=1)
         form.rowconfigure(1, weight=1)
 

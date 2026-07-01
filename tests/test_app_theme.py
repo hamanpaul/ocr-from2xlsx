@@ -32,6 +32,27 @@ def _find_labelframes(widget) -> list:
     return found
 
 
+@pytest.mark.parametrize("width,expected", [(1000, 420), (1600, 672), (0, 0)])
+def test_default_sash_x_is_left_of_center(width, expected):
+    x = ReviewApp._default_sash_x(width, 0.42)
+    assert x == expected
+    if width:
+        assert x < width // 2  # divider left of centre → the right (form) pane is wider
+
+
+def test_initial_sash_placed_left_of_center():
+    app = _app_or_skip()
+    try:
+        app.geometry("1000x700")
+        app.update_idletasks()
+        app._place_initial_sash()
+        body_w = app._body.winfo_width()
+        if body_w > 1:  # only assert once the paned window actually has a width
+            assert app._body.sashpos(0) < body_w // 2
+    finally:
+        app.destroy()
+
+
 def test_form_groups_use_section_style():
     app = _app_or_skip()
     try:

@@ -12,6 +12,14 @@ import pytest
 from ocr_from2xlsx.app import ReviewApp
 
 
+@pytest.fixture(autouse=True)
+def _isolated_config(tmp_path, monkeypatch):
+    # Every test here builds a real ReviewApp, which reads/writes config.json under
+    # OCR_FROM2XLSX_HOME. Point it at a tmp dir so tests never touch (or corrupt) the
+    # operator's real ~/.ocr_from2xlsx/config.json (e.g. flipping their saved theme).
+    monkeypatch.setenv("OCR_FROM2XLSX_HOME", str(tmp_path))
+
+
 def _app_or_skip() -> ReviewApp:
     try:
         app = ReviewApp()

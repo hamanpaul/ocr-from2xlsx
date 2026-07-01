@@ -41,11 +41,16 @@ def _find_labelframes(widget) -> list:
 
 
 @pytest.mark.parametrize("width,expected", [(1000, 420), (1600, 672), (0, 0)])
-def test_default_sash_x_is_left_of_center(width, expected):
+def test_default_sash_x_is_proportional(width, expected):
     x = ReviewApp._default_sash_x(width, 0.42)
     assert x == expected
     if width:
         assert x < width // 2  # divider left of centre → the right (form) pane is wider
+
+
+def test_default_sash_fraction_favours_the_form():
+    # the shipped default must sit left of centre so the wide form isn't clipped
+    assert 0.0 < ReviewApp._SASH_FRACTION < 0.5
 
 
 def test_initial_sash_placed_left_of_center():

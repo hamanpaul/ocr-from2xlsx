@@ -773,7 +773,7 @@ class ReviewApp(tk.Tk):
             except Exception:
                 pass
 
-    _SASH_FRACTION = 0.42  # left (image) pane share of body width; < 0.5 → wider right form pane
+    _SASH_FRACTION = 0.36  # left (image) pane share of body width; small so the wide form fits
 
     @staticmethod
     def _default_sash_x(width: int, fraction: float) -> int:

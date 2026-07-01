@@ -13,6 +13,7 @@ a = Analysis(
     datas=[
         (str(PROJECT_ROOT / "VERSION"), "."),
         (str(PROJECT_ROOT / "src/ocr_from2xlsx/assets/shutter.wav"), "ocr_from2xlsx/assets"),
+        (str(PROJECT_ROOT / "src/ocr_from2xlsx/assets/icons"), "ocr_from2xlsx/assets/icons"),
     ],
     hiddenimports=["tkinter", "cv2"],
     hookspath=[],

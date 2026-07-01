@@ -58,13 +58,13 @@ On startup the app auto-detects webcams: if exactly one camera is found it auto-
 
 App 工具列「連續拍照」可現場連續掃一疊紙本：開始時先**清空桌面擷取「空桌基準」**，之後把表單一張張放到鏡頭下，系統偵測到「畫面相對空桌出現內容、穩定且合焦」就自動拍照（快門聲＋計數），請拿開換下一張即可再拍（回到空桌才會再武裝，因此同版型一疊也能逐張拍）。背景/光線變了可按「重設空桌基準」重抓。連續多張太模糊會**暫停**等你處理。按「結束連拍並辨識」一次批次辨識全部，跳「辨識完成」後進入逐張人工校正（確認→寫入 xlsx→下一張）。偵測門檻可用 `AUTOCAPTURE_*` 環境變數對相機/光線微調。
 
-動作分門別類放在上方的**下拉式選單列**——**檔案**（開啟報表＝選 XLSX 模板 / 匯入 JSON / 匯入資料夾批次）、**掃描**（選擇攝影機 / 擷取並辨識 / 連續拍照 / 結束連拍並辨識 / 連拍刪除上一張 / 取消連拍 / 重設空桌基準）、**編輯**（新增頁面 / 上一筆 / 下一筆 / 確認並寫入 / 強制寫入）、**檢視**（放大 / 縮小 / 符合視窗 / 旋轉）、**說明**（快捷鍵）。下方工具列只留最常用按鈕：**開啟報表 ｜ 匯入資料夾 ｜ 上一筆 ｜ 下一筆 ｜ 確認並寫入**；未就緒的按鈕與選單項目會自動 disable。（「新增頁面」不再放在工具列——開啟報表與每次確認並寫入都會自動帶出新空白頁，需要時仍可從「編輯」選單手動新增。）
+動作分門別類放在上方的**下拉式選單列**——**檔案**（開啟報表＝選 XLSX 模板 / 匯入 JSON / 匯入資料夾批次）、**掃描**（選擇攝影機 / 擷取並辨識 / 連續拍照 / 結束連拍並辨識 / 連拍刪除上一張 / 取消連拍 / 重設空桌基準）、**編輯**（新增頁面 / 上一筆 / 下一筆 / 確認寫入 / 強制寫入）、**檢視**（放大 / 縮小 / 符合視窗 / 旋轉）、**說明**（快捷鍵）。下方為**品牌色帶狀工具列**：次要動作（開啟報表 / 匯入資料夾 / 上一筆 / 下一筆）為 **icon-only 圖示鈕**（滑鼠停留顯示提示與快捷鍵），最右側是**單一琥珀色主要鈕「確認寫入」**與**深色/淺色切換**；未就緒的按鈕與選單項目會自動 disable（例如未載入資料時上一筆/下一筆灰階不可按）。（「新增頁面」不再放在工具列——開啟報表與每次確認寫入都會自動帶出新空白頁，需要時仍可從「編輯」選單手動新增。）介面提供**淺色 / 深色**兩套主題，可在「檢視 → 深色模式」或工具列右上角切換，選擇會被記住。
 
 ### Correction keyboard shortcuts
 
 Review/correction is keyboard-first: when a record opens, focus lands on the first field that needs a human (the first `⚠` flagged field) and scrolls it into view, the active field's title is **bold**, high-confidence fields are dimmed, and the footer shows `待確認 N` (how many fields still need confirmation). A clean (0-flagged) record does *not* grab focus, so you can glance and confirm. A `快捷鍵` toolbar button shows this list, and buttons have hover hints.
 
-- `Enter` / `Ctrl+Enter` — 確認並寫入 (confirm and write, then advance)
+- `Enter` / `Ctrl+Enter` — 確認寫入 (confirm and write, then advance)
 - `F2` / `Ctrl+Shift+Enter` — 強制寫入 (force write; if fields still fail validation, a notice follows the write)
 - `PgDn` / `PgUp` (or `Ctrl+→` / `Ctrl+←`) — 下一筆 / 上一筆 (next / previous record)
 - `Esc` — cancel the current record's edits, restoring stored values **in place** (keeps your image zoom/pan and focus)
@@ -76,7 +76,7 @@ Review/correction is keyboard-first: when a record opens, focus lands on the fir
 
 - **Progress + per-record status** — the footer shows `已寫入 X / 共 N` and the current row (or `尚未載入資料` before a batch is loaded), plus a **color-coded** per-record badge (green `已寫入` / red `被擋下` / grey `待處理`); navigating back to a written record shows its badge and row.
 - **Empty-name guard** — confirming a record whose name is still flagged-and-empty is refused (use 強制寫入 to override), so a blank name is never silently written. (Handwriting is read against the source-image preview below — drag-pan + wheel/按鈕 縮放; the standalone 姓名校正 panel was removed as redundant.)
-- **Write recovery (re-open & overwrite)** — confirming/force-writing a record that was already written prompts to overwrite its row (the dialog defaults to *No*, so a reflexive `Enter` cancels); the prompt wording differs for 確認並寫入 (validated overwrite) vs 強制寫入 (skips required-field checks). Confirming overwrites that exact row (no duplicate), cancelling writes nothing.
+- **Write recovery (re-open & overwrite)** — confirming/force-writing a record that was already written prompts to overwrite its row (the dialog defaults to *No*, so a reflexive `Enter` cancels); the prompt wording differs for 確認寫入 (validated overwrite) vs 強制寫入 (skips required-field checks). Confirming overwrites that exact row (no duplicate), cancelling writes nothing.
 - **Image verification (pan / zoom / field framing)** — the source-image preview is a Canvas viewer: drag to pan, scroll the mouse wheel to zoom (integer-step magnification, zoom remembered for the session), and focusing a field frames the image to that field's area (recognition-layout section band). The live camera preview stays fit-to-pane.
 
 ```powershell

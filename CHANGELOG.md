@@ -8,11 +8,19 @@
 ## [Unreleased]
 
 ### Added
+- **淺色 / 深色主題**（#restyle-review-ui）：全 App 統一的外觀設計 token（配色 / 字體 / 間距），
+  由新的 `theme.py`（`Palette`、`apply_theme`、`ThemeManager`）集中管理；可在「檢視 → 深色模式」或
+  工具列右上角切換，選擇記憶於 `config.json`（預設淺色，久看不刺眼）。文字對比皆符合 WCAG AA（≥4.5:1）。
 - README 加入**示範影片** `example/ocr-from2xlsx_example.mp4`。
 - **首個 release v0.1.0**：可執行版打包（`ocr-from2xlsx.exe` + `plugins/`（PaddleOCR）+ `example/`），
   作為 GitHub Release asset 提供下載（不進 git；1.3GB plugin 屬建置產物）。`VERSION` 同步為 0.1.0。
 
 ### Changed
+- **重新設計工具列與整體視覺**（#restyle-review-ui）：新增品牌青綠色**帶狀工具列**；次要動作
+  （開啟報表 / 匯入 / 上一筆 / 下一筆）改為 **icon-only 圖示鈕 + 滑鼠提示（含快捷鍵）**，全文標籤仍保留在
+  「檔案 / 編輯」選單以維持辨識性；「確認並寫入」按鈕**改名為「確認寫入」**並做成**單一琥珀色主要 CTA**
+  （對應 Enter），編輯選單同步改名。圖示為內建線性圖示（`assets/icons/`，非 emoji）。**版面骨架、動作啟用
+  規則（上一筆/下一筆需有資料；確認寫入維持既有狀態機）與快捷鍵皆不變**，只改外觀。
 - 新空白頁的游標改**定位在「服務日期」**（最上欄），不再往下跳到「姓名」（#focus-service-date）。開啟報表與
   每次確認並寫入帶出新頁時都從最上欄開始，符合由上而下的填寫動線。
 - 工具列**移除「新增頁面」按鈕**（#remove-add-page-button）。`開啟報表` 與每次 `確認並寫入` 都會自動帶出

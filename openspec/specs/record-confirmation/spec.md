@@ -66,7 +66,7 @@ without using the mouse.
 #### Scenario: Confirm shortcut writes and advances
 - **WHEN** the reviewer presses the confirm shortcut on a record with no blocking errors
 - **THEN** the record is written as human-confirmed and the next record is shown, identically to pressing
-  「確認並寫入」
+  「確認寫入」
 
 #### Scenario: Next / previous shortcuts navigate records
 - **WHEN** the reviewer presses the next-record or previous-record shortcut

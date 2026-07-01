@@ -19,6 +19,7 @@ build/*
 !build/phase0_vlm_bakeoff.py
 !build/build_vlm_runtime.py
 !build/make_shutter_wav.py
+!build/make_icons.py
 !build/splash.png
 *.egg-info/
 .eggs/

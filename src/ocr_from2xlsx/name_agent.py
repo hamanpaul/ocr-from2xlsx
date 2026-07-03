@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 DEFAULT_NAME_AGENT_PROMPT = "讀出圖片中的手寫中文姓名，只回傳姓名本身，不要其他文字。"
+DEFAULT_NAME_AGENT_MODEL = "claude-fable-5"
 
 
 class NameAgent(Protocol):
@@ -32,7 +33,7 @@ class NullNameAgent:
 class NameAgentConfig:
     enabled: bool = False
     provider: str = ""
-    model: str = ""
+    model: str = DEFAULT_NAME_AGENT_MODEL
     endpoint: str = ""
     prompt: str = DEFAULT_NAME_AGENT_PROMPT
     api_key_env: str = "ANTHROPIC_API_KEY"
@@ -57,7 +58,7 @@ def load_config(path: Path | str) -> NameAgentConfig:
     data = tomllib.loads(path.read_text(encoding="utf-8"))
     enabled = data.get("enabled", False)
     provider = data.get("provider", "")
-    model = data.get("model", "")
+    model = data.get("model", DEFAULT_NAME_AGENT_MODEL)
     endpoint = data.get("endpoint", "")
     prompt = data.get("prompt", DEFAULT_NAME_AGENT_PROMPT)
     api_key_env = data.get("api_key_env", "ANTHROPIC_API_KEY")

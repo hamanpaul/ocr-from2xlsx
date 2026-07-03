@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from ocr_from2xlsx.name_agent import (
+    DEFAULT_NAME_AGENT_MODEL,
     NameAgentConfig,
     NullNameAgent,
     build_agent,
@@ -48,6 +49,18 @@ def test_enabled_config_without_prompt_uses_default_prompt_string(tmp_path: Path
     config = load_config(path)
 
     assert config.prompt == "讀出圖片中的手寫中文姓名，只回傳姓名本身，不要其他文字。"
+
+
+def test_enabled_config_without_model_uses_fable5_default(tmp_path: Path):
+    path = tmp_path / "name_agent.toml"
+    path.write_text(
+        'enabled = true\nprovider = "claude"\nendpoint = "https://api.example/v1/messages"\n',
+        encoding="utf-8",
+    )
+
+    config = load_config(path)
+
+    assert config.model == DEFAULT_NAME_AGENT_MODEL
 
 
 def test_load_config_rejects_non_boolean_enabled(tmp_path: Path):

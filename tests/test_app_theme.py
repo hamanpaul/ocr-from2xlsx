@@ -161,3 +161,19 @@ def test_active_banner_and_pending_badge_use_dark_tokens():
         assert str(app._badge_label.cget("background")) == th.DARK.surface_alt
     finally:
         app.destroy()
+
+
+def test_pending_badge_uses_light_tokens():
+    from ocr_from2xlsx import theme as th
+
+    app = _app_or_skip()
+    try:
+        # default mode is light; the neutral 待處理 chip must pull from the LIGHT palette
+        # (single token source) whenever a ThemeManager is present, not a hard-coded grey.
+        assert app.theme.mode == "light"
+        app.records = []
+        app.current_index = -1
+        app._update_badge()
+        assert str(app._badge_label.cget("background")) == th.LIGHT.surface_alt
+    finally:
+        app.destroy()

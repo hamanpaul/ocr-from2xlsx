@@ -676,9 +676,13 @@ class ReviewApp(tk.Tk):
         import json
 
         try:
-            return json.loads(cls._config_path().read_text(encoding="utf-8"))
+            data = json.loads(cls._config_path().read_text(encoding="utf-8"))
         except Exception:
             return {}
+        # A hand-edited / corrupted config.json can hold a non-dict JSON value (list, string,
+        # number). Normalise to {} so callers can safely .update()/.get() without an
+        # AttributeError crashing config persistence.
+        return data if isinstance(data, dict) else {}
 
     @classmethod
     def _update_config(cls, **values) -> None:
@@ -1303,12 +1307,14 @@ class ReviewApp(tk.Tk):
                 pass
 
     def _neutral_badge_colors(self) -> tuple[str, str]:
-        # The 待處理 chip is neutral, so it must follow the theme (a light grey chip reads wrong
-        # in dark mode). written/blocked keep their strong semantic colours in both themes.
-        # __dict__.get (not getattr) so a headless ReviewApp without `theme` doesn't trip
-        # tk.Tk.__getattr__ into infinite recursion.
+        # The 待處理 chip is neutral, so it follows the theme surface in *both* modes (a light
+        # grey chip reads wrong in dark mode). written/blocked keep their strong semantic colours
+        # in both themes. Pull from the palette (single token source) whenever a ThemeManager is
+        # present; the hard-coded fallback is only for a headless ReviewApp with no theme.
+        # __dict__.get (not getattr) so that headless case doesn't trip tk.Tk.__getattr__ into
+        # infinite recursion.
         manager = self.__dict__.get("theme")
-        if manager is not None and manager.mode == "dark":
+        if manager is not None:
             return manager.palette.surface_alt, manager.palette.text
         return "#e8eaed", "#202124"
 

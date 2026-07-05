@@ -32,6 +32,11 @@
   標題與 README 一併同步新名稱。功能與既有快捷鍵不變。
 
 ### Fixed
+- **主題／設定的三處健壯性修正**（#restyle-review-ui code review）：(1) `_load_config` 遇到被手動改成
+  **非 dict 的合法 JSON**（如 `[...]`）時正規化為 `{}`，避免 `_update_config`/`_load_theme_mode` 對非 dict
+  呼叫 `.update()`/`.get()` 觸發 `AttributeError` 而中斷設定持久化；(2) 待處理徽章的中性色改為**明暗兩模式
+  皆從 palette 取 token**（原本淺色寫死 `#e8eaed`），統一單一 token 來源；(3) `load_icon` 改用
+  `with Image.open(...)` context manager 關檔，與 repo 既有慣例一致、避免洩漏檔案描述子。
 - 第二筆（含）之後寫入的紀錄**底色跑掉**（#appended-row-style）。官方模板只把**第一個資料列（第 2 列）**
   完整上色（47 欄有填滿樣式），其下的列只有稀疏的 6 欄；`write_record` 只寫值、不複製列樣式，所以接在第 3 列
   之後的紀錄背景大片空白。此問題先前被「手動寫第二筆會跳 JSON 錯」（#manual-continue）掩蓋，修好後才浮現。

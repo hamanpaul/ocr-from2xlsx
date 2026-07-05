@@ -260,7 +260,11 @@ def load_icon(name, size=24):
 
         pil = _PIL_CACHE.get(key)
         if pil is None:
-            pil = Image.open(path).convert("RGBA")
+            # Context manager so the source file descriptor is closed even before PIL's own
+            # load() would (matches the `with Image.open(...)` pattern used elsewhere); the
+            # cached image is the decoded copy, independent of the closed handle.
+            with Image.open(path) as src:
+                pil = src.convert("RGBA")
             if pil.size != (size, size):
                 pil = pil.resize((size, size), Image.LANCZOS)
             _PIL_CACHE[key] = pil

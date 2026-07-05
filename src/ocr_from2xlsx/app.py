@@ -27,6 +27,7 @@ from ocr_from2xlsx.domain import OcrInfo, Record, ReviewInfo, normalize_service_
 from ocr_from2xlsx.form_layout import FormLayout, option_grid_positions, service_record_layout
 from ocr_from2xlsx.name_suggestion import NAME_UNCONFIRMED, confirm_name
 from ocr_from2xlsx.session import ImportSession
+from ocr_from2xlsx import theme
 
 
 def _wheel_scroll_units(delta: int) -> int:
@@ -127,7 +128,9 @@ class ConfirmForm:
                 if section.id and section.id.isalpha() and section.id.isupper() and len(section.id) <= 2
                 else ""
             )
-            group = ttk.LabelFrame(self.frame, text=f"{prefix}{section.title}")
+            group = ttk.LabelFrame(
+                self.frame, text=f"{prefix}{section.title}", style="Section.TLabelframe"
+            )
             group.grid(row=section_row, column=0, sticky="ew", padx=4, pady=4)
             group.columnconfigure(1, weight=1)
             for field_row, field in enumerate(section.fields):
@@ -617,7 +620,7 @@ class ImageViewer:
 class ReviewApp(tk.Tk):
     _PREVIEW_PLACEHOLDER = (
         "攝影機或圖片預覽區\n"
-        "手動建單：『開啟報表』選模板後即可直接填寫、按『確認並寫入』存檔，會自動帶出下一張空白頁繼續填。\n"
+        "手動建單：『開啟報表』選模板後即可直接填寫、按『確認寫入』存檔，會自動帶出下一張空白頁繼續填。\n"
         "或：『選擇攝影機』連續掃描／『匯入資料夾批次』／『匯入 JSON』載入既有資料。"
     )
     _CAMERA_POLL_INTERVAL_MS = 33
@@ -669,26 +672,47 @@ class ReviewApp(tk.Tk):
         return cls._runtime_base_dir() / "config.json"
 
     @classmethod
-    def _load_preview_rotation(cls) -> int:
+    def _load_config(cls) -> dict:
         import json
 
         try:
             data = json.loads(cls._config_path().read_text(encoding="utf-8"))
-            return int(data.get("preview_rotation", 0)) % 360
+        except Exception:
+            return {}
+        # A hand-edited / corrupted config.json can hold a non-dict JSON value (list, string,
+        # number). Normalise to {} so callers can safely .update()/.get() without an
+        # AttributeError crashing config persistence.
+        return data if isinstance(data, dict) else {}
+
+    @classmethod
+    def _update_config(cls, **values) -> None:
+        # Read-modify-write so independent settings (preview_rotation, theme_mode)
+        # coexist in config.json instead of one overwriting the other.
+        import json
+
+        try:
+            path = cls._config_path()
+            data = cls._load_config()
+            data.update(values)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(data), encoding="utf-8")
+        except OSError:
+            pass
+
+    @classmethod
+    def _load_preview_rotation(cls) -> int:
+        try:
+            return int(cls._load_config().get("preview_rotation", 0)) % 360
         except Exception:
             return 0
 
     def _save_preview_rotation(self) -> None:
-        import json
+        self._update_config(preview_rotation=self._preview_rotation)
 
-        try:
-            path = self._config_path()
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(
-                json.dumps({"preview_rotation": self._preview_rotation}), encoding="utf-8"
-            )
-        except OSError:
-            pass
+    @classmethod
+    def _load_theme_mode(cls) -> str:
+        mode = cls._load_config().get("theme_mode", "light")
+        return mode if mode in ("light", "dark") else "light"
 
     def __init__(self) -> None:
         super().__init__()
@@ -729,8 +753,60 @@ class ReviewApp(tk.Tk):
         self._status_log_path = self._default_status_log_path()
         self.fields: dict[str, tk.StringVar] = {}
         self._build_ui()
+        # Appearance: apply the persisted light/dark theme and register the non-ttk (tk) widgets
+        # the app owns so a mode switch recolours them too (ttk widgets re-theme via the styles).
+        self.theme = theme.ThemeManager(
+            self, ttk.Style(), mode=self._load_theme_mode(),
+            on_change=lambda mode: self._update_config(theme_mode=mode),
+        )
+        self.theme.register(self._form_canvas, role="canvas")
+        self.theme.register(self._autocapture_banner, role="banner")
+        self.theme.apply()
         self._update_toolbar_states()  # initial: disable buttons whose prerequisites are unmet
         self.protocol("WM_DELETE_WINDOW", self._on_close)
+
+    def _toggle_theme(self) -> None:
+        manager = self.__dict__.get("theme")
+        if manager is None:
+            return
+        manager.toggle()
+        dark_var = getattr(self, "_dark_var", None)
+        if dark_var is not None:
+            try:
+                dark_var.set(manager.mode == "dark")
+            except Exception:
+                pass
+
+    _SASH_FRACTION = 0.36  # left (image) pane share of body width; small so the wide form fits
+
+    @staticmethod
+    def _default_sash_x(width: int, fraction: float) -> int:
+        return int(max(0, width) * fraction)
+
+    def _place_initial_sash(self, event=None) -> None:
+        # Set the default divider once, when the paned window first has a real width. A width of 1
+        # means it isn't laid out yet — wait for the next <Configure>. Unbind after a successful
+        # placement so the operator's own dragging is not overridden on later resizes.
+        body = self.__dict__.get("_body")
+        if body is None:
+            return
+        try:
+            width = body.winfo_width()
+        except Exception:
+            return
+        if width <= 1:
+            return
+        try:
+            body.sashpos(0, self._default_sash_x(width, self._SASH_FRACTION))
+        except Exception:
+            pass
+        bind_id = self.__dict__.get("_sash_bind_id")
+        if bind_id is not None:
+            try:
+                body.unbind("<Configure>", bind_id)
+            except Exception:
+                pass
+            self._sash_bind_id = None
 
     def _maximize_window(self) -> None:
         # Open maximized so the wide 個案總表 form + scan preview use the whole screen instead of
@@ -803,10 +879,11 @@ class ReviewApp(tk.Tk):
         _menu_item(edit_menu, "上一筆", self._previous_record, "prev_record")
         _menu_item(edit_menu, "下一筆", self._next_record, "next_record")
         edit_menu.add_separator()
-        _menu_item(edit_menu, "確認並寫入", self._confirm_current, "confirm")
+        _menu_item(edit_menu, "確認寫入", self._confirm_current, "confirm")
         _menu_item(edit_menu, "強制寫入", self._force_write, "force")
         menubar.add_cascade(label="編輯(E)", menu=edit_menu, underline=3)
 
+        self._dark_var = tk.BooleanVar(value=(self._load_theme_mode() == "dark"))
         view_menu = tk.Menu(menubar, tearoff=0)
         view_menu.add_command(label="放大", command=self._zoom_in_static)
         view_menu.add_command(label="縮小", command=self._zoom_out_static)
@@ -815,6 +892,10 @@ class ReviewApp(tk.Tk):
         view_menu.add_command(label="旋轉", command=self._rotate_preview)
         self._view_menu = view_menu
         self._rotate_menu_index = view_menu.index("end")  # the 旋轉 entry; label shows the angle
+        view_menu.add_separator()
+        view_menu.add_checkbutton(
+            label="深色模式", variable=self._dark_var, command=self._toggle_theme
+        )
         menubar.add_cascade(label="檢視(V)", menu=view_menu, underline=3)
 
         help_menu = tk.Menu(menubar, tearoff=0)
@@ -824,32 +905,73 @@ class ReviewApp(tk.Tk):
         self.config(menu=menubar)
         self._update_rotate_button()  # reflect carried-over rotation in the 檢視 menu label
 
-        # --- Slim toolbar: only the five most-used actions (#56) --------------------------
-        toolbar = ttk.Frame(self)
-        toolbar.pack(fill=tk.X, padx=8, pady=8)
+        # --- Branded toolbar band: icon-only secondary actions on a coloured band, with the
+        # one always-used action (確認寫入) as the single accent primary CTA (#restyle-review-ui).
+        # Icon-only keeps the band clean; discoverability stays via tooltips + the full-text menus.
+        toolbar = ttk.Frame(self, style="Toolbar.TFrame", padding=(8, 6))
+        toolbar.pack(fill=tk.X)
+        self._toolbar = toolbar
 
-        def _btn(text: str, command, key: str | None = None):
-            button = ttk.Button(toolbar, text=text, command=command)
-            button.pack(side=tk.LEFT, padx=4)
+        def _icon_btn(icon_name: str, command, key: str | None, tip: str):
+            icon = theme.load_icon(icon_name, 22)
+            button = ttk.Button(
+                toolbar, style="Toolbar.TButton", command=command, takefocus=False
+            )
+            if icon is not None:
+                button.configure(image=icon)
+                button.image = icon  # hold a ref so Tk does not GC the icon
+            else:
+                button.configure(text=tip.split(" ")[0])  # text fallback if the icon is missing
+            button.pack(side=tk.LEFT, padx=3)
             _register(
                 key,
                 lambda enabled, b=button: b.configure(state="normal" if enabled else "disabled"),
             )
+            _Tooltip(button, tip)
             return button
 
-        _btn("開啟報表", self._choose_template, "choose_template")
-        _btn("匯入資料夾", self._import_folder_batch, "import_folder_batch")
+        self._open_btn = _icon_btn("open", self._choose_template, "choose_template", "開啟報表")
+        self._import_btn = _icon_btn(
+            "import", self._import_folder_batch, "import_folder_batch", "匯入資料夾"
+        )
         ttk.Separator(toolbar, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=(8, 4))
-        prev_btn = _btn("上一筆", self._previous_record, "prev_record")
-        next_btn = _btn("下一筆", self._next_record, "next_record")
-        confirm_btn = _btn("確認並寫入", self._confirm_current, "confirm")
-        # 新增頁面 is no longer a toolbar button: the flow auto-opens a fresh page on 開啟報表 and
-        # after each 確認並寫入, so manual page-adding is redundant. It stays in the 編輯 menu as a
-        # fallback (#remove-add-page-button).
-        # Hover hints on the keyboard-driven actions (#48), since labels are now sparse.
-        _Tooltip(prev_btn, "PgUp / Ctrl+←：上一筆")
-        _Tooltip(next_btn, "PgDn / Ctrl+→：下一筆")
-        _Tooltip(confirm_btn, "Enter / Ctrl+Enter：寫入；只有缺 XLSX 或姓名會被擋下，其餘欄位皆 optional")
+        self._prev_btn = _icon_btn("prev", self._previous_record, "prev_record", "上一筆 · PgUp / Ctrl+←")
+        self._next_btn = _icon_btn("next", self._next_record, "next_record", "下一筆 · PgDn / Ctrl+→")
+        # 新增頁面 stays in the 編輯 menu (auto-opened on 開啟報表 / after each 確認寫入).
+
+        # Dark/light toggle at the far right corner; primary CTA sits just left of it.
+        theme_icon = theme.load_icon("moon", 20)
+        theme_btn = ttk.Button(
+            toolbar, style="Toolbar.TButton", command=self._toggle_theme, takefocus=False
+        )
+        if theme_icon is not None:
+            theme_btn.configure(image=theme_icon)
+            theme_btn.image = theme_icon
+        else:
+            theme_btn.configure(text="深色")
+        theme_btn.pack(side=tk.RIGHT, padx=(4, 2))
+        _Tooltip(theme_btn, "切換深色 / 淺色")
+        self._theme_btn = theme_btn
+
+        confirm_icon = theme.load_icon("confirm", 20)
+        self._confirm_btn = ttk.Button(
+            toolbar, style="Primary.TButton", text="確認寫入",
+            command=self._confirm_current, takefocus=False,
+        )
+        if confirm_icon is not None:
+            self._confirm_btn.configure(image=confirm_icon, compound=tk.LEFT)
+            self._confirm_btn.image = confirm_icon
+        self._confirm_btn.pack(side=tk.RIGHT, padx=(4, 8))
+        _register(
+            "confirm",
+            lambda enabled, b=self._confirm_btn: b.configure(
+                state="normal" if enabled else "disabled"
+            ),
+        )
+        _Tooltip(
+            self._confirm_btn,
+            "Enter / Ctrl+Enter：寫入；只有缺 XLSX 或姓名會被擋下，其餘欄位皆 optional",
+        )
 
         # Persistent continuous-capture state banner — separate from the one-shot footer so
         # rotate/zoom/retry messages can't clobber the operator's "which state am I in?" cue.
@@ -892,15 +1014,21 @@ class ReviewApp(tk.Tk):
         ttk.Separator(footer, orient=tk.VERTICAL).pack(side=tk.RIGHT, fill=tk.Y, padx=4)
 
         # Two maximized panes: webcam/source preview on the left, the review form on the right.
+        # The form (right) gets the larger share — its labelled fields need the width or the text
+        # gets clipped — so the default divider sits left of centre and resizing favours the form.
         body = ttk.PanedWindow(self, orient=tk.HORIZONTAL)
         body.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=8, pady=8)
+        self._body = body
 
         self.preview = ImageViewer(body)
         self._show_placeholder_preview()
-        body.add(self.preview.canvas, weight=1)
+        body.add(self.preview.canvas, weight=42)
 
         form = ttk.Frame(body)
-        body.add(form, weight=1)
+        body.add(form, weight=58)
+        # Place the initial sash once the window has a real width (after maximize/map); a bare
+        # weight split alone leaves the divider near centre, clipping the form on first paint.
+        self._sash_bind_id = body.bind("<Configure>", self._place_initial_sash)
         form.columnconfigure(0, weight=1)
         form.rowconfigure(1, weight=1)
 
@@ -952,7 +1080,7 @@ class ReviewApp(tk.Tk):
     def _show_shortcut_help(self) -> None:
         messagebox.showinfo(
             "鍵盤快捷鍵",
-            "Enter / Ctrl+Enter　確認並寫入\n"
+            "Enter / Ctrl+Enter　確認寫入\n"
             "F2 / Ctrl+Shift+Enter　強制寫入\n"
             "PgDn / PgUp（或 Ctrl+→ / Ctrl+←）　下一筆 / 上一筆\n"
             "Esc　取消本筆編輯\n"
@@ -1178,6 +1306,18 @@ class ReviewApp(tk.Tk):
             except Exception:
                 pass
 
+    def _neutral_badge_colors(self) -> tuple[str, str]:
+        # The 待處理 chip is neutral, so it follows the theme surface in *both* modes (a light
+        # grey chip reads wrong in dark mode). written/blocked keep their strong semantic colours
+        # in both themes. Pull from the palette (single token source) whenever a ThemeManager is
+        # present; the hard-coded fallback is only for a headless ReviewApp with no theme.
+        # __dict__.get (not getattr) so that headless case doesn't trip tk.Tk.__getattr__ into
+        # infinite recursion.
+        manager = self.__dict__.get("theme")
+        if manager is not None:
+            return manager.palette.surface_alt, manager.palette.text
+        return "#e8eaed", "#202124"
+
     def _update_badge(self) -> None:
         from ocr_from2xlsx.review_workflow import record_badge_state
 
@@ -1193,8 +1333,9 @@ class ReviewApp(tk.Tk):
                     pass
             badge_label = getattr(self, "_badge_label", None)
             if badge_label is not None:
+                neutral_bg, neutral_fg = self._neutral_badge_colors()
                 try:
-                    badge_label.configure(background="#e8eaed", foreground="#202124")
+                    badge_label.configure(background=neutral_bg, foreground=neutral_fg)
                 except Exception:
                     pass
             return
@@ -1204,10 +1345,13 @@ class ReviewApp(tk.Tk):
         )
         self._badge_state = state
         # (text, background, foreground) per state so 成功/被擋下/待處理 differ at a glance.
+        # written/blocked keep strong high-contrast chips (readable in light AND dark); only the
+        # neutral 待處理 chip follows the theme so it isn't a light chip in dark mode.
+        neutral_bg, neutral_fg = self._neutral_badge_colors()
         styles = {
             "written": ("✓ 已寫入", "#1e7d34", "#ffffff"),
             "blocked": ("⛔ 被擋下", "#b00020", "#ffffff"),
-            "pending": ("• 待處理", "#e8eaed", "#202124"),
+            "pending": ("• 待處理", neutral_bg, neutral_fg),
         }
         text, bg, fg = styles[state]
         badge_var = getattr(self, "_badge_var", None)
@@ -1362,7 +1506,7 @@ class ReviewApp(tk.Tk):
         # getting the next blank page never yanks the caret/view down to 姓名 (#focus-service-date).
         self._focus_field("service_date")
         self._push_status(
-            f"已新增頁面 {record.record_id}，請填寫後按「確認並寫入」"
+            f"已新增頁面 {record.record_id}，請填寫後按「確認寫入」"
             + ("" if self.session else "（記得先用「開啟報表」選模板才能寫入）")
         )
         self._update_toolbar_states()
@@ -1383,7 +1527,7 @@ class ReviewApp(tk.Tk):
         )
 
         if self.editing:
-            messagebox.showerror("尚未保存", "目前資料已修改，請先使用「確認並寫入」或「強制寫入」。")
+            messagebox.showerror("尚未保存", "目前資料已修改，請先使用「確認寫入」或「強制寫入」。")
             return
         restore_camera_index = self._camera_index
         restore_live_preview = self._has_live_camera_preview()
@@ -1697,7 +1841,7 @@ class ReviewApp(tk.Tk):
             messagebox.showerror("缺少資料", "請先載入 JSON 資料。")
             return
         if self.editing:
-            messagebox.showerror("尚未保存", "目前資料已修改，請先使用「確認並寫入」或「強制寫入」。")
+            messagebox.showerror("尚未保存", "目前資料已修改，請先使用「確認寫入」或「強制寫入」。")
             return
         self.editing = False
         if self.current_index < 0:
@@ -1714,7 +1858,7 @@ class ReviewApp(tk.Tk):
             messagebox.showerror("缺少資料", "請先載入 JSON 資料。")
             return
         if self.editing:
-            messagebox.showerror("尚未保存", "目前資料已修改，請先使用「確認並寫入」或「強制寫入」。")
+            messagebox.showerror("尚未保存", "目前資料已修改，請先使用「確認寫入」或「強制寫入」。")
             return
         if self.current_index >= len(self.records):
             self.current_index = len(self.records) - 1
@@ -1744,7 +1888,7 @@ class ReviewApp(tk.Tk):
         if not record.name.strip():
             messagebox.showwarning(
                 "姓名未填",
-                "請先填入姓名再「確認並寫入」；若確定要留空，請改用「強制寫入」。",
+                "請先填入姓名再「確認寫入」；若確定要留空，請改用「強制寫入」。",
             )
             self._focus_name_field()
             return
@@ -1767,7 +1911,7 @@ class ReviewApp(tk.Tk):
                 "未寫入工作檔",
                 "此筆未寫入，因為有缺少或不合法的必填欄位：\n\n"
                 + "\n".join(result.blockers)
-                + "\n\n請在右側補齊後再按「確認並寫入」，或改用「強制寫入」。",
+                + "\n\n請在右側補齊後再按「確認寫入」，或改用「強制寫入」。",
             )
             return
         if result.status in {"forced", "written"}:
@@ -2259,12 +2403,21 @@ class ReviewApp(tk.Tk):
             pass
         banner = getattr(self, "_autocapture_banner", None)
         if banner is not None:
-            palette = {
-                "active": ("#fff4ce", "#5f4b00"),
-                "warn": ("#fde7e9", "#a4262c"),
-                "": ("#f3f3f3", "#202124"),
-            }
-            bg, fg = palette.get(tone if text else "", palette[""])
+            manager = self.__dict__.get("theme")
+            if manager is not None:
+                p = manager.palette
+                tones = {
+                    "active": (p.warning_bg, p.warning_fg),
+                    "warn": (p.danger_bg, p.danger_fg),
+                    "": (p.surface_alt, p.text_muted),
+                }
+            else:
+                tones = {
+                    "active": ("#fff4ce", "#5f4b00"),
+                    "warn": ("#fde7e9", "#a4262c"),
+                    "": ("#f3f3f3", "#202124"),
+                }
+            bg, fg = tones.get(tone if text else "", tones[""])
             try:
                 banner.configure(background=bg, foreground=fg)
             except Exception:
@@ -2350,7 +2503,7 @@ class ReviewApp(tk.Tk):
             return
         if self.editing:
             messagebox.showerror(
-                "尚未保存", "目前資料已修改，請先使用「確認並寫入」或「強制寫入」。"
+                "尚未保存", "目前資料已修改，請先使用「確認寫入」或「強制寫入」。"
             )
             return
         if self._camera_index is None:

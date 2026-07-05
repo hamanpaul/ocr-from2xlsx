@@ -68,6 +68,7 @@ def main() -> int:
                 "build_paddle_plugin.py",
                 "build_vlm_runtime.py",
                 "make_shutter_wav.py",
+                "make_icons.py",
                 "phase0_vlm_bakeoff.py",
                 "splash.png",
             },

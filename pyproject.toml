@@ -30,7 +30,7 @@ ocr-from2xlsx = "ocr_from2xlsx.cli:main"
 version = { file = ["VERSION"] }
 
 [tool.setuptools.package-data]
-ocr_from2xlsx = ["assets/*.wav"]
+ocr_from2xlsx = ["assets/*.wav", "assets/icons/*.png"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

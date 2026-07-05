@@ -218,11 +218,14 @@ def test_review_app_builds_confirm_form_and_prefills_record(tmp_path: Path) -> N
         assert collected["medical_record_no"] == expected_state["medical_record_no"]
         assert collected["gender"] == expected_state["gender"]
         assert collected["cancer"] == expected_state["cancer"]
-        # Slim toolbar keeps only the most-used actions; the rest moved to the menu bar (#56).
+        # Restyled toolbar: secondary actions are icon-only (no text); 確認寫入 is the one
+        # labelled primary CTA. The icon-only buttons are exposed as attributes (#restyle-review-ui).
         toolbar_texts = _button_texts(app)
-        assert {"開啟報表", "匯入資料夾", "上一筆", "下一筆", "確認並寫入"} <= set(toolbar_texts)
+        assert "確認寫入" in set(toolbar_texts)
+        for attr in ("_open_btn", "_import_btn", "_prev_btn", "_next_btn"):
+            assert hasattr(app, attr)
         # #remove-add-page-button: the manual 新增頁面 button is gone from the toolbar — the flow
-        # auto-opens a fresh page on 開啟報表 and after 確認並寫入. It stays in the 編輯 menu only.
+        # auto-opens a fresh page on 開啟報表 and after 確認寫入. It stays in the 編輯 menu only.
         assert "新增頁面" not in toolbar_texts
     finally:
         app.destroy()
@@ -240,7 +243,7 @@ def test_menu_bar_categories_and_state_machine_drives_menu_entries() -> None:
         assert {"檔案(F)", "掃描(S)", "編輯(E)", "檢視(V)", "說明(H)"} <= labels
 
         # The state machine (#56) gates MENU entries, not just toolbar buttons: with no records
-        # 上一筆 (a menu entry) is disabled. 確認並寫入 / 強制寫入 are deliberately NOT gated —
+        # 上一筆 (a menu entry) is disabled. 確認寫入 / 強制寫入 are deliberately NOT gated —
         # they stay clickable so they can surface a clear "缺少工作檔"/"姓名未填" error instead
         # of greying out silently (#confirm-required-fields).
         app.session = None
@@ -249,7 +252,7 @@ def test_menu_bar_categories_and_state_machine_drives_menu_entries() -> None:
         app._update_toolbar_states()
         edit_menu = app.nametowidget(menubar.entrycget("編輯(E)", "menu"))
         assert str(edit_menu.entrycget("上一筆", "state")) == "disabled"
-        assert str(edit_menu.entrycget("確認並寫入", "state")) == "normal"
+        assert str(edit_menu.entrycget("確認寫入", "state")) == "normal"
         assert str(edit_menu.entrycget("強制寫入", "state")) == "normal"
     finally:
         app.destroy()
@@ -911,7 +914,7 @@ def test_capture_and_recognize_blocks_when_current_record_has_unsaved_edits(
 
     ReviewApp._capture_and_recognize(app)
 
-    assert errors == [("尚未保存", "目前資料已修改，請先使用「確認並寫入」或「強制寫入」。")]
+    assert errors == [("尚未保存", "目前資料已修改，請先使用「確認寫入」或「強制寫入」。")]
     assert stop_calls == []
     assert capture_calls == []
     assert app.records == [record]

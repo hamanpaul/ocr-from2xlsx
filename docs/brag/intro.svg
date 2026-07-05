@@ -1,0 +1,119 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 380" role="img"
+     aria-label="ocr-from2xlsx 動態簡介：紙本服務紀錄，經拍照、辨識、校正、寫入，變成每月報表 XLSX">
+  <defs>
+    <linearGradient id="brandbar" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#0F5F5B"/>
+      <stop offset="0.55" stop-color="#0C3F3C"/>
+      <stop offset="1" stop-color="#FFB703"/>
+    </linearGradient>
+    <radialGradient id="bg" cx="0.5" cy="-0.1" r="1.1">
+      <stop offset="0" stop-color="#EAF0EF"/>
+      <stop offset="0.6" stop-color="#F4F6F7"/>
+    </radialGradient>
+    <style>
+      text{font-family:"Microsoft JhengHei UI","Noto Sans TC","PingFang TC",system-ui,"Segoe UI",sans-serif}
+      .mono{font-family:ui-monospace,"Cascadia Code",Consolas,"SFMono-Regular",monospace}
+      .ico{fill:none;stroke:#0F5F5B;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+      .node{fill:#FFFFFF;stroke:#D7E0DF;stroke-width:1.5}
+      .ring{fill:none;stroke:#0F5F5B;stroke-width:3;opacity:0}
+      .ring.amber{stroke:#FFB703}
+      .conn{stroke:#CBD8D6;stroke-width:2;stroke-dasharray:2 7;stroke-linecap:round}
+
+      .r1{animation:glow 5.2s linear infinite}
+      .r2{animation:glow 5.2s linear infinite 1.3s}
+      .r3{animation:glow 5.2s linear infinite 2.6s}
+      .r4{animation:glow 5.2s linear infinite 3.9s}
+      @keyframes glow{0%{opacity:0}4%{opacity:1}17%{opacity:0}100%{opacity:0}}
+
+      #pulse{animation:travel 5.2s cubic-bezier(.65,0,.35,1) infinite}
+      @keyframes travel{
+        0%{transform:translateX(0);opacity:0}
+        6%{opacity:1}
+        94%{opacity:1}
+        100%{transform:translateX(405px);opacity:0}
+      }
+      #scan{animation:sweep 5.2s ease-in-out infinite}
+      @keyframes sweep{0%,100%{transform:translateY(0);opacity:.0}45%{opacity:.9}50%{transform:translateY(46px);opacity:.9}55%{opacity:0}}
+
+      @media (prefers-reduced-motion: reduce){
+        .r1,.r2,.r3,.r4{animation:none;opacity:.55}
+        #pulse{animation:none;opacity:1}
+        #scan{animation:none;opacity:0}
+      }
+    </style>
+  </defs>
+
+  <rect width="1200" height="380" fill="url(#bg)"/>
+  <rect width="1200" height="5" fill="url(#brandbar)"/>
+
+  <!-- ===== left : identity ===== -->
+  <g>
+    <rect x="64" y="52" width="46" height="46" rx="11" fill="#0F5F5B"/>
+    <rect x="79" y="67" width="16" height="16" rx="4" fill="#FFB703"/>
+    <text x="126" y="70" class="mono" font-size="13" letter-spacing="2.5" fill="#0F5F5B">癌症資源中心 · 服務紀錄數位化</text>
+    <text x="126" y="92" class="mono" font-size="12" fill="#4F5D5B">portable windows · offline OCR</text>
+
+    <text x="62" y="162" class="mono" font-size="48" font-weight="700" letter-spacing="-1" fill="#1B2A29">ocr-<tspan fill="#0F5F5B">from2xlsx</tspan></text>
+
+    <text x="64" y="204" font-size="20" fill="#1B2A29">把紙本服務紀錄，變成每月報表 Excel。</text>
+    <text x="64" y="234" font-size="16" fill="#4F5D5B">拍照 · 辨識 · 校正 · 寫入 —— 一疊表單，一路到底。</text>
+
+    <!-- chips -->
+    <g transform="translate(64,286)" class="mono" font-size="13">
+      <g>
+        <rect x="0" y="0" width="128" height="30" rx="15" fill="#EAF0EF" stroke="#D7E0DF"/>
+        <text x="64" y="20" text-anchor="middle" fill="#0F5F5B">PaddleOCR 離線</text>
+      </g>
+      <g transform="translate(140,0)">
+        <rect x="0" y="0" width="96" height="30" rx="15" fill="#EAF0EF" stroke="#D7E0DF"/>
+        <text x="48" y="20" text-anchor="middle" fill="#4F5D5B">連續拍照</text>
+      </g>
+      <g transform="translate(248,0)">
+        <rect x="0" y="0" width="110" height="30" rx="15" fill="#EAF0EF" stroke="#D7E0DF"/>
+        <text x="55" y="20" text-anchor="middle" fill="#4F5D5B">淺 / 深主題</text>
+      </g>
+      <g transform="translate(370,0)">
+        <rect x="0" y="0" width="74" height="30" rx="15" fill="#FFB703"/>
+        <text x="37" y="20" text-anchor="middle" fill="#3D2C00" font-weight="700">v0.1.0</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- ===== right : pipeline ===== -->
+  <g transform="translate(0,4)">
+    <!-- base connectors -->
+    <line class="conn" x1="690" y1="150" x2="1095" y2="150"/>
+
+    <!-- traveling pulse -->
+    <g id="pulse"><circle cx="690" cy="150" r="6" fill="#0F5F5B"/><circle cx="690" cy="150" r="11" fill="#0F5F5B" opacity="0.18"/></g>
+
+    <!-- node 1 : capture -->
+    <g transform="translate(690,150)">
+      <circle class="ring r1" r="34"/>
+      <circle class="node" r="26"/>
+      <g class="ico" transform="translate(-11,-10)"><path d="M0 4a2 2 0 0 1 2-2h1.4l1-1.6h5.2L11.6 2H20a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2z"/><circle cx="11" cy="8.5" r="3.2"/></g>
+      <text x="0" y="60" text-anchor="middle" font-size="15" font-weight="700" fill="#1B2A29">拍照</text>
+    </g>
+    <!-- node 2 : recognize -->
+    <g transform="translate(825,150)">
+      <circle class="ring r2" r="34"/>
+      <circle class="node" r="26"/>
+      <g class="ico" transform="translate(-11,-11)"><path d="M0 3V1a1 1 0 0 1 1-1h2"/><path d="M18 0h2a1 1 0 0 1 1 1v2"/><path d="M21 15v2a1 1 0 0 1-1 1h-2"/><path d="M3 18H1a1 1 0 0 1-1-1v-2"/><path d="M4 9h13"/></g>
+      <text x="0" y="60" text-anchor="middle" font-size="15" font-weight="700" fill="#1B2A29">辨識</text>
+    </g>
+    <!-- node 3 : review -->
+    <g transform="translate(960,150)">
+      <circle class="ring r3" r="34"/>
+      <circle class="node" r="26"/>
+      <g class="ico" transform="translate(-12,-8)"><rect x="0" y="0" width="24" height="16" rx="2.5"/><path d="M5 6h.01M9 6h.01M13 6h.01M5 11h8"/></g>
+      <text x="0" y="60" text-anchor="middle" font-size="15" font-weight="700" fill="#1B2A29">校正</text>
+    </g>
+    <!-- node 4 : write xlsx (amber accent) -->
+    <g transform="translate(1095,150)">
+      <circle class="ring amber r4" r="34"/>
+      <circle class="node" r="26"/>
+      <g class="ico" transform="translate(-10,-11)"><path d="M1 1h11l4 4v14a1 1 0 0 1-1 1H1a0 0 0 0 1 0 0V1z" stroke="#0F5F5B"/><path d="M5 12l2.5 2.5L13 9" stroke="#FFB703" stroke-width="2.2"/></g>
+      <text x="0" y="60" text-anchor="middle" font-size="15" font-weight="700" fill="#1B2A29">寫入 XLSX</text>
+    </g>
+  </g>
+</svg>

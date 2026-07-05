@@ -2,6 +2,12 @@
 
 > Portable Windows prototype for turning cancer resource center service-record OCR results into the existing monthly-report XLSX workbook.
 
+<p align="center">
+  <a href="example/ocr-from2xlsx_example.mp4">
+    <img src="docs/brag/intro.svg" alt="ocr-from2xlsx 動態簡介：拍照 → 辨識 → 校正 → 寫入 XLSX" width="100%">
+  </a>
+</p>
+
 ## 示範影片（Demo）
 
 App 操作示範影片：
